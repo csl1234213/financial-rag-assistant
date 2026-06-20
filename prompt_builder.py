@@ -1,62 +1,29 @@
-def build_prompt(question, context):
+def build_prompt(question, context, history = None):
+    history_text = ""
+    history_lines = []
+
+    if history:
+        for h in history[-3:]:
+            history_lines.append(
+
+                f"Q: {h['q']}\nA: {h['a']}"
+
+            )
+
+        history_text = "\n".join(history_lines)
+
     prompt = f"""
+    You are a financial analyst.
+    {PROMPT_RULES}
 
-    You are a professional financial analyst.
+    Conversation History:
+    {history_text}
 
-    Your task is to answer the user's question
-
-    ONLY using the retrieved financial evidence.
-
-    Rules:
-
-    1. Use ONLY the evidence provided.
-
-    2. Do NOT invent information.
-
-    3. If the evidence is insufficient,
-
-       clearly say so.
-
-    4. Some evidence blocks may be partially relevant.
-
-    5. Focus on the evidence most related
-
-       to the user's question.
-
-    6. Combine multiple evidence blocks
-
-       when appropriate.
-
-    7.If evidence implies rather than explicitly states,
-
-      say:
-
-      "The evidence suggests..."
-
-      instead of making a definitive claim.
-
-    ============================================================
-
-    USER QUESTION
-
+    Question:
     {question}
 
-    ============================================================
-
-    RETRIEVED EVIDENCE
-
+    Context:
     {context}
-
-    ============================================================
-
-    ANSWER
-
-    Summary:
-
-    Key Points:
-
-    Evidence Used:
-
     """
 
     return prompt
@@ -70,11 +37,13 @@ def build_compare_prompt(
 
 You are a professional financial analyst.
 
-Use ONLY the provided evidence.
-
-Do NOT invent facts.
+Use ONLY the provided context.
 
 If evidence is insufficient,
+
+state that clearly.
+
+Do NOT invent facts.
 
 say:
 

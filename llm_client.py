@@ -1,17 +1,22 @@
 from openai import OpenAI
 import os
+
 def generate_answer(prompt):
 
     client = OpenAI(
         api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url="https://api.deepseek.com"
+        base_url=os.getenv(
+            "DEEPSEEK_BASE_URL",
+            "https://api.deepseek.com"
+        ),
+        timeout = 60
     )
 
     try:
 
         response = client.chat.completions.create(
 
-            model="deepseek-chat",
+            model=os.getenv("DEEPSEEK_MODEL","deepseek-chat"),
 
             messages=[
                 {
@@ -29,28 +34,100 @@ def generate_answer(prompt):
             max_tokens=1000
 
         )
-
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        return content.strip()
 
 
     except Exception as e:
 
         error = str(e)
 
+        if "timeout" in error.lower():
+            return """
+
+        DeepSeek API Error
+
+        Request timed out.
+
+        Please check your network and retry.
+
+        """
+
+        if "connection" in error.lower():
+            return """
+
+        DeepSeek API Error
+
+        Network connection failed.
+
+        Please check your Internet.
+
+        """
+
+        if "nameresolution" in error.lower():
+            return """
+
+        DeepSeek API Error
+
+        Cannot resolve server address.
+
+        Please check DNS or proxy settings.
+
+        """
+
+        if "401" in error:
+            return """
+
+        DeepSeek API Error
+
+        Invalid API Key.
+
+        """
+
+
         if "402" in error:
             return """
 
-    DeepSeek API Error
+        DeepSeek API Error
+
+        Insufficient balance.
+
+        Please recharge your account.
+
+        """
 
 
-    Reason:
+        if "429" in error:
+            return """
 
-    Insufficient account balance.
+        DeepSeek API Error
 
+        Rate limit exceeded.
 
-    Please recharge your DeepSeek API account.
+        Please retry later.
 
+        """
 
-    """
+        if "500" in error:
+            return """
+
+        DeepSeek API Error
+
+        Server error.
+
+        Please retry later.
+
+        """
+
+        if "503" in error:
+            return """
+
+        DeepSeek API Error
+
+        Service unavailable.
+
+        Please retry later.
+
+        """
 
         return f"API Error:\n{error}"
