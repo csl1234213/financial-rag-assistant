@@ -12,6 +12,42 @@ Future:
 from sentence_transformers import util
 import re
 from embedding import embed_chunks
+from retrieval.bm25_retriever import (build_bm25, bm25_search)
+from retrieval.document_filter import (
+    filter_documents
+)
+
+def retrieve_vector_chunks(
+        model,
+        embeddings,
+        question,
+        chunks,
+        top_k=5
+):
+
+    question_embedding = model.encode(
+        question,
+        convert_to_tensor=True
+    )
+
+    scores = util.cos_sim(
+        question_embedding,
+        embeddings
+    )[0]
+
+    top_indices = scores.argsort(
+        descending=True
+    )[:top_k]
+
+    results = []
+
+    for idx in top_indices:
+
+        results.append(
+            chunks[idx]
+        )
+
+    return results
 
 def retrieve_evidence(model, embeddings, question):
     question_embedding = model.encode(question, convert_to_tensor=True)
@@ -206,3 +242,152 @@ def extract_keyword(query):
         key=len
 
     )
+
+def hybrid_search(
+        query,
+        chunks,
+        embeddings,
+        model,
+        matched_sources=None,
+        top_k=5
+):
+    chunks, embeddings = filter_documents(
+
+        matched_sources,
+
+        chunks,
+
+        embeddings
+
+    )
+
+    print()
+    print("=" * 60)
+    print("DOCUMENT FILTER")
+    print("=" * 60)
+
+    print(
+        f"Matched Sources: {matched_sources}"
+    )
+
+    print(
+        f"Filtered Chunks: {len(chunks)}"
+    )
+
+    # Vector Search
+    vector_results = retrieve_vector_chunks(
+
+        model,
+
+        embeddings,
+
+        query,
+
+        chunks,
+
+        top_k
+
+    )
+
+    # BM25 Search
+    bm25 = build_bm25(
+
+        chunks
+
+    )
+
+    bm25_results = bm25_search(
+
+        bm25,
+
+        query,
+
+        chunks,
+
+        top_k
+
+    )
+    print()
+    print("=" * 60)
+    print("HYBRID SEARCH")
+    print("=" * 60)
+
+    print(
+        f"Vector Results: {len(vector_results)}"
+    )
+
+    print(
+        f"BM25 Results: {len(bm25_results)}"
+    )
+
+    # Merge
+    # Score Fusion
+    scores = {}
+
+    for chunk in vector_results:
+        key = (
+            chunk["source"],
+            chunk["chunk_id"]
+        )
+
+        scores[key] = scores.get(
+            key,
+            0
+        ) + 1
+
+    for chunk in bm25_results:
+        key = (
+            chunk["source"],
+            chunk["chunk_id"]
+        )
+
+        scores[key] = scores.get(
+            key,
+            0
+        ) + 1
+
+    # Chunk Mapping
+    chunk_map = {}
+
+    for chunk in (
+
+            vector_results +
+
+            bm25_results
+
+    ):
+        key = (
+            chunk["source"],
+            chunk["chunk_id"]
+        )
+
+        chunk_map[key] = chunk
+
+    # Ranking
+    ranked = sorted(
+
+        scores.items(),
+
+        key=lambda x: x[1],
+
+        reverse=True
+
+    )
+    print()
+
+    for key, score in ranked:
+        print(
+            f"{key} -> {score}"
+        )
+
+    # Final Results
+    results = []
+
+    for key, score in ranked[:top_k]:
+        results.append(
+
+            chunk_map[key]
+
+        )
+
+    return results
