@@ -1,4 +1,22 @@
 from config import DOCUMENT_HINTS
+COMPARE_KEYWORDS = [
+
+    "compare",
+    "comparison",
+    "vs",
+    "versus",
+    "difference",
+    "better",
+    "stronger",
+    "weaker",
+    "larger",
+    "smaller",
+    "advantage",
+    "leading",
+    "leader"
+
+]
+
 def detect_documents(question):
 
     question_lower = question.lower()
@@ -10,11 +28,9 @@ def detect_documents(question):
         matched = False
 
         for keyword in keywords:
-
+            keyword = keyword.lower()
             if keyword in question_lower:
-
                 matched = True
-
                 break
 
         if matched:
@@ -89,7 +105,10 @@ def filter_chunks_by_source(
 
     for chunk in chunks:
 
-        source_name = chunk["source"].lower()
+        source_name = chunk.get(
+            "company",
+            chunk["source"]
+        ).lower()
 
         for company in matched_sources:
 
@@ -151,7 +170,7 @@ def filter_chunks_by_source(
     return filtered_chunks
 def detect_research_mode(question):
     q = question.lower()
-    RESEARCH_MODES = {
+    research_modes = {
 
         "compare": [
             "compare",
@@ -194,7 +213,7 @@ def detect_research_mode(question):
         ]
 
     }
-    for mode, keywords in RESEARCH_MODES.items():
+    for mode, keywords in research_modes.items():
         for keyword in keywords:
             if keyword in q:
                 return mode
@@ -235,7 +254,7 @@ def detect_compare_question(question):
 
     ]
 
-    for word in compare_keywords:
+    for word in COMPARE_KEYWORDS:
 
         if word in q:
 

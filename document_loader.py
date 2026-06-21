@@ -2,11 +2,36 @@ import fitz
 import re
 import os
 
+def get_company(filename):
+
+    filename = filename.lower()
+
+    if "apple" in filename:
+        return "Apple"
+
+    if "nvidia" in filename:
+        return "NVIDIA"
+
+    if "tesla" in filename:
+        return "Tesla"
+
+    return "Unknown"
+
+
+def get_quarter(filename):
+
+    m = re.search(r"(Q\d.*)\.pdf", filename)
+
+    if m:
+        return m.group(1)
+
+    return "Unknown"
+
 def load_documents(pdf_folder):
 
     all_chunks = []
 
-    pdf_files = [
+    pdf_files = sorted([
 
         file
 
@@ -14,7 +39,7 @@ def load_documents(pdf_folder):
 
         if file.lower().endswith(".pdf")
 
-    ]
+    ])
 
     print()
 
@@ -26,6 +51,8 @@ def load_documents(pdf_folder):
     print()
 
     for pdf_name in pdf_files:
+        company = get_company(pdf_name)
+        quarter = get_quarter(pdf_name)
 
         print(pdf_name)
 
@@ -49,12 +76,15 @@ def load_documents(pdf_folder):
         chunks = chunk_text(text)
 
         for i, chunk in enumerate(chunks):
-
             all_chunks.append({
 
                 "source": pdf_name,
 
                 "chunk_id": i,
+
+                "company": company,
+
+                "quarter": quarter,
 
                 "text": chunk
 
@@ -141,6 +171,10 @@ def show_chunk_preview(chunks):
         print(f"Source: {chunks[i]['source']}")
 
         print(f"Chunk ID: {chunks[i]['chunk_id']}")
+
+        print(f"Company: {chunks[i]['company']}")
+
+        print(f"Quarter: {chunks[i]['quarter']}")
 
         print()
 

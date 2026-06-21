@@ -2,51 +2,65 @@ from sentence_transformers import SentenceTransformer
 import os
 import torch
 
+CACHE_DIR = "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+
+
+
+
 def get_cache_path(
 
         pdf_folder
 
 ):
+    cache_name = os.path.basename(pdf_folder)
 
-    cache_name = pdf_folder.replace(
+    if not cache_name:
+        cache_name = "all_documents"
 
-        "/",
-
-        "_"
-
+    return os.path.join(
+        CACHE_DIR,
+        f"{cache_name}.pt"
     )
 
-    return f"cache/{cache_name}.pt"
 
-def save_embeddings(
 
-        embeddings,
+def save_embeddings(path, data):
 
-        cache_path
+    import os
+    import torch
 
-):
+    os.makedirs(
+        os.path.dirname(path),
+        exist_ok=True
+    )
 
     torch.save(
-
-        embeddings,
-
-        cache_path
-
+        data,
+        path
     )
 
     print()
 
-    print(
-
-        "Embeddings cached."
-
-    )
+    print("Embeddings cached.")
 
     print(
-
-        cache_path
-
+        f"Saved to: {path}"
     )
+
+    try:
+
+        print(
+
+            f"Size: {len(data)}"
+
+        )
+
+    except:
+
+        pass
 
 def load_cached_embeddings(
 
@@ -67,6 +81,9 @@ def load_cached_embeddings(
             "Loading cached embeddings..."
 
         )
+        print(
+            f"Cache: {cache_path}"
+        )
 
         return torch.load(
 
@@ -85,6 +102,8 @@ def get_embeddings(
         pdf_folder
 
 ):
+
+
 
     cache_path = get_cache_path(
 
@@ -111,13 +130,9 @@ def get_embeddings(
     )
 
     save_embeddings(
-
-        embeddings,
-
-        cache_path
-
+        cache_path,
+        embeddings
     )
-
     return embeddings
 
 def load_embedding_model( ):

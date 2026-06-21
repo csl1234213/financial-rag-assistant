@@ -1,3 +1,14 @@
+# retrieval/hybrid_retriever.py
+
+"""
+V1.9 Placeholder
+
+Future:
+- BM25
+- Vector Search
+- Hybrid Search
+"""
+
 from sentence_transformers import util
 import re
 from embedding import embed_chunks
