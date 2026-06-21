@@ -330,10 +330,35 @@ def hybrid_search(
             chunk["chunk_id"]
         )
 
-        scores[key] = scores.get(
-            key,
-            0
-        ) + 1
+        scores = {}
+
+        # =========================
+        # Vector 权重
+        # =========================
+        VECTOR_WEIGHT = 0.7
+        BM25_WEIGHT = 0.3
+
+        # Vector scoring
+        for rank, chunk in enumerate(vector_results):
+            key = (
+                chunk["source"],
+                chunk["chunk_id"]
+            )
+
+            score = 1 / (rank + 1)  # rank score
+
+            scores[key] = scores.get(key, 0) + score * VECTOR_WEIGHT
+
+        # BM25 scoring
+        for rank, chunk in enumerate(bm25_results):
+            key = (
+                chunk["source"],
+                chunk["chunk_id"]
+            )
+
+            score = 1 / (rank + 1)
+
+            scores[key] = scores.get(key, 0) + score * BM25_WEIGHT
 
     for chunk in bm25_results:
         key = (
