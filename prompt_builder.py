@@ -22,6 +22,16 @@ Rules:
 7. Separate facts from interpretation.
 
 8. Be concise and objective.
+
+9. Cite evidence using:
+
+[Evidence 1]
+[Evidence 2]
+
+Never use:
+
+(Evidence 1)
+(Evidence 2)
 """
 
 def build_prompt(
@@ -83,6 +93,11 @@ Risks
 2.
 
 Evidence Used
+
+List evidence exactly using:
+
+[Evidence 1]
+[Evidence 2]
 
 List all evidence references used.
 

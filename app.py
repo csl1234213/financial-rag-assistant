@@ -105,8 +105,5 @@ if __name__ == "__main__":
         answer, citations, context, mode = run_rag(q)
 
         print("\nMODE:", mode)
-        print("\nANSWER:\n", answer)
-
-        print("\nCITATIONS:")
-        for c in citations:
-            print(c)
+        print("\nANSWER:\n")
+        print(answer)

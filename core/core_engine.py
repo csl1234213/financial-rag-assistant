@@ -22,7 +22,9 @@ from prompt_builder import (
 )
 from llm.provider import call_llm
 from config import DEBUG_MODE
-
+from core.citation_formatter import (
+    format_citations
+)
 
 
 
@@ -170,6 +172,16 @@ def run_rag(question: str):
         return prompt, citations, context, research_mode
 
     answer = call_llm(prompt)
+
+    citation_text = format_citations(
+        citations
+    )
+
+    answer = (
+            answer
+            + "\n\n"
+            + citation_text
+    )
 
     return answer, citations, context, research_mode
 
