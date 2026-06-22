@@ -7,21 +7,52 @@ from embedding import (
 from retrieval.hybrid_retriever import (
     hybrid_search
 )
+import os
+import pickle
 
+
+
+
+
+# =========================
+# INIT ONLY ONCE
+# =========================
 PDF_FOLDER = "pdfs"
+CACHE_FILE = "cache/test_runtime.pkl"
 
-print("Loading documents...")
-chunks = load_documents(PDF_FOLDER)
+if os.path.exists(CACHE_FILE):
 
-print("Loading model...")
-model = load_embedding_model()
+    print("Loading cache...")
 
-print("Loading embeddings...")
-embeddings = get_embeddings(
-    model,
-    chunks,
-    PDF_FOLDER
-)
+    with open(CACHE_FILE, "rb") as f:
+        data = pickle.load(f)
+
+    chunks = data["chunks"]
+    embeddings = data["embeddings"]
+    model = data["model"]
+
+else:
+
+    print("Building cache...")
+
+    chunks = load_documents(PDF_FOLDER)
+
+    model = load_embedding_model()
+
+    embeddings = get_embeddings(
+        model,
+        chunks,
+        PDF_FOLDER
+    )
+
+    os.makedirs("cache", exist_ok=True)
+
+    with open(CACHE_FILE, "wb") as f:
+        pickle.dump({
+            "chunks": chunks,
+            "embeddings": embeddings
+        }, f)
+
 
 # =========================
 # 2. 测试集合

@@ -243,6 +243,72 @@ def extract_keyword(query):
 
     )
 
+
+def rrf_fusion(
+            vector_results,
+            bm25_results,
+            top_k=5,
+            k=60
+    ):
+
+        scores = {}
+        chunk_map = {}
+
+        # =========================
+        # Vector ranking contribution
+        # =========================
+        for rank, chunk in enumerate(vector_results):
+            key = (
+                chunk["source"],
+                chunk["chunk_id"]
+            )
+
+            scores[key] = scores.get(key, 0) + 1 / (k + rank)
+
+            chunk_map[key] = chunk
+
+        # =========================
+        # BM25 ranking contribution
+        # =========================
+        for rank, chunk in enumerate(bm25_results):
+            key = (
+                chunk["source"],
+                chunk["chunk_id"]
+            )
+
+            scores[key] = scores.get(key, 0) + 1 / (k + rank)
+
+            chunk_map[key] = chunk
+
+        # =========================
+        # Sorting
+        # =========================
+        ranked = sorted(
+            scores.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        print()
+        print("=" * 60)
+        print("RRF FUSION")
+        print("=" * 60)
+
+        for key, score in ranked:
+            print(
+                f"{key} -> {score:.6f}"
+            )
+
+        # =========================
+        # Output
+        # =========================
+        results = []
+
+        for key, score in ranked[:top_k]:
+            results.append(chunk_map[key])
+
+        return results
+
+
 def hybrid_search(
         query,
         chunks,
@@ -307,6 +373,7 @@ def hybrid_search(
         top_k
 
     )
+
     print()
     print("=" * 60)
     print("HYBRID SEARCH")
@@ -319,100 +386,12 @@ def hybrid_search(
     print(
         f"BM25 Results: {len(bm25_results)}"
     )
-
-    # Merge
-    # Score Fusion
-    scores = {}
-
-    for chunk in vector_results:
-        key = (
-            chunk["source"],
-            chunk["chunk_id"]
-        )
-
-        scores = {}
-
-        # =========================
-        # Vector 权重
-        # =========================
-        VECTOR_WEIGHT = 0.7
-        BM25_WEIGHT = 0.3
-
-        # Vector scoring
-        for rank, chunk in enumerate(vector_results):
-            key = (
-                chunk["source"],
-                chunk["chunk_id"]
-            )
-
-            score = 1 / (rank + 1)  # rank score
-
-            scores[key] = scores.get(key, 0) + score * VECTOR_WEIGHT
-
-        # BM25 scoring
-        for rank, chunk in enumerate(bm25_results):
-            key = (
-                chunk["source"],
-                chunk["chunk_id"]
-            )
-
-            score = 1 / (rank + 1)
-
-            scores[key] = scores.get(key, 0) + score * BM25_WEIGHT
-
-    for chunk in bm25_results:
-        key = (
-            chunk["source"],
-            chunk["chunk_id"]
-        )
-
-        scores[key] = scores.get(
-            key,
-            0
-        ) + 1
-
-    # Chunk Mapping
-    chunk_map = {}
-
-    for chunk in (
-
-            vector_results +
-
-            bm25_results
-
-    ):
-        key = (
-            chunk["source"],
-            chunk["chunk_id"]
-        )
-
-        chunk_map[key] = chunk
-
-    # Ranking
-    ranked = sorted(
-
-        scores.items(),
-
-        key=lambda x: x[1],
-
-        reverse=True
-
+    results = rrf_fusion(
+        vector_results,
+        bm25_results,
+        top_k
     )
-    print()
-
-    for key, score in ranked:
-        print(
-            f"{key} -> {score}"
-        )
-
-    # Final Results
-    results = []
-
-    for key, score in ranked[:top_k]:
-        results.append(
-
-            chunk_map[key]
-
-        )
 
     return results
+
+

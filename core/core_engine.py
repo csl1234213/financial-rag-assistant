@@ -24,6 +24,8 @@ from llm.provider import call_llm
 from config import DEBUG_MODE
 
 
+
+
 # =========================
 # 初始化（避免重复加载）
 # =========================
@@ -32,28 +34,30 @@ PDF_FOLDER = "pdfs/"
 chunks = None
 model = None
 
+def get_model():
+
+    global model
+
+    if model is None:
+
+        model = load_embedding_model()
+
+    return model
+
 
 def init_engine():
-    """
-    只初始化一次模型和文档
-    """
 
-    global chunks, model
+    global chunks
 
     if chunks is not None:
         return
 
     chunks = load_documents(PDF_FOLDER)
-    show_chunk_preview(chunks)
 
-    model = load_embedding_model()
+    if DEBUG_MODE:
+        show_chunk_preview(chunks)
 
-    # 预热 Cache
-    get_embeddings(
-        model,
-        chunks,
-        PDF_FOLDER
-    )
+model = get_model()
 # =========================
 # 主RAG流程
 # =========================
@@ -140,7 +144,15 @@ def run_rag(question: str):
             scores,
             question
         )
+        if DEBUG_MODE:
+            print()
+            print("=" * 60)
+            print("EVIDENCE CONTEXT")
+            print("=" * 60)
 
+            print(
+                context[:1500]
+            )
     # -------------------------
     # 3. prompt building
     # -------------------------
@@ -168,6 +180,7 @@ def run_rag(question: str):
 def build_context(chunks, top_k, scores, question):
 
     context = ""
+
     citations = []
 
     for rank, idx in enumerate(top_k):
@@ -187,14 +200,13 @@ def build_context(chunks, top_k, scores, question):
             "preview": local_context[:150]
         })
 
-        context += "=" * 60 + "\n"
-        context += f"Evidence {rank + 1}\n"
-        context += f"Source: {chunks[idx]['source']}\n"
-        context += f"Chunk ID: {chunks[idx]['chunk_id']}\n"
-        context += f"Similarity Score: {score:.4f}\n"
-        context += "=" * 60 + "\n"
+        context += f"""
+[Evidence {rank + 1}]
+Source: {chunks[idx]["source"]}
+Chunk: {chunks[idx]["chunk_id"]}
 
-        context += local_context
-        context += "\n\n"
+{local_context}
+
+"""
 
     return context, citations

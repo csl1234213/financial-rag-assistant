@@ -1,43 +1,108 @@
 PROMPT_RULES = """
+You are a professional financial analyst.
+
 Rules:
 
-1. Use ONLY the provided context.
-2. If evidence is insufficient, say so clearly.
-3. Do NOT invent facts.
-4. Cite supporting evidence whenever possible.
-5. Keep answers concise and professional.
-6. Focus on financial analysis.
+1. Answer ONLY using information from the Evidence section.
+
+2. Do NOT invent facts.
+
+3. Do NOT use external knowledge.
+
+4. If the Evidence does not contain enough information,
+   say:
+
+   "The provided documents do not contain enough information."
+
+5. When making a statement,
+   cite the Evidence number.
+
+6. Prefer numerical facts whenever available.
+
+7. Separate facts from interpretation.
+
+8. Be concise and objective.
 """
 
-def build_prompt(question, context, history = None):
+def build_prompt(
+        question,
+        context,
+        history=None
+):
+
     history_text = ""
-    history_lines = []
 
     if history:
+
+        history_lines = []
+
         for h in history[-3:]:
+
             history_lines.append(
-
                 f"Q: {h['q']}\nA: {h['a']}"
-
             )
 
         history_text = "\n".join(history_lines)
 
-    prompt = f"""
-    You are a financial analyst.
-    {PROMPT_RULES}
+    return f"""
+{PROMPT_RULES}
 
-    Conversation History:
-    {history_text}
+==================================================
+CONVERSATION HISTORY
+==================================================
 
-    Question:
-    {question}
+{history_text}
 
-    Context:
-    {context}
-    """
+==================================================
+EVIDENCE
+==================================================
 
-    return prompt
+{context}
+
+==================================================
+QUESTION
+==================================================
+
+{question}
+
+==================================================
+RESPONSE FORMAT
+==================================================
+
+Summary
+
+Key Findings
+
+1.
+2.
+3.
+
+Risks
+
+1.
+2.
+
+Evidence Used
+
+List all evidence references used.
+
+==================================================
+
+Requirements:
+
+- Use ONLY the Evidence section.
+- Never invent facts.
+- Never use external knowledge.
+- Cite evidence numbers.
+- Prefer numerical facts.
+- If evidence is insufficient, say:
+
+"The provided documents do not contain enough information."
+
+==================================================
+
+Answer:
+"""
 
 def build_compare_prompt(
         question,
