@@ -1,70 +1,39 @@
 import os
 import json
+from pathlib import Path
+
+from config import PDF_DIR
+
+PDF_DIR = Path("pdfs")
 
 PDF_FOLDER = "pdfs"
 REGISTRY_FILE = "knowledge_registry.json"
 
-
-def build_registry():
+def get_documents():
     """
-    扫描知识库并生成注册表
+    返回知识库所有 PDF 文件
     """
+    if not PDF_DIR.exists():
+        return []
 
-    registry = []
-
-    if not os.path.exists(PDF_FOLDER):
-        return registry
-
-    pdf_files = [
-        f for f in os.listdir(PDF_FOLDER)
-        if f.endswith(".pdf")
-    ]
-
-    pdf_files.sort()
-
-    for pdf in pdf_files:
-
-        registry.append({
-            "name": pdf,
-            "status": "active"
-        })
-
-    with open(
-        REGISTRY_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        json.dump(
-            registry,
-            f,
-            ensure_ascii=False,
-            indent=2
-        )
-
-    return registry
+    return sorted(
+        [
+            pdf.name
+            for pdf in PDF_DIR.glob("*.pdf")
+        ]
+    )
 
 
-def load_registry():
+def get_document_count():
     """
-    读取注册表
+    返回 PDF 数量
     """
-
-    if not os.path.exists(REGISTRY_FILE):
-        return build_registry()
-
-    with open(
-        REGISTRY_FILE,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        return json.load(f)
+    return len(get_documents())
 
 
 def refresh_registry():
     """
-    上传文件后刷新注册表
+    当前版本直接刷新文件列表
+    后续可扩展 JSON Registry
     """
-
-    return build_registry()
+    return get_documents()

@@ -1,3 +1,6 @@
+from retrieval.hybrid_retriever import extract_local_context
+
+
 def build_context(chunks, top_k, scores, question):
 
     context = ""

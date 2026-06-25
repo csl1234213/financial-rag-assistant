@@ -7,12 +7,12 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 from core.core_engine import refresh_knowledge_base
-
-
-
-
-
-from core.core_engine import run_rag
+from core.knowledge_manager import (
+    get_documents,
+    get_document_count
+)
+from core.core_engine import run_rag, get_chunk_count, refresh_knowledge_base
+from core.knowledge_manager import (get_documents, get_document_count)
 
 # 后续 Phase3 实现时启用
 # from core.ingest import process_pdf
@@ -37,12 +37,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 st.sidebar.title("Knowledge Base")
 
-pdf_files = sorted(
-    [
-        f for f in os.listdir("pdfs")
-        if f.endswith(".pdf")
-    ]
-)
+pdf_files = get_documents()
 
 if pdf_files:
 
@@ -55,7 +50,11 @@ if pdf_files:
 
     st.sidebar.metric(
         "Documents",
-        len(pdf_files)
+        get_document_count()
+    )
+    st.sidebar.metric(
+        "Chunks",
+        get_chunk_count()
     )
 
 else:

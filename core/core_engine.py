@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-import os
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
@@ -17,7 +16,7 @@ from embedding import (
 
 from retrieval.hybrid_retriever import (
     retrieve_evidence,
-    extract_local_context
+    extract_local_context,
 )
 
 from research_mode import (
@@ -35,6 +34,7 @@ from config import DEBUG_MODE
 from core.citation_formatter import format_citations
 from core.research_analyzer import analyze_evidence
 from core.report_builder import build_research_report
+from core.context_builder import build_context
 
 
 # =========================
@@ -118,13 +118,7 @@ def run_rag(question: str):
         question
     )
 
-    # filter invalid indices
-    valid_sources = set(matched_sources)
 
-    top_k = [
-        i for i in top_k
-        if chunks[i]["source"] in valid_sources
-    ]
 
     context, citations = build_context(
         chunks,
@@ -185,3 +179,15 @@ def run_rag(question: str):
         context,
         research_mode
     )
+
+def get_chunk_count():
+    """
+    返回当前知识库 Chunk 数量
+    """
+
+    global chunks
+
+    if chunks is None:
+        return 0
+
+    return len(chunks)
