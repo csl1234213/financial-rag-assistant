@@ -1,57 +1,70 @@
-# core_engine.py
-from document_loader import load_documents, show_chunk_preview
+import sys
+from pathlib import Path
+import os
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(ROOT))
+
+from document_loader import (
+    load_documents,
+    show_chunk_preview
+)
+
 from embedding import (
     load_embedding_model,
-    get_embeddings,
-    embed_chunks
+    get_embeddings
 )
+
 from retrieval.hybrid_retriever import (
     retrieve_evidence,
-    retrieve_multi_document,
     extract_local_context
 )
+
 from research_mode import (
     detect_research_mode,
-    show_document_detection,
-    expand_research_sources,
-    filter_chunks_by_source
 )
+
 from prompt_builder import (
     build_prompt,
     build_compare_prompt
 )
+
 from llm.provider import call_llm
+
 from config import DEBUG_MODE
-from core.citation_formatter import (
-    format_citations
-)
-
+from core.citation_formatter import format_citations
+from core.research_analyzer import analyze_evidence
+from core.report_builder import build_research_report
 
 
 # =========================
-# 初始化（避免重复加载）
+# Global State
 # =========================
+
 PDF_FOLDER = "pdfs/"
-
 chunks = None
 model = None
 
+
+# =========================
+# Model init
+# =========================
+
 def get_model():
-
     global model
-
     if model is None:
-
         model = load_embedding_model()
-
     return model
 
 
-def init_engine():
+# =========================
+# Knowledge Base
+# =========================
 
+def init_engine(force_reload=False):
     global chunks
 
-    if chunks is not None:
+    if chunks is not None and not force_reload:
         return
 
     chunks = load_documents(PDF_FOLDER)
@@ -59,166 +72,116 @@ def init_engine():
     if DEBUG_MODE:
         show_chunk_preview(chunks)
 
+
+def refresh_knowledge_base():
+    global chunks
+
+    chunks = load_documents(PDF_FOLDER)
+
+    print(f"[RAG] Loaded {len(chunks)} chunks")
+
+    if len(chunks) > 0:
+        print(chunks[0]["source"], chunks[0]["chunk_id"])
+
+
 model = get_model()
+
+
 # =========================
-# 主RAG流程
+# RAG MAIN
 # =========================
+
 def run_rag(question: str):
-    """
-    V1.6核心入口
-    """
 
     global chunks, model
 
     init_engine()
 
     # -------------------------
-    # 1. research mode
+    # 1. Router
     # -------------------------
     research_mode = detect_research_mode(question)
 
-    matched_sources = show_document_detection(question)
-    matched_sources = expand_research_sources(
-        matched_sources,
-        research_mode
-    )
 
-    filtered_chunks = filter_chunks_by_source(
-        chunks,
-        matched_sources
-    )
-
-    if len(matched_sources) == 0:
-        doc_name = "all"
-
-    else:
-        doc_name = "_".join(
-            sorted(matched_sources)
-        )
-
-    filtered_embeddings = get_embeddings(
+    # -------------------------
+    # 2. Embedding + Retrieval
+    # -------------------------
+    all_embeddings = get_embeddings(
         model,
-        filtered_chunks,
-        doc_name
+        chunks,
+        "global"
     )
 
+    top_k, scores = retrieve_evidence(
+        model,
+        all_embeddings,
+        question
+    )
+
+    # filter invalid indices
+    valid_sources = set(matched_sources)
+
+    top_k = [
+        i for i in top_k
+        if chunks[i]["source"] in valid_sources
+    ]
+
+    context, citations = build_context(
+        chunks,
+        top_k,
+        scores,
+        question
+    )
+
+    print("\n====================")
+    print("CITATIONS")
+    print(citations)
+
+    print("====================")
+    print("CONTEXT")
+    print(context[:800])
+    print("====================\n")
+
     # -------------------------
-    # 2. retrieval
-    # -------------------------
-    if len(matched_sources) > 1:
-
-        multi_results = retrieve_multi_document(
-            matched_sources,
-            filtered_chunks,
-            model,
-            question
-        )
-
-        selected_chunks = []
-        score_values = []
-        top_k = []
-
-        for item in multi_results:
-            selected_chunks.append(item["chunk"])
-            score_values.append(item["score"])
-            top_k.append(len(selected_chunks) - 1)
-
-        import torch
-        scores = torch.tensor(score_values)
-
-        context, citations = build_context(
-            selected_chunks,
-            top_k,
-            scores,
-            question
-        )
-
-    else:
-        top_k, scores = retrieve_evidence(
-            model,
-            filtered_embeddings,
-            question
-        )
-
-        context, citations = build_context(
-            filtered_chunks,
-            top_k,
-            scores,
-            question
-        )
-        if DEBUG_MODE:
-            print()
-            print("=" * 60)
-            print("EVIDENCE CONTEXT")
-            print("=" * 60)
-
-            print(
-                context[:1500]
-            )
-    # -------------------------
-    # 3. prompt building
+    # 3. Prompt
     # -------------------------
     if research_mode == "compare":
-        prompt = build_compare_prompt(question, context)
-    elif research_mode == "leader":
         prompt = build_compare_prompt(question, context)
     else:
         prompt = build_prompt(question, context)
 
     # -------------------------
-    # 4. LLM call
+    # 4. LLM
     # -------------------------
     if DEBUG_MODE:
         return prompt, citations, context, research_mode
 
-    answer = call_llm(prompt)
-
-    citation_text = format_citations(
-        citations
-    )
-
-    answer = (
-            answer
-            + "\n\n"
-            + citation_text
-    )
-
-    return answer, citations, context, research_mode
-
-
-# =========================
-# 工具函数：构建context
-# =========================
-def build_context(chunks, top_k, scores, question):
-
-    context = ""
-
-    citations = []
-
-    for rank, idx in enumerate(top_k):
-
-        score = scores[idx].item()
-
-        local_context = extract_local_context(
-            chunks[idx]["text"],
-            question
+    if len(citations) == 0:
+        return (
+            "No relevant evidence found in uploaded documents.",
+            [],
+            "",
+            research_mode
         )
 
-        citations.append({
-            "rank": rank + 1,
-            "source": chunks[idx]["source"],
-            "chunk_id": chunks[idx]["chunk_id"],
-            "similarity": round(score, 4),
-            "preview": local_context[:150]
-        })
+    answer = call_llm(prompt)
 
-        context += f"""
-[Evidence {rank + 1}]
-Source: {chunks[idx]["source"]}
-Chunk: {chunks[idx]["chunk_id"]}
+    evidence_stats = analyze_evidence(citations)
 
-{local_context}
+    report = build_research_report(
+        question,
+        answer,
+        citations,
+        evidence_stats
+    )
 
-"""
+    citation_text = format_citations(citations)
 
-    return context, citations
+    answer = answer + "\n\n" + citation_text
+
+    return (
+        report,
+        citations,
+        context,
+        research_mode
+    )
