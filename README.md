@@ -1,176 +1,253 @@
-# Financial Research Assistant
+# 📊 Financial Research Assistant
 
-A production-oriented Financial RAG Assistant for financial statement analysis.
-
----
-
-## Features
-
-### Knowledge Base
-
-- Dynamic PDF Upload
-- Multi-PDF Knowledge Base
-- Knowledge Source Manager
-- Automatic Knowledge Refresh
-
-### Retrieval
-
-- Semantic Search
-- Multi-document Retrieval
-- Context Builder
-- Evidence Extraction
-
-### Research
-
-- Research Report Generation
-- Evidence Panel
-- Citation Support
-- Compare Mode
+## AI-Powered Financial RAG System for Multi-Document Analysis
 
 ---
 
-## System Architecture
+## 🧭 1. Product Vision / 产品定位
 
+### English
 
-                Upload PDF
-                     │
-                     ▼
-          Knowledge Manager
-                     │
-                     ▼
-           Document Loader
-                     │
-                     ▼
-             Text Chunking
-                     │
-                     ▼
-               Embedding
-                     │
-                     ▼
-              Vector Search
-                     │
-                     ▼
-            Context Builder
-                     │
-                     ▼
-              Prompt Builder
-                     │
-                     ▼
-                  LLM
-                     │
-                     ▼
-            Research Report
-                     │
-                     ▼
-             Evidence Panel
+A production-level AI system that transforms financial documents into structured research insights.
 
+It is designed to help users analyze multiple financial reports with **evidence-backed reasoning**, not simple chat responses.
 
 ---
 
-## Project Structure
+### 中文
 
+一个生产级 AI 金融研究系统。
 
-financial-rag-assistant/
-
-core/
-│
-├── core_engine.py
-├── knowledge_manager.py
-├── context_builder.py
-├── report_builder.py
-├── citation_formatter.py
-└── research_analyzer.py
-
-retrieval/
-│
-└── hybrid_retriever.py
-
-ui/
-│
-└── streamlit_app.py
-
-pdfs/
-
-uploads/
-
-README.md
-
+用于将多份财报转化为结构化研究结果，支持**基于证据的分析，而不是简单问答**。
 
 ---
 
-## Current Capabilities
+## 🎯 2. What This Project Does / 项目能力
 
-- Upload financial reports
-- Build knowledge base automatically
-- Retrieve relevant evidence
-- Generate research reports
-- Compare multiple companies
-- Display citations
-- Multi-PDF retrieval
+### ✔ Core Capabilities
 
----
-
-## Technology Stack
-
-Python
-
-Streamlit
-
-Sentence Transformers
-
-PyTorch
-
-RAG
-
-OpenAI Compatible API
+* Upload multiple financial PDFs
+* Cross-document semantic retrieval
+* Evidence-based answer generation
+* Structured financial research reports
+* Transparent AI reasoning system
 
 ---
 
-## Roadmap
+### 🧠 Key Output
 
-### V2.2 Stable
+Instead of:
 
-- Dynamic Knowledge Base
-- Knowledge Manager
-- Evidence Panel
-- Research Report
-- Context Builder
-- Multi-PDF Retrieval
+> “Here is the answer”
 
-### V2.3
+The system provides:
 
-- Retrieval Pipeline Cleanup
-- Hybrid Search
-- Better Ranking
-
-### V2.4
-
-- Financial Ratio Analysis
-- Company Profile
-- Timeline View
-
-### V3.0
-
-- Web Search
-- Real-time News
-- AI Agent Workflow
+> ✔ Answer
+> ✔ Evidence
+> ✔ Source documents
+> ✔ Reasoning trace
 
 ---
 
-## Screenshots
+## 🖼️ 3. UI Preview (Landing Layout Design)
 
-Home
-
-Upload PDF
-
-Knowledge Base
-
-Research Report
-
-Evidence Panel
+> 👉 这是 GitHub 首页最关键部分（建议你按这个放截图）
 
 ---
 
-## License
+### 🟦 ① Main Dashboard
 
-MIT License
+📌 **位置建议：README顶部第一张图**
+
+```
+[Screenshot: Main UI Dashboard]
+```
+
+👉 展示内容：
+
+* 上传PDF界面
+* 左侧 Knowledge Base
+* 中间 Chat / Query
+* 右侧 Evidence Panel
+
+---
+
+### 🟩 ② Evidence Panel（核心卖点）
+
+📌 **建议放第二张图**
+
+```
+[Screenshot: Evidence Panel]
+```
+
+👉 展示：
+
+* chunk来源
+* document引用
+* score ranking
+* traceable reasoning
+
+---
+
+### 🟨 ③ Research Report Output
+
+📌 **第三张图**
+
+```
+[Screenshot: Structured Report]
+```
+
+👉 展示：
+
+* Summary
+* Key Insights
+* Risks
+* Evidence Used
+
+---
+
+### 🟥 ④ Multi-Document Query Example
+
+📌 **第四张图**
+
+```
+[Screenshot: Cross-company analysis]
+```
+
+👉 展示：
+
+* Apple vs Tesla vs NVIDIA
+* cross-document reasoning
+
+---
+
+## 🏗️ 4. System Architecture / 系统架构
+
+```
+User Question
+     ↓
+Retrieval Layer
+(semantic search + ranking)
+     ↓
+Context Builder
+(filter + compress + structure)
+     ↓
+Prompt Builder
+(strict instruction control)
+     ↓
+LLM Reasoning
+     ↓
+Output Layer
+ ├── Research Report
+ └── Evidence Panel
+```
+
+---
+
+## 🧠 5. Key Engineering Highlights / 核心设计亮点
+
+---
+
+### 1. ❌ Removed Document Router
+
+**EN:** Simplified architecture by removing fragile routing logic
+**CN:** 移除不稳定的文档路由逻辑，降低系统复杂度
+
+---
+
+### 2. 🧠 Context Engineering Layer
+
+**EN:** Introduced structured context instead of raw chunks
+**CN:** 用 Context Builder 替代原始 chunk 输入
+
+---
+
+### 3. 📌 Evidence-Based Output
+
+**EN:** Every answer must be traceable to source documents
+**CN:** 所有回答必须可追溯到原始证据
+
+---
+
+### 4. 🔒 Output Boundary Control
+
+**EN:** LLM is strictly constrained to prevent hallucination
+**CN:** 对模型输出进行严格约束，防止幻觉
+
+---
+
+## 📊 6. System Evolution / 系统演进
+
+```
+V1 → PDF QA Prototype
+V2 → Multi-document RAG
+V2.1 → Router Experiment (removed)
+V2.2 → Stable Architecture (current)
+```
+
+---
+
+## 💡 7. Design Philosophy / 设计理念
+
+> Simplicity improves reliability more than complexity improves intelligence.
+
+> 简单性带来的稳定性，远比复杂系统带来的“智能感”更重要。
+
+---
+
+## 🖥️ 8. Recommended GitHub Layout (VERY IMPORTANT)
+
+👉 你 GitHub README 建议这样排：
+
+```
+1. Title + Short Description
+2. UI Screenshots (4 images)
+3. Key Features
+4. Architecture Diagram
+5. Engineering Highlights
+6. Project Evolution
+7. Design Philosophy
+8. Future Work
+```
+
+---
+
+## 📌 9. Screenshot Placement Strategy（关键）
+
+你一定要这样放：
+
+```
+[ HERO IMAGE - Dashboard ]
+
+[ Evidence Panel ]
+
+[ Report Output ]
+
+[ Multi-document Comparison ]
+```
+
+---
+
+## 🔥 10. Why This Project Matters
+
+### English
+
+This is not a demo RAG system.
+
+It is a **financial reasoning system with evidence-based AI outputs**.
+
+---
+
+### 中文
+
+这不是一个简单的 RAG Demo。
+
+而是一个**具备证据驱动能力的金融分析系统**。
+
+---
+
+## 🚀 Final Statement
+
+> Built not to answer questions, but to support financial reasoning.
+
+> 不是为了回答问题，而是为了支持金融研究。
