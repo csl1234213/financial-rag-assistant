@@ -1,13 +1,8 @@
-import os
-import json
+
 from pathlib import Path
-
+from core.knowledge_models import KnowledgeSource
 from config import PDF_DIR
-
-PDF_DIR = Path("pdfs")
-
-PDF_FOLDER = "pdfs"
-REGISTRY_FILE = "knowledge_registry.json"
+from core.knowledge_models import KnowledgeStatistics
 
 def get_documents():
     """
@@ -37,3 +32,61 @@ def refresh_registry():
     后续可扩展 JSON Registry
     """
     return get_documents()
+
+def get_company_list():
+
+    companies = set()
+
+    for pdf in PDF_DIR.glob("*.pdf"):
+
+        name = pdf.stem
+
+        company = name.split("_")[0]
+
+        companies.add(company)
+
+    return sorted(companies)
+
+def get_sources():
+
+    sources = []
+
+    for pdf in PDF_DIR.glob("*.pdf"):
+
+        stem = pdf.stem
+
+        parts = stem.split("_")
+
+        company = parts[0]
+
+        period = "_".join(parts[1:])
+
+        document_id = (
+            stem.lower()
+            .replace(" ", "_")
+            .replace("-", "_")
+        )
+
+        sources.append(
+            KnowledgeSource(
+                document_id=document_id,
+                company=company,
+                report_type="Financial Report",
+                period=period,
+                filename=pdf.name,
+            )
+        )
+
+    return sources
+
+def get_statistics(chunks):
+
+    companies = len(get_company_list())
+
+    reports = len(get_sources())
+
+    return KnowledgeStatistics(
+        companies=companies,
+        reports=reports,
+        chunks=len(chunks),
+    )
