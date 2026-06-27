@@ -1,8 +1,9 @@
 
-from pathlib import Path
+
 from core.knowledge_models import KnowledgeSource
 from config import PDF_DIR
 from core.knowledge_models import KnowledgeStatistics
+from document_loader import get_company
 
 def get_documents():
     """
@@ -39,9 +40,7 @@ def get_company_list():
 
     for pdf in PDF_DIR.glob("*.pdf"):
 
-        name = pdf.stem
-
-        company = name.split("_")[0]
+        company = get_company(pdf.name)
 
         companies.add(company)
 
@@ -57,9 +56,9 @@ def get_sources():
 
         parts = stem.split("_")
 
-        company = parts[0]
+        company = get_company(pdf.name)
 
-        period = "_".join(parts[1:])
+        period = "_".join(parts[1:]) if len(parts) > 1 else "Unknown"
 
         document_id = (
             stem.lower()

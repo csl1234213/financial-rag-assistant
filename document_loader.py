@@ -86,6 +86,11 @@ def load_documents(pdf_folder):
 
                 "quarter": quarter,
 
+                "document_id": pdf_name.lower()
+                    .replace(".pdf", "")
+                    .replace(" ", "_")
+                    .replace("-", "_"),
+
                 "text": chunk
 
             })

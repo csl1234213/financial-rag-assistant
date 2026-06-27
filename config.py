@@ -1,3 +1,5 @@
+from pathlib import Path
+PDFS_DIR = "pdfs"
 DEBUG_MODE = False
 DOCUMENT_HINTS = {
 
@@ -39,7 +41,7 @@ DOCUMENT_HINTS = {
 }
 CACHE_DIR = "cache"
 
-PDF_DIR = "pdfs"
+PDF_DIR = Path("pdfs")
 
 TOP_K = 4
 

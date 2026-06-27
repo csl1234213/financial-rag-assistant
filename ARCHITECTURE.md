@@ -50,6 +50,62 @@ High-Level Architecture
           ▼                         ▼
   Research Report             Evidence Panel
 
+
+
+V3 Agent Runtime Architecture
+
+                         UI
+                          │
+                          ▼
+                  core_engine.py
+                          │
+                          ▼
+                   AgentRuntime
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+         QueryPlanner ExecutionEngine ReasoningEngine
+              │           │
+              │           ▼
+              │      HybridRetriever
+              │
+              ▼
+         RuntimeContext
+              │
+              ▼
+         ContextBuilder
+              │
+              ▼
+         PromptBuilder
+              │
+              ▼
+              LLM
+              │
+              ▼
+         ReportBuilder
+
+Pipeline:
+
+User Query
+    ↓
+Intent Analyzer
+    ↓
+Query Planner
+    ↓
+Execution Plan
+    ↓
+Execution Engine
+    ↓
+Reasoning Engine
+    ↓
+Context Builder
+    ↓
+Prompt Builder
+    ↓
+LLM
+    ↓
+Report Builder
+
 ⸻
 
 Knowledge Base Architecture
@@ -75,22 +131,32 @@ Each uploaded PDF is automatically converted into semantic chunks and embedded i
 Project Structure
 
 financial-rag-assistant/
-core/
-│
-├── core_engine.py
-├── context_builder.py
-├── knowledge_manager.py
-├── report_builder.py
-├── research_analyzer.py
-└── citation_formatter.py
-retrieval/
-│
-└── hybrid_retriever.py
-ui/
-│
-└── streamlit_app.py
-pdfs/
-uploads/
+├── agent/
+│   ├── agent_runtime.py
+│   ├── execution_plan.py
+│   ├── execution_result.py
+│   ├── execution_engine.py
+│   ├── query_planner.py
+│   ├── reasoning_engine.py
+│   ├── reasoning_models.py
+│   ├── runtime_context.py
+│   └── runtime_result.py
+├── core/
+│   ├── core_engine.py
+│   ├── context_builder.py
+│   ├── knowledge_manager.py
+│   ├── report_builder.py
+│   ├── research_analyzer.py
+│   ├── citation_formatter.py
+│   └── intent_analyzer.py
+├── retrieval/
+│   └── hybrid_retriever.py
+├── llm/
+│   └── provider.py
+├── ui/
+│   └── streamlit_app.py
+├── pdfs/
+└── uploads/
 
 ⸻
 
@@ -157,6 +223,84 @@ Sections include:
 * Key Findings
 * Risks
 * Evidence Used
+
+
+
+Agent Layer (V3)
+
+agent_runtime.py
+
+Unified lifecycle manager for one AI Agent execution.
+
+Responsibilities:
+
+* Intent analysis → Plan
+* Execute via ExecutionEngine
+* Collect evidence
+* Build context & citations
+* Reason via ReasoningEngine
+* Return structured RuntimeResult
+
+
+
+query_planner.py
+
+Generates execution plans from user intent.
+
+Responsibilities:
+
+* Interpret intent analysis results
+* Build structured ExecutionPlan
+* Assign StepType to each task
+* Define DAG dependencies (depends_on)
+
+
+
+execution_plan.py
+
+Core data structures for Agent workflow orchestration.
+
+Exports:
+
+* StepType — Enum (RETRIEVE / COMPARE / SYNTHESIS / TOOL_CALL / REASONING)
+* StepStatus — Enum (PENDING / RUNNING / COMPLETED / FAILED / SKIPPED)
+* PlanStep — One executable task with status, result, and tool_name
+* ExecutionPlan — Full execution plan with tasks and metadata
+
+
+
+execution_engine.py
+
+Dispatches PlanStep to registered handlers.
+
+Responsibilities:
+
+* Register handlers per StepType
+* Resolve depends_on dependencies
+* Execute ready steps
+* Track step status (PENDING → RUNNING → COMPLETED / FAILED)
+
+
+
+reasoning_engine.py
+
+Structured analysis of execution results.
+
+Responsibilities:
+
+* Aggregate execution outputs
+* Convert outputs into structured Evidence
+* Extract facts, risks, and opportunities
+* Produce ReasoningResult
+
+
+
+runtime_context.py / runtime_result.py
+
+Unified runtime state and output.
+
+RuntimeContext replaces ad-hoc shared_context dict.
+RuntimeResult replaces the long return tuple from run_rag().
 
 ⸻
 
@@ -232,20 +376,31 @@ V2.2 Stable
 
 ⸻
 
+V3.0.0 Agent Runtime Edition
+
+* Agent Runtime (AgentRuntime)
+* Query Planner (QueryPlanner)
+* Execution Plan (ExecutionPlan + PlanStep)
+* Execution Engine (ExecutionEngine)
+* Runtime Context (RuntimeContext)
+* Runtime Result (RuntimeResult)
+* Structured Reasoning Engine (ReasoningEngine)
+* Evidence-based output (Evidence + ReasoningResult)
+* Handler registration pattern (StepType dispatch)
+* DAG dependency resolution (depends_on)
+
+
+
 Future Roadmap
 
-V2.3
+V3.1
 
-* Retrieval Pipeline Cleanup
-* Better Ranking Strategy
+* Tool Registry (Yahoo Finance / SEC API / Web Search)
+* ExecutionContext (upgrade from shared_context dict)
+* Scheduler + Ready Queue (topological execution)
 
-V2.4
+V3.2
 
-* Hybrid Search
-* Financial Ratio Analysis
-
-V3.0
-
-* Real-time Web Search
-* AI Agent Workflow
-* Financial Research Copilot
+* Reflection + Self-Correction
+* Agent Memory
+* Conversation State

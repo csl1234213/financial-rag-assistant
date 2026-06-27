@@ -34,7 +34,13 @@ from config import DEBUG_MODE
 from core.citation_formatter import format_citations
 from core.research_analyzer import analyze_evidence
 from core.report_builder import build_research_report
-from core.context_builder import build_context
+from core.intent_analyzer import IntentAnalyzer
+from agent.query_planner import QueryPlanner
+from agent.execution_engine import ExecutionEngine
+from agent.reasoning_engine import ReasoningEngine
+from agent.execution_plan import StepType
+from agent.agent_runtime import AgentRuntime
+from retrieval.hybrid_retriever import HybridRetriever
 
 
 # =========================
@@ -44,6 +50,7 @@ from core.context_builder import build_context
 PDF_FOLDER = "pdfs/"
 chunks = None
 model = None
+embeddings = None
 
 
 # =========================
@@ -62,21 +69,23 @@ def get_model():
 # =========================
 
 def init_engine(force_reload=False):
-    global chunks
+    global chunks, embeddings
 
     if chunks is not None and not force_reload:
         return
 
     chunks = load_documents(PDF_FOLDER)
+    embeddings = get_embeddings(model, chunks, "global")
 
     if DEBUG_MODE:
         show_chunk_preview(chunks)
 
 
 def refresh_knowledge_base():
-    global chunks
+    global chunks, embeddings
 
     chunks = load_documents(PDF_FOLDER)
+    embeddings = get_embeddings(model, chunks, "global")
 
     print(f"[RAG] Loaded {len(chunks)} chunks")
 
@@ -85,15 +94,48 @@ def refresh_knowledge_base():
 
 
 model = get_model()
+retriever = HybridRetriever(model)
+intent_analyzer = IntentAnalyzer()
+query_planner = QueryPlanner()
+
+engine = ExecutionEngine()
+reasoning_engine = ReasoningEngine()
+
+
+def _retrieve_handler(step, shared_context):
+    global chunks, embeddings, retriever
+    evidences = retriever.retrieve_evidence(
+        chunks=chunks,
+        embeddings=embeddings,
+        question=step.query or "",
+        company=step.company,
+        document_ids=step.document_ids or None,
+        top_k=step.parameters.get("top_k", 4),
+    )
+    shared_context.setdefault("_all_evidence", []).extend(evidences)
+    return evidences
+
+
+engine.register_handler(StepType.RETRIEVE, _retrieve_handler)
+engine.register_handler(StepType.COMPARE, lambda s, c: None)
+engine.register_handler(StepType.SYNTHESIS, lambda s, c: None)
+
+runtime = AgentRuntime(
+    planner=query_planner,
+    executor=engine,
+    reasoner=reasoning_engine,
+    retriever=retriever,
+    intent_analyzer=intent_analyzer,
+)
 
 
 # =========================
 # RAG MAIN
 # =========================
 
-def run_rag(question: str):
+def run_rag(question: str, company=None):
 
-    global chunks, model
+    global chunks, model, embeddings
 
     init_engine()
 
@@ -102,82 +144,68 @@ def run_rag(question: str):
     # -------------------------
     research_mode = detect_research_mode(question)
 
-
     # -------------------------
-    # 2. Embedding + Retrieval
+    # 2. Agent Runtime
     # -------------------------
-    all_embeddings = get_embeddings(
-        model,
-        chunks,
-        "global"
-    )
-
-    top_k, scores = retrieve_evidence(
-        model,
-        all_embeddings,
-        question
-    )
-
-
-
-    context, citations = build_context(
-        chunks,
-        top_k,
-        scores,
-        question
-    )
-
-    print("\n====================")
-    print("CITATIONS")
-    print(citations)
-
-    print("====================")
-    print("CONTEXT")
-    print(context[:800])
-    print("====================\n")
+    result = runtime.run(question, company)
 
     # -------------------------
     # 3. Prompt
     # -------------------------
     if research_mode == "compare":
-        prompt = build_compare_prompt(question, context)
+        prompt = build_compare_prompt(question, result.context)
     else:
-        prompt = build_prompt(question, context)
+        prompt = build_prompt(question, result.context)
 
     # -------------------------
     # 4. LLM
     # -------------------------
     if DEBUG_MODE:
-        return prompt, citations, context, research_mode
+        return (
+            prompt,
+            result.citations,
+            result.context,
+            research_mode,
+            result.intent_result,
+            result.evidence,
+            result.plan
+        )
 
-    if len(citations) == 0:
+    if len(result.citations) == 0:
         return (
             "No relevant evidence found in uploaded documents.",
             [],
             "",
-            research_mode
+            research_mode,
+            result.intent_result,
+            result.evidence,
+            result.plan
         )
 
     answer = call_llm(prompt)
 
-    evidence_stats = analyze_evidence(citations)
+    evidence_stats = analyze_evidence(result.citations)
 
     report = build_research_report(
         question,
         answer,
-        citations,
-        evidence_stats
+        result.citations,
+        evidence_stats,
+        result.reasoning_result
     )
 
-    citation_text = format_citations(citations)
+    citation_text = format_citations(result.citations)
 
     answer = answer + "\n\n" + citation_text
 
     return (
         report,
-        citations,
-        context,
-        research_mode
+        result.citations,
+        result.context,
+        research_mode,
+        result.intent_result,
+        result.evidence,
+        result.plan
     )
 
 def get_chunk_count():

@@ -1,0 +1,28 @@
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from agent.reasoning_models import Evidence, ReasoningResult
+from agent.execution_plan import ExecutionPlan
+
+
+@dataclass
+class RuntimeResult:
+    """
+    Unified output produced by one AgentRuntime.run() call.
+
+    UI / API consumes exactly one object, not a long tuple.
+    """
+
+    reasoning_result: Optional[ReasoningResult] = None
+
+    context: str = ""
+
+    citations: List[Dict[str, Any]] = field(default_factory=list)
+
+    report: str = ""
+
+    evidence: List[Evidence] = field(default_factory=list)
+
+    plan: Optional[ExecutionPlan] = None
+
+    intent_result: Dict[str, Any] = field(default_factory=dict)

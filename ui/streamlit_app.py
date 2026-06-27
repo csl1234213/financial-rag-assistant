@@ -9,10 +9,10 @@ if str(ROOT) not in sys.path:
 from core.core_engine import refresh_knowledge_base
 from core.knowledge_manager import (
     get_documents,
-    get_document_count
+    get_document_count,
+    get_company_list
 )
 from core.core_engine import run_rag, get_chunk_count, refresh_knowledge_base
-from core.knowledge_manager import (get_documents, get_document_count)
 
 # 后续 Phase3 实现时启用
 # from core.ingest import process_pdf
@@ -26,7 +26,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Financial RAG Assistant")
+st.title("📊 Financial Research Copilot")
+st.caption("AI-powered multi-document financial analysis system")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -35,16 +36,19 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Sidebar
 # =========================
 
-st.sidebar.title("Knowledge Base")
+st.sidebar.title("🔎 Knowledge Sources")
 
 pdf_files = get_documents()
 
 if pdf_files:
 
-    st.sidebar.subheader("Knowledge Sources")
+    company_list = get_company_list()
 
-    for pdf in pdf_files:
-        st.sidebar.success(f"✓ {pdf}")
+    selected_companies = st.sidebar.multiselect(
+        "Select Companies",
+        options=company_list,
+        default=[]
+    )
 
     st.sidebar.divider()
 
@@ -62,11 +66,14 @@ else:
     st.sidebar.info(
         "No document loaded"
     )
+    selected_companies = []
 # =========================
 # Upload PDF
 # =========================
 
-uploaded_file = st.file_uploader(
+st.sidebar.divider()
+st.sidebar.subheader("Upload PDF")
+uploaded_file = st.sidebar.file_uploader(
     "Upload PDF",
     type=["pdf"]
 )
@@ -89,127 +96,119 @@ if uploaded_file:
 
         st.success("Knowledge base updated")
 
+        st.rerun()
+
     except Exception as e:
         st.error(f"Upload failed: {e}")
 # =========================
 # Question Input
 # =========================
 
-if uploaded_file:
+question = st.text_input(
+    "Ask a question about companies or markets"
+)
 
-    question = st.text_input(
-        "Ask a question"
-    )
+if st.button("Analyze", type="primary"):
 
-    if st.button("Search"):
-
-        if not question:
-
-            st.warning(
-                "Please enter a question"
-            )
-
-        else:
-
-            try:
-
-                with st.spinner(
-                    "Analyzing documents..."
-                ):
-
-                    report, citations, context, mode = run_rag(question)
-
-                st.success(
-                    f"Mode: {mode}"
+    if not question:
+        st.warning("Please enter a question")
+    else:
+        try:
+            with st.spinner("🧠 AI is analyzing financial reports and building investment insights..."):
+                selected_company = selected_companies[0] if selected_companies else None
+                report, citations, context, research_mode, intent_result, all_evidence, plan = run_rag(
+                    question,
+                    company=selected_company
                 )
+                intent = intent_result["intent"]
+                companies = intent_result["companies"]
 
-                st.info(
-                    f"Evidence Count: {len(citations)}"
-                )
+            # =========================
+            # Level 1: Research Scope (Product Understanding Layer)
+            # =========================
 
-                left_col, right_col = st.columns(
-                    [2, 1]
-                )
+            st.markdown("## 🧠 Research Scope")
 
-                # =========================
-                # Answer Area
-                # =========================
+            scope_text = f"""
+**Intent:** `{intent_result['intent']}`
 
-                with left_col:
-                    st.markdown(
-                        "## Report"
-                    )
+**Companies:** {intent_result['companies']}
 
-                    st.markdown(
-                        report
-                    )
+**Documents:** {list(set(ev.metadata.get('document_id', '') for ev in all_evidence))}
 
-                    with st.expander(
-                        "Retrieved Context"
-                    ):
+**Chunks Retrieved:** {len(all_evidence)}
+"""
 
-                        st.text(
-                            context
-                        )
+            st.info(scope_text)
 
-                # =========================
-                # Evidence Area
-                # =========================
+            st.markdown("## 📋 Execution Plan")
+            plan_tasks = plan.tasks
+            for i, task in enumerate(plan_tasks):
+                task_type = task.step_type.value
+                task_query = task.query or ", ".join(task.parameters.get("metrics", []))
+                emoji = {"retrieve": "🔍", "compare": "⚖️", "synthesis": "🧩"}.get(task_type, "📌")
+                st.caption(f"{emoji} **Step {i+1}:** `{task_type}` — {task_query}")
 
-                with right_col:
+            # =========================
+            # Intent 可视化（Sidebar）
+            # =========================
 
-                    st.markdown(
-                        "## Evidence"
-                    )
+            st.sidebar.divider()
+            st.sidebar.markdown("## 🧭 Intent Analysis")
 
-                    if citations:
+            if intent == "SINGLE_COMPANY":
+                st.sidebar.success("🟢 Single Company Analysis")
+            elif intent == "COMPARE_COMPANIES":
+                st.sidebar.info("🔵 Comparative Analysis")
+            elif intent == "GLOBAL_RESEARCH":
+                st.sidebar.warning("🟣 Global Research Mode")
+            else:
+                st.sidebar.error("⚪ Unknown Intent")
 
-                        for c in citations:
+            if companies:
+                st.sidebar.markdown("**Companies:**")
+                for c in companies:
+                    st.sidebar.write(f"- {c}")
 
-                            with st.expander(
-                                f"Evidence {c['rank']}"
-                            ):
+            st.divider()
 
-                                st.caption(
-                                    f"📄 {c['source']}"
-                                )
+            # =========================
+            # Level 2: Answer Report (Result Layer)
+            # =========================
 
-                                st.caption(
-                                    f"Chunk {c['chunk_id']}"
-                                )
+            st.markdown("## 📊 Investment Research Report")
+            st.markdown(report)
 
-                                st.write(
-                                    f"Confidence: {c['similarity']:.3f}"
-                                )
+            with st.expander("Show Raw Retrieved Context"):
+                st.text(context)
 
-                                st.progress(
-                                    float(
-                                        c["similarity"]
-                                    )
-                                )
+            st.divider()
 
-                                st.markdown(
-                                    "**Preview**"
-                                )
+            # =========================
+            # Level 3: Evidence (Citation Layer)
+            # =========================
 
-                                st.caption(
-                                    c["preview"]
-                                )
+            st.markdown("## 📎 Evidence")
 
-                    else:
+            if citations:
+                for c in citations:
+                    with st.container():
+                        st.markdown(f"""
+**[{c['rank']}] {c['source']}**
 
-                        st.warning(
-                            "No evidence found"
-                        )
+- Chunk ID: `{c['chunk_id']}`
+- Score: `{c['similarity']:.4f}`
 
-            except Exception as e:
+> {c['preview']}
+""")
+                        st.divider()
+            else:
+                st.warning("No relevant evidence found")
 
-                st.error(
-                    f"Search failed: {e}"
-                )
+        except Exception as e:
+            st.error(f"Analysis failed: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
-else:
-
-    st.info(
-        "Please upload a PDF first"
-    )
+if not get_documents():
+    st.info("Please upload at least one PDF document to get started")

@@ -179,15 +179,66 @@ Output Layer
 ## 📊 6. System Evolution / 系统演进
 
 ```
-V1 → PDF QA Prototype
-V2 → Multi-document RAG
+V1   → PDF QA Prototype
+V2   → Multi-document RAG
 V2.1 → Router Experiment (removed)
-V2.2 → Stable Architecture (current)
+V2.2 → Stable Architecture
+V3.0 → Agent Runtime Edition ⭐
 ```
 
 ---
 
-## 💡 7. Design Philosophy / 设计理念
+## ✨ 7. Agent Runtime (V3)
+
+Unlike traditional RAG pipelines, V3 introduces a dedicated Agent Runtime.
+
+### Features
+
+* **Query Planning** — Structured execution plans with DAG dependencies
+* **Execution Engine** — Handler-based dispatch with step status tracking
+* **Runtime Context** — Unified state management for one Agent execution
+* **Structured Reasoning** — Facts / Risks / Opportunities extraction
+* **Explainable Evidence Pipeline** — Every output traceable to source documents
+
+### Architecture
+
+```
+User Query
+    ↓
+Intent Analyzer
+    ↓
+Query Planner
+    ↓
+Execution Plan
+    ↓
+Execution Engine
+    ↓
+Reasoning Engine
+    ↓
+Context Builder
+    ↓
+Prompt Builder
+    ↓
+LLM
+    ↓
+Report Builder
+```
+
+### Agent Modules
+
+| Module | Role |
+|---|---|
+| `agent_runtime.py` | Unified lifecycle manager |
+| `query_planner.py` | Intent → ExecutionPlan |
+| `execution_plan.py` | StepType / PlanStep / ExecutionPlan |
+| `execution_engine.py` | Handler dispatch + dependency resolution |
+| `reasoning_engine.py` | Evidence → Facts / Risks / Opportunities |
+| `runtime_context.py` | Runtime state (replaces shared_context dict) |
+| `runtime_result.py` | Unified output (replaces long return tuple) |
+
+---
+
+## 💡 8. Design Philosophy / 设计理念
 
 > Simplicity improves reliability more than complexity improves intelligence.
 
@@ -195,7 +246,7 @@ V2.2 → Stable Architecture (current)
 
 ---
 
-## 🖥️ 8. Recommended GitHub Layout (VERY IMPORTANT)
+## 🖥️ 9. Recommended GitHub Layout (VERY IMPORTANT)
 
 👉 你 GitHub README 建议这样排：
 
@@ -212,7 +263,7 @@ V2.2 → Stable Architecture (current)
 
 ---
 
-## 📌 9. Screenshot Placement Strategy（关键）
+## 📌 10. Screenshot Placement Strategy（关键）
 
 你一定要这样放：
 
@@ -228,7 +279,7 @@ V2.2 → Stable Architecture (current)
 
 ---
 
-## 🔥 10. Why This Project Matters
+## 🔥 11. Why This Project Matters
 
 ### English
 
