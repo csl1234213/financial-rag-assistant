@@ -1,5 +1,10 @@
 # 📊 Financial Research Assistant
 
+[![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
+[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 ## AI-Powered Financial RAG System for Multi-Document Analysis
 
 ---
@@ -184,6 +189,7 @@ V2   → Multi-document RAG
 V2.1 → Router Experiment (removed)
 V2.2 → Stable Architecture
 V3.0 → Agent Runtime Edition ⭐
+V4.0 → Production Architecture ⭐
 ```
 
 ---
@@ -238,7 +244,54 @@ Report Builder
 
 ---
 
-## 💡 8. Design Philosophy / 设计理念
+## 🚀 8. Production Architecture (V4)
+
+Financial Research Copilot V4 introduces a complete service-oriented architecture.
+
+### Highlights
+
+* **FastAPI backend** — Production HTTP server with Swagger UI
+* **RESTful API** — 6 endpoints: chat, knowledge, statistics, upload, refresh, health
+* **API Client SDK** — `APIClient` with unified timeout and error handling
+* **Service Layer** — `ChatService` as single entry point for all clients
+* **Agent Runtime** — V3 Agent pipeline behind the API
+* **Production-ready** — Versioned API (`/api/v1`), structured schemas, health checks
+
+### Architecture
+
+```
+Browser / Streamlit / CLI
+        │
+        ▼
+   APIClient SDK
+        │
+        ▼
+   REST API (FastAPI)
+        │
+        ▼
+   Service Layer
+        │
+        ▼
+   Agent Runtime
+        │
+        ▼
+   Retriever / LLM
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/chat` | POST | Financial research chat |
+| `/api/v1/knowledge` | GET | Knowledge base overview |
+| `/api/v1/knowledge/statistics` | GET | Document & chunk statistics |
+| `/api/v1/upload` | POST | Upload PDF + auto-refresh |
+| `/api/v1/refresh` | POST | Rebuild knowledge base |
+| `/api/v1/health` | GET | System health check |
+
+---
+
+## 💡 9. Design Philosophy / 设计理念
 
 > Simplicity improves reliability more than complexity improves intelligence.
 

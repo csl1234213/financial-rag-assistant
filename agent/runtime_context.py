@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from agent.reasoning_models import Evidence
 from agent.execution_result import ExecutionResult
+from agent.reasoning_models import Evidence
 
 
 @dataclass

@@ -1,6 +1,7 @@
-from sentence_transformers import SentenceTransformer
 import os
+
 import torch
+from sentence_transformers import SentenceTransformer
 
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -30,6 +31,7 @@ def get_cache_path(
 def save_embeddings(path, data):
 
     import os
+
     import torch
 
     os.makedirs(
@@ -58,7 +60,7 @@ def save_embeddings(path, data):
 
         )
 
-    except:
+    except Exception:
 
         pass
 

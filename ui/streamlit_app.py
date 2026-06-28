@@ -1,36 +1,37 @@
+import os
 import sys
 from pathlib import Path
-import os
+
 import streamlit as st
+
 ROOT = Path(__file__).resolve().parent.parent
 
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
-from core.core_engine import refresh_knowledge_base
-from core.knowledge_manager import (
-    get_documents,
-    get_document_count,
-    get_company_list
-)
-from core.core_engine import run_rag, get_chunk_count, refresh_knowledge_base
 
-# 后续 Phase3 实现时启用
-# from core.ingest import process_pdf
+from client.api_client import APIClient, APIClientError
+from config.ui import (
+    API_BASE_URL,
+    PAGE_LAYOUT,
+    PAGE_TITLE,
+    UPLOAD_DIR,
+)
+
+client = APIClient(base_url=API_BASE_URL)
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # =========================
 # Page Config
 # =========================
 
 st.set_page_config(
-    page_title="Financial RAG Assistant",
-    layout="wide"
+    page_title=PAGE_TITLE,
+    layout=PAGE_LAYOUT,
 )
 
 st.title("📊 Financial Research Copilot")
 st.caption("AI-powered multi-document financial analysis system")
-
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # =========================
 # Sidebar
@@ -38,11 +39,17 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 st.sidebar.title("🔎 Knowledge Sources")
 
-pdf_files = get_documents()
+try:
+    knowledge = client.knowledge()
+    pdf_files = knowledge["documents"]
+    company_list = knowledge["companies"]
+    doc_count = knowledge["document_count"]
+except APIClientError:
+    pdf_files = []
+    company_list = []
+    doc_count = 0
 
 if pdf_files:
-
-    company_list = get_company_list()
 
     selected_companies = st.sidebar.multiselect(
         "Select Companies",
@@ -54,11 +61,7 @@ if pdf_files:
 
     st.sidebar.metric(
         "Documents",
-        get_document_count()
-    )
-    st.sidebar.metric(
-        "Chunks",
-        get_chunk_count()
+        doc_count
     )
 
 else:
@@ -80,20 +83,13 @@ uploaded_file = st.sidebar.file_uploader(
 
 if uploaded_file:
 
-    file_path = os.path.join(
-        UPLOAD_DIR,
-        uploaded_file.name
-    )
-
     try:
-        # 1. 保存到 uploads
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        result = client.upload(
+            uploaded_file.getvalue(),
+            uploaded_file.name,
+        )
 
-        st.success(f"Uploaded: {uploaded_file.name}")
-
-        refresh_knowledge_base()
-
+        st.success(f"Uploaded: {result['file']}")
         st.success("Knowledge base updated")
 
         st.rerun()
@@ -116,12 +112,19 @@ if st.button("Analyze", type="primary"):
         try:
             with st.spinner("🧠 AI is analyzing financial reports and building investment insights..."):
                 selected_company = selected_companies[0] if selected_companies else None
-                report, citations, context, research_mode, intent_result, all_evidence, plan = run_rag(
-                    question,
-                    company=selected_company
+                data = client.chat(
+                    question=question,
+                    company=selected_company,
                 )
-                intent = intent_result["intent"]
-                companies = intent_result["companies"]
+
+            report = data["report"]
+            citations = data["citations"]
+            reasoning = data["reasoning"]
+            plan = data["plan"]
+            execution_time = data["execution_time"]
+
+            intent = reasoning["intent"]
+            companies = reasoning["companies"]
 
             # =========================
             # Level 1: Research Scope (Product Understanding Layer)
@@ -130,27 +133,26 @@ if st.button("Analyze", type="primary"):
             st.markdown("## 🧠 Research Scope")
 
             scope_text = f"""
-**Intent:** `{intent_result['intent']}`
+**Intent:** `{reasoning['intent']}`
 
-**Companies:** {intent_result['companies']}
+**Companies:** {reasoning['companies']}
 
-**Documents:** {list(set(ev.metadata.get('document_id', '') for ev in all_evidence))}
+**Evidence Count:** {reasoning['evidence_count']}
 
-**Chunks Retrieved:** {len(all_evidence)}
+**Execution Time:** {execution_time}s
 """
 
             st.info(scope_text)
 
             st.markdown("## 📋 Execution Plan")
-            plan_tasks = plan.tasks
-            for i, task in enumerate(plan_tasks):
-                task_type = task.step_type.value
-                task_query = task.query or ", ".join(task.parameters.get("metrics", []))
+            for task in plan["tasks"]:
+                task_type = task["step_type"]
+                task_desc = task["description"]
                 emoji = {"retrieve": "🔍", "compare": "⚖️", "synthesis": "🧩"}.get(task_type, "📌")
-                st.caption(f"{emoji} **Step {i+1}:** `{task_type}` — {task_query}")
+                st.caption(f"{emoji} **Step {task['step_id']}:** `{task_type}` — {task_desc}")
 
             # =========================
-            # Intent 可视化（Sidebar）
+            # Intent Visualization (Sidebar)
             # =========================
 
             st.sidebar.divider()
@@ -179,9 +181,6 @@ if st.button("Analyze", type="primary"):
             st.markdown("## 📊 Investment Research Report")
             st.markdown(report)
 
-            with st.expander("Show Raw Retrieved Context"):
-                st.text(context)
-
             st.divider()
 
             # =========================
@@ -197,7 +196,7 @@ if st.button("Analyze", type="primary"):
 **[{c['rank']}] {c['source']}**
 
 - Chunk ID: `{c['chunk_id']}`
-- Score: `{c['similarity']:.4f}`
+- Score: `{c['similarity']}`
 
 > {c['preview']}
 """)
@@ -205,10 +204,15 @@ if st.button("Analyze", type="primary"):
             else:
                 st.warning("No relevant evidence found")
 
+        except APIClientError:
+            st.error(
+                f"⚠️ API server not reachable at {API_BASE_URL}. "
+                "Please start the API server first:\n\n```\nuvicorn api.app:app --reload\n```"
+            )
         except Exception as e:
             st.error(f"Analysis failed: {e}")
             import traceback
             st.code(traceback.format_exc())
 
-if not get_documents():
+if not doc_count:
     st.info("Please upload at least one PDF document to get started")

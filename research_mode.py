@@ -1,4 +1,3 @@
-from config import DOCUMENT_HINTS
 COMPARE_KEYWORDS = [
 
     "compare",

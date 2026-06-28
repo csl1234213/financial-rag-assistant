@@ -1,10 +1,8 @@
 from typing import Optional
 
-from agent.execution_plan import ExecutionPlan, StepType
 from agent.execution_engine import ExecutionEngine
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
-from agent.reasoning_models import Evidence
 from agent.runtime_context import RuntimeContext
 from agent.runtime_result import RuntimeResult
 from core.context_builder import build_context_from_evidence

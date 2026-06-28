@@ -1,10 +1,19 @@
-# retrieval/hybrid_retriever.py
+from typing import Any, Dict, Optional
 
-"""
-V1.9 Placeholder
 
-Future:
-- BM25
-- Vector Search
-- Hybrid Search
-"""
+class MetadataFilter:
+    """
+    Builds metadata filter conditions from RetrievalContext.
+
+    Used by HybridRetriever._apply_filters() for post-filtering.
+    """
+
+    def build(
+        self,
+        company: Optional[str] = None,
+        filters: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "company": company,
+            "filters": filters or {},
+        }

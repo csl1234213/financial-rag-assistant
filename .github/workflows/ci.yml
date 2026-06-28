@@ -1,0 +1,144 @@
+name: CI
+
+# TODO (V4.4 — after Docker):
+#   - security: pip-audit       → fail on known vulnerabilities
+#   - typecheck: mypy .          → static type checking
+#   Future pipeline: ruff → mypy → pytest (unit+integration) → coverage
+
+on:
+  push:
+    branches: [main, master, v4]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ============================================================
+  # 1. Lint — fast, catches style issues immediately
+  # ============================================================
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check .
+
+  # ============================================================
+  # 2. Unit Tests — fast, isolated, no IO
+  # ============================================================
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/dev.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.11-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Run unit tests
+        run: pytest tests/ -m "unit" -v --tb=short
+
+  # ============================================================
+  # 3. Integration Tests — API layer, module collaboration
+  # ============================================================
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/dev.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.11-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Run integration tests
+        run: pytest tests/ -m "integration" -v --tb=short
+
+  # ============================================================
+  # 4. Coverage — runs after unit + integration, enforces 85%
+  # ============================================================
+  coverage:
+    needs: [unit, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/dev.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.11-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Run full test suite with coverage
+        run: pytest tests/ --cov --cov-report=term --cov-report=html --cov-fail-under=85
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  # ============================================================
+  # 5. Docker — verify image builds (placeholder for Sprint 4)
+  # ============================================================
+  docker:
+    if: hashFiles('docker/Dockerfile.api') != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -f docker/Dockerfile.api -t financial-rag-assistant/api .

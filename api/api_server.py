@@ -1,7 +1,6 @@
+from core_engine import run_rag
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-
-from core_engine import run_rag
 
 app = FastAPI()
 

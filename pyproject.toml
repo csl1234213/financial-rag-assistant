@@ -1,0 +1,49 @@
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=.",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-fail-under=85",
+]
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (module collaboration)",
+    "slow: Slow tests (e2e, benchmark)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["E402"]
+"ui/*.py" = ["E402"]
+"core/*.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.coverage.run]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "llm/deepseek.py",
+    "llm/provider.py",
+    "app.py",
+    "api_server.py",
+    "client/*",
+    "storage/collection_manager.py",
+    "chroma_db_test*",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]

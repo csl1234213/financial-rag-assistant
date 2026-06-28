@@ -1,42 +1,17 @@
-# retrieval/document_filter.py
+from typing import Dict, List, Optional
 
-# retrieval/document_filter.py
 
-def filter_documents(
-        matched_sources,
-        chunks,
-        embeddings=None
-):
-    if not matched_sources:
-        return chunks, embeddings
+class DocumentFilter:
+    """
+    Builds document filter conditions from RetrievalContext.
 
-    filtered_chunks = []
-    filtered_indices = []
+    Used by HybridRetriever._apply_filters() for post-filtering.
+    """
 
-    for i, chunk in enumerate(chunks):
-
-        source_name = chunk["source"].lower()
-
-        if any(
-
-            company.lower() in source_name
-
-            for company in matched_sources
-
-        ):
-
-            filtered_chunks.append(chunk)
-
-            filtered_indices.append(i)
-
-    if embeddings is None:
-        return filtered_chunks, None
-
-    filtered_embeddings = embeddings[
-        filtered_indices
-    ]
-
-    return (
-        filtered_chunks,
-        filtered_embeddings
-    )
+    def build(
+        self,
+        document_ids: Optional[List[str]] = None,
+    ) -> Dict[str, List[str]]:
+        return {
+            "document_ids": document_ids or [],
+        }

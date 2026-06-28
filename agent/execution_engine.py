@@ -1,8 +1,7 @@
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from agent.execution_plan import ExecutionPlan, PlanStep, StepStatus, StepType
 from agent.execution_result import ExecutionResult
-
 
 Handler = Callable[[PlanStep, Dict[str, Any]], Any]
 

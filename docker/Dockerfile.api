@@ -1,0 +1,44 @@
+# ============================================================
+# financial-api — FastAPI Backend
+# ============================================================
+FROM python:3.11.13-slim-bookworm
+
+LABEL org.opencontainers.image.title="Financial Research Copilot - API"
+LABEL org.opencontainers.image.version="4.3.0"
+LABEL org.opencontainers.image.description="AI Financial Research Platform — FastAPI Backend"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.source="https://github.com/your-org/financial-rag-assistant"
+
+WORKDIR /app
+
+# Python best practices
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies (API only — no Streamlit)
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/api.txt requirements/api.txt
+RUN pip install --no-cache-dir -r requirements/api.txt
+
+# Application code
+COPY . .
+
+# Storage directories
+RUN mkdir -p /app/storage/uploads /app/chroma_db
+
+# Non-root user (security hardening)
+RUN adduser --disabled-password --gecos "" appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
