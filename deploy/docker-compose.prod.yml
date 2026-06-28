@@ -1,0 +1,72 @@
+# ============================================================
+# Production Compose — optimized, health checks, restart always
+# ============================================================
+name: financial-rag-prod
+
+services:
+  # ---------- FastAPI Backend ----------
+  financial-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: financial-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - financial_uploads:/app/storage/uploads
+      - financial_chroma:/app/chroma_db
+    environment:
+      - APP_ENV=production
+      - LOG_LEVEL=WARNING
+      - CHROMA_PATH=/app/chroma_db
+      - UPLOAD_DIR=/app/storage/uploads
+    env_file:
+      - .env
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+
+  # ---------- Streamlit Frontend ----------
+  financial-ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ui
+    container_name: financial-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - financial_uploads:/app/storage/uploads:ro
+    environment:
+      - API_BASE=http://financial-api:8000
+    depends_on:
+      financial-api:
+        condition: service_healthy
+    networks:
+      - financial_network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+
+volumes:
+  financial_uploads:
+    driver: local
+  financial_chroma:
+    driver: local
+
+networks:
+  financial_network:
+    driver: bridge

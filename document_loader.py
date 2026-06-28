@@ -1,6 +1,8 @@
-import fitz
-import re
 import os
+import re
+
+import fitz
+
 
 def get_company(filename):
 

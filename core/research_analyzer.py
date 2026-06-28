@@ -1,5 +1,6 @@
 from collections import Counter
 
+
 def analyze_evidence(citations):
 
     source_counter = Counter()

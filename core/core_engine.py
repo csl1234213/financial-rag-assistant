@@ -4,97 +4,107 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
 
+from agent.agent_runtime import AgentRuntime
+from agent.execution_engine import ExecutionEngine
+from agent.execution_plan import StepType
+from agent.query_planner import QueryPlanner
+from agent.reasoning_engine import ReasoningEngine
+from config import DEBUG_MODE
+from core.citation_formatter import format_citations
+from core.intent_analyzer import IntentAnalyzer
+from core.report_builder import build_research_report
+from core.research_analyzer import analyze_evidence
 from document_loader import (
     load_documents,
-    show_chunk_preview
 )
-
 from embedding import (
     load_embedding_model,
-    get_embeddings
 )
-
-from retrieval.hybrid_retriever import (
-    retrieve_evidence,
-    extract_local_context,
-)
-
+from llm.provider import call_llm
+from prompt_builder import build_compare_prompt, build_prompt
 from research_mode import (
     detect_research_mode,
 )
-
-from prompt_builder import (
-    build_prompt,
-    build_compare_prompt
+from retrieval.hybrid_retriever import (
+    HybridRetriever,
 )
-
-from llm.provider import call_llm
-
-from config import DEBUG_MODE
-from core.citation_formatter import format_citations
-from core.research_analyzer import analyze_evidence
-from core.report_builder import build_research_report
-from core.intent_analyzer import IntentAnalyzer
-from agent.query_planner import QueryPlanner
-from agent.execution_engine import ExecutionEngine
-from agent.reasoning_engine import ReasoningEngine
-from agent.execution_plan import StepType
-from agent.agent_runtime import AgentRuntime
-from retrieval.hybrid_retriever import HybridRetriever
-
+from retrieval.retrieval_context import RetrievalContext
+from storage.vector_models import VectorDocument
 
 # =========================
-# Global State
+# Pipeline Composition
 # =========================
 
 PDF_FOLDER = "pdfs/"
-chunks = None
-model = None
-embeddings = None
+
+_store = None
+_model = None
 
 
-# =========================
-# Model init
-# =========================
+def _get_model():
+    global _model
+    if _model is None:
+        _model = load_embedding_model()
+    return _model
 
-def get_model():
-    global model
-    if model is None:
-        model = load_embedding_model()
-    return model
+
+def _get_store():
+    global _store
+    if _store is None:
+        from storage.chroma_store import ChromaEmbeddingStore
+        _store = ChromaEmbeddingStore()
+    return _store
 
 
 # =========================
 # Knowledge Base
 # =========================
 
-def init_engine(force_reload=False):
-    global chunks, embeddings
-
-    if chunks is not None and not force_reload:
-        return
-
-    chunks = load_documents(PDF_FOLDER)
-    embeddings = get_embeddings(model, chunks, "global")
-
-    if DEBUG_MODE:
-        show_chunk_preview(chunks)
-
-
 def refresh_knowledge_base():
-    global chunks, embeddings
+    store = _get_store()
+    model = _get_model()
 
     chunks = load_documents(PDF_FOLDER)
-    embeddings = get_embeddings(model, chunks, "global")
 
-    print(f"[RAG] Loaded {len(chunks)} chunks")
+    for col_name in store.list_collections():
+        store.delete_collection(col_name)
+
+    store.create_collection("financial_reports")
+
+    docs = []
+    for chunk in chunks:
+        embedding = model.encode(chunk["text"], convert_to_tensor=False).tolist()
+        docs.append(VectorDocument(
+            document_id=chunk["document_id"],
+            chunk_id="%s_%d" % (chunk["document_id"], chunk["chunk_id"]),
+            company=chunk["company"],
+            content=chunk["text"],
+            embedding=embedding,
+            metadata={
+                "source": chunk["source"],
+                "quarter": chunk.get("quarter", ""),
+                "collection": "financial_reports",
+            }
+        ))
+
+    store.add_documents(docs)
+
+    print(f"[RAG] Loaded {len(chunks)} chunks into ChromaDB")
 
     if len(chunks) > 0:
         print(chunks[0]["source"], chunks[0]["chunk_id"])
 
 
-model = get_model()
-retriever = HybridRetriever(model)
+def get_chunk_count():
+    store = _get_store()
+    return store.count()
+
+
+# =========================
+# Runtime Wiring
+# =========================
+
+retriever = HybridRetriever(_get_model())
 intent_analyzer = IntentAnalyzer()
 query_planner = QueryPlanner()
 
@@ -103,15 +113,20 @@ reasoning_engine = ReasoningEngine()
 
 
 def _retrieve_handler(step, shared_context):
-    global chunks, embeddings, retriever
-    evidences = retriever.retrieve_evidence(
-        chunks=chunks,
-        embeddings=embeddings,
+    store = _get_store()
+
+    context = RetrievalContext(
         question=step.query or "",
         company=step.company,
         document_ids=step.document_ids or None,
         top_k=step.parameters.get("top_k", 4),
     )
+
+    evidences = retriever.retrieve_evidence(
+        context=context,
+        store=store,
+    )
+
     shared_context.setdefault("_all_evidence", []).extend(evidences)
     return evidences
 
@@ -135,31 +150,15 @@ runtime = AgentRuntime(
 
 def run_rag(question: str, company=None):
 
-    global chunks, model, embeddings
-
-    init_engine()
-
-    # -------------------------
-    # 1. Router
-    # -------------------------
     research_mode = detect_research_mode(question)
 
-    # -------------------------
-    # 2. Agent Runtime
-    # -------------------------
     result = runtime.run(question, company)
 
-    # -------------------------
-    # 3. Prompt
-    # -------------------------
     if research_mode == "compare":
         prompt = build_compare_prompt(question, result.context)
     else:
         prompt = build_prompt(question, result.context)
 
-    # -------------------------
-    # 4. LLM
-    # -------------------------
     if DEBUG_MODE:
         return (
             prompt,
@@ -207,15 +206,3 @@ def run_rag(question: str, company=None):
         result.evidence,
         result.plan
     )
-
-def get_chunk_count():
-    """
-    返回当前知识库 Chunk 数量
-    """
-
-    global chunks
-
-    if chunks is None:
-        return 0
-
-    return len(chunks)

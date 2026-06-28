@@ -1,9 +1,9 @@
 
 
-from core.knowledge_models import KnowledgeSource
 from config import PDF_DIR
-from core.knowledge_models import KnowledgeStatistics
+from core.knowledge_models import KnowledgeSource, KnowledgeStatistics
 from document_loader import get_company
+
 
 def get_documents():
     """

@@ -6,7 +6,33 @@ Financial Research Assistant is a Retrieval-Augmented Generation (RAG) system de
 
 The system allows users to upload one or more financial reports, automatically builds a knowledge base, retrieves the most relevant evidence, and generates structured research reports with evidence citations.
 
-⸻
+---
+
+## V4 Production Architecture
+
+```
+Browser / Streamlit
+        │
+        ▼
+   APIClient SDK
+        │
+        ▼
+   REST API (FastAPI)
+        │
+        ▼
+   Service Layer
+        │
+        ▼
+   Agent Runtime
+        │
+        ▼
+   Retriever
+        │
+        ▼
+   LLM
+```
+
+---
 
 High-Level Architecture
 
@@ -393,14 +419,72 @@ V3.0.0 Agent Runtime Edition
 
 Future Roadmap
 
-V3.1
+V3.1 — Agent Capabilities
 
 * Tool Registry (Yahoo Finance / SEC API / Web Search)
 * ExecutionContext (upgrade from shared_context dict)
 * Scheduler + Ready Queue (topological execution)
 
-V3.2
+V3.2 — Agent Intelligence
 
 * Reflection + Self-Correction
 * Agent Memory
 * Conversation State
+
+
+
+V4 Roadmap — Productionization
+
+Phase 1: Service Layer
+
+* FastAPI application (`api/`)
+* RESTful endpoints: `/api/v1/chat`, `/api/v1/knowledge`, `/api/v1/health`
+* Request/Response schemas (`api/schemas/`)
+* Streamlit, Web, and mobile reuse the same backend
+
+Phase 2: Storage Layer
+
+* ChromaDB — persistent vector storage
+* Chunks, metadata, and embeddings persisted
+* No re-embedding on restart
+* Multi-user shared knowledge base
+* Incremental document updates
+
+Phase 3: Database Layer
+
+* PostgreSQL — structured data
+* Document Registry, Upload History, User Sessions, Query History, Feedback
+* Separation of concerns: PostgreSQL (structured) + ChromaDB (vectors)
+
+Phase 4: Cache Layer
+
+* Redis — embedding, retrieval results, planner results, session cache
+* Repeated queries served from cache
+* Significant performance improvement for repeated analyses
+
+Phase 5: Containerization
+
+* Dockerfile + docker-compose.yml
+* One-command startup: `docker compose up`
+* Services: FastAPI + ChromaDB + PostgreSQL + Redis
+
+Phase 6: Testing
+
+* `tests/` directory with pytest
+* Unit tests: Planner, Runtime, Retriever, Reasoner, API
+* Coverage targets via pytest-cov
+
+Phase 7: CI/CD
+
+* GitHub Actions pipeline
+* Lint → Unit Test → Coverage → Docker Build
+* Executes on every push
+
+Phase 8: Deployment
+
+* FastAPI: Render / Railway / Fly.io
+* PostgreSQL: Supabase / Railway
+* Redis: Upstash
+* ChromaDB: local persistent or cloud instance
+* Streamlit: standalone deployment
+* Future: AWS / Azure / GCP
