@@ -1,7 +1,7 @@
 # ============================================================
 # financial-api — FastAPI Backend
 # ============================================================
-FROM python:3.11.13-slim-bookworm
+FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="Financial Research Copilot - API"
 LABEL org.opencontainers.image.version="4.3.0"

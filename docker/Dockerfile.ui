@@ -1,7 +1,7 @@
 # ============================================================
 # financial-ui — Streamlit Frontend
 # ============================================================
-FROM python:3.11.13-slim-bookworm
+FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="Financial Research Copilot - UI"
 LABEL org.opencontainers.image.version="4.3.0"
@@ -31,10 +31,4 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=20s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')" || exit 1
 
-CMD [
-    "streamlit",
-    "run",
-    "ui/streamlit_app.py",
-    "--server.address=0.0.0.0",
-    "--server.port=8501"
-]
+CMD ["streamlit", "run", "ui/streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
