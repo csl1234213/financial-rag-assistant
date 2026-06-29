@@ -1,65 +1,27 @@
 # ============================================================
 # Development Compose — hot-reload, volume mounts, debug mode
 # ============================================================
+# Usage:
+#   docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.dev.yml up
+# ============================================================
 name: financial-rag-dev
 
 services:
-  # ---------- FastAPI Backend ----------
   financial-api:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.api
-    container_name: financial-api
-    ports:
-      - "8000:8000"
+    env_file:
+      - .env.dev
     volumes:
       - ..:/app
       - financial_uploads:/app/storage/uploads
       - financial_chroma:/app/chroma_db
-    environment:
-      - APP_ENV=development
-      - LOG_LEVEL=DEBUG
-      - CHROMA_PATH=/app/chroma_db
-      - UPLOAD_DIR=/app/storage/uploads
-    env_file:
-      - .env
-    networks:
-      - financial_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - financial_logs:/app/logs
     restart: unless-stopped
 
-  # ---------- Streamlit Frontend ----------
   financial-ui:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.ui
-    container_name: financial-ui
-    ports:
-      - "8501:8501"
+    env_file:
+      - .env.dev
     volumes:
       - ../ui:/app/ui
       - ../client:/app/client
       - financial_uploads:/app/storage/uploads:ro
-    environment:
-      - API_BASE=http://financial-api:8000
-    depends_on:
-      financial-api:
-        condition: service_healthy
-    networks:
-      - financial_network
     restart: unless-stopped
-
-volumes:
-  financial_uploads:
-    driver: local
-  financial_chroma:
-    driver: local
-
-networks:
-  financial_network:
-    driver: bridge
