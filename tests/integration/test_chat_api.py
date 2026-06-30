@@ -41,6 +41,8 @@ def _fake_run_rag_success(question, company=None):
         {"intent": "SINGLE_COMPANY", "companies": ["Apple"]},
         [],
         _make_fake_plan("single_company", 2),
+        None,
+        None,
     )
 
 
@@ -56,6 +58,8 @@ def _fake_run_rag_compare(question, company=None):
         {"intent": "COMPARE_COMPANIES", "companies": ["Apple", "Tesla"]},
         [],
         _make_fake_plan("comparison", 4),
+        None,
+        None,
     )
 
 
@@ -68,6 +72,8 @@ def _fake_run_rag_empty(question, company=None):
         {"intent": "GLOBAL_RESEARCH", "companies": None},
         [],
         _make_fake_plan("global_research", 2),
+        None,
+        None,
     )
 
 

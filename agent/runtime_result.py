@@ -26,3 +26,7 @@ class RuntimeResult:
     plan: Optional[ExecutionPlan] = None
 
     intent_result: Dict[str, Any] = field(default_factory=dict)
+
+    routing: Optional[Dict[str, Any]] = None
+
+    planning: Optional[Dict[str, Any]] = None

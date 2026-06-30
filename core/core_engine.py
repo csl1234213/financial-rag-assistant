@@ -21,6 +21,11 @@ from embedding import (
     load_embedding_model,
 )
 from llm.provider import call_llm
+from llm.router import (
+    CapabilityRoutingPolicy,
+    ModelRouter,
+    RoutingPolicy,
+)
 from prompt_builder import build_compare_prompt, build_prompt
 from research_mode import (
     detect_research_mode,
@@ -135,12 +140,17 @@ engine.register_handler(StepType.RETRIEVE, _retrieve_handler)
 engine.register_handler(StepType.COMPARE, lambda s, c: None)
 engine.register_handler(StepType.SYNTHESIS, lambda s, c: None)
 
+router = ModelRouter(
+    policy=RoutingPolicy(CapabilityRoutingPolicy())
+)
+
 runtime = AgentRuntime(
     planner=query_planner,
     executor=engine,
     reasoner=reasoning_engine,
     retriever=retriever,
     intent_analyzer=intent_analyzer,
+    router=router,
 )
 
 
@@ -167,7 +177,9 @@ def run_rag(question: str, company=None):
             research_mode,
             result.intent_result,
             result.evidence,
-            result.plan
+            result.plan,
+            result.routing,
+            result.planning,
         )
 
     if len(result.citations) == 0:
@@ -178,7 +190,9 @@ def run_rag(question: str, company=None):
             research_mode,
             result.intent_result,
             result.evidence,
-            result.plan
+            result.plan,
+            result.routing,
+            result.planning,
         )
 
     answer = call_llm(prompt)
@@ -204,5 +218,7 @@ def run_rag(question: str, company=None):
         research_mode,
         result.intent_result,
         result.evidence,
-        result.plan
+        result.plan,
+        result.routing,
+        result.planning,
     )

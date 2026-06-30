@@ -10,7 +10,7 @@ def chat_stream(req: dict):
 
     def generate():
 
-        answer, citations, context, mode = run_rag(req["question"])
+        answer, citations, context, mode, *_ = run_rag(req["question"])
 
         for char in answer:
             yield char

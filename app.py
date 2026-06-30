@@ -100,7 +100,7 @@ if __name__ == "__main__":
         if q in ["exit", "quit"]:
             break
 
-        answer, citations, context, mode = run_rag(q)
+        answer, citations, context, mode, *_ = run_rag(q)
 
         print("\nMODE:", mode)
         print("\nANSWER:\n")

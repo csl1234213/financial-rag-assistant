@@ -53,9 +53,6 @@ Dockerfile*
 # Trae
 .trae/
 
-# Streamlit (API doesn't need it)
-ui/
-
 # Working data (keep fresh)
 chroma_db/
 storage/uploads/

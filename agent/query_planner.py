@@ -1,14 +1,28 @@
 from agent.execution_plan import ExecutionPlan, PlanStep, StepType
+from agent.planning import (
+    ComplexityLevel,
+    PlanningContext,
+    TaskAnalyzer,
+    TaskResult,
+    TaskType,
+)
+from llm.router import RoutingContext, RoutingPriority
 
 
 class QueryPlanner:
     """
-    V3 Query Planner
-    将用户问题拆解为可执行 AI 任务流，返回结构化 ExecutionPlan
+    V4 Query Planner
+
+    Consumes TaskResult from TaskAnalyzer and produces
+    ExecutionPlan with full planner metadata.
+
+    Single responsibility: task → plan.
+    Keyword / intent classification lives in TaskAnalyzer.
     """
 
     def __init__(self):
         self._step_counter = 1
+        self.task_analyzer = TaskAnalyzer()
 
     def _next_id(self):
         sid = self._step_counter
@@ -21,27 +35,64 @@ class QueryPlanner:
     # =========================
     # Main Entry
     # =========================
-    def plan(self, query: str, intent: dict) -> ExecutionPlan:
+
+    def plan(
+        self,
+        context: PlanningContext,
+    ) -> tuple[ExecutionPlan, TaskResult]:
         self._reset_counter()
 
-        intent_type = intent.get("intent", "UNKNOWN")
-        companies = intent.get("companies", [])
+        task_result = self.task_analyzer.analyze(context)
+        task_type = task_result.task.task_type
 
-        if intent_type == "COMPARE_COMPANIES":
-            return self._build_compare_plan(query, companies)
+        companies = [
+            e for e in task_result.extracted_entities
+            if not e.isdigit()
+        ]
 
-        elif intent_type == "SINGLE_COMPANY":
-            return self._build_single_plan(query, companies)
-
-        elif intent_type == "GLOBAL_RESEARCH":
-            return self._build_global_plan(query)
-
+        if task_type == TaskType.COMPARISON:
+            plan = self._build_compare_plan(context.question, companies)
+        elif task_type == TaskType.DOCUMENT_QA:
+            plan = self._build_single_plan(context.question, companies)
+        elif task_type in (TaskType.RESEARCH, TaskType.FINANCIAL_ANALYSIS):
+            plan = self._build_global_plan(context.question)
         else:
-            return self._build_generic_plan(query)
+            plan = self._build_generic_plan(context.question)
+
+        plan.task_type = task_result.task.task_type
+        plan.complexity = task_result.task.complexity
+        plan.estimated_tokens = task_result.estimated_tokens
+        plan.planner_reason = task_result.reason
+
+        return plan, task_result
+
+    # =========================
+    # Routing Context
+    # =========================
+
+    def build_routing_context(
+        self,
+        task_result: TaskResult,
+    ) -> RoutingContext:
+        task_type = task_result.task.task_type
+
+        return RoutingContext(
+            task=task_type,
+            priority=self._priority_for(task_type),
+            estimated_tokens=task_result.estimated_tokens,
+        )
+
+    def _priority_for(self, task_type: TaskType) -> RoutingPriority:
+        if task_type in (TaskType.RESEARCH, TaskType.FINANCIAL_ANALYSIS):
+            return RoutingPriority.QUALITY
+        if task_type == TaskType.COMPARISON:
+            return RoutingPriority.BALANCED
+        return RoutingPriority.BALANCED
 
     # =========================
     # 1. Compare Plan
     # =========================
+
     def _build_compare_plan(self, query, companies) -> ExecutionPlan:
 
         plan = ExecutionPlan(
@@ -66,17 +117,19 @@ class QueryPlanner:
         compare_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.COMPARE,
-            description="Compare financial metrics across companies",
-            depends_on=retrieve_ids,
-            parameters={"metrics": ["revenue", "margin", "risk"]}
+            description=f"Compare {', '.join(companies)}",
+            query=query,
+            parameters={"companies": companies},
+            depends_on=retrieve_ids if retrieve_ids else [],
         )
         plan.tasks.append(compare_step)
 
         synthesis_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.SYNTHESIS,
-            description="Synthesize comparison findings",
-            depends_on=[compare_step.step_id]
+            description="Synthesize comparison results",
+            query=query,
+            depends_on=[compare_step.step_id],
         )
         plan.tasks.append(synthesis_step)
 
@@ -85,50 +138,54 @@ class QueryPlanner:
     # =========================
     # 2. Single Company Plan
     # =========================
+
     def _build_single_plan(self, query, companies) -> ExecutionPlan:
 
         company = companies[0] if companies else None
 
         plan = ExecutionPlan(
             intent="single_company",
-            original_query=query
+            original_query=query,
         )
 
         retrieve_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.RETRIEVE,
-            description=f"Retrieve {company} financial report",
+            description=f"Retrieve {company} documents"
+            if company else "Retrieve relevant documents",
             company=company,
             query=query,
-            parameters={"metrics": ["revenue", "profit", "risk"]}
         )
         plan.tasks.append(retrieve_step)
 
-        synthesis_step = PlanStep(
+        analysis_step = PlanStep(
             step_id=self._next_id(),
-            step_type=StepType.SYNTHESIS,
-            description="Synthesize research findings",
-            depends_on=[retrieve_step.step_id]
+            step_type=StepType.REASONING,
+            description="Analyze retrieved data",
+            query=query,
+            depends_on=[retrieve_step.step_id],
         )
-        plan.tasks.append(synthesis_step)
+        plan.tasks.append(analysis_step)
 
         return plan
 
     # =========================
-    # 3. Global Plan
+    # 3. Global Research Plan
     # =========================
+
     def _build_global_plan(self, query) -> ExecutionPlan:
 
         plan = ExecutionPlan(
             intent="global_research",
-            original_query=query
+            original_query=query,
         )
 
         retrieve_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.RETRIEVE,
-            description="Retrieve relevant documents",
-            query=query
+            description="Retrieve industry-wide documents",
+            query=query,
+            parameters={"top_k": 6},
         )
         plan.tasks.append(retrieve_step)
 
@@ -136,36 +193,30 @@ class QueryPlanner:
             step_id=self._next_id(),
             step_type=StepType.SYNTHESIS,
             description="Synthesize research findings",
-            depends_on=[retrieve_step.step_id]
+            query=query,
+            depends_on=[retrieve_step.step_id],
         )
         plan.tasks.append(synthesis_step)
 
         return plan
 
     # =========================
-    # 4. Fallback Plan
+    # 4. Generic Plan
     # =========================
+
     def _build_generic_plan(self, query) -> ExecutionPlan:
 
         plan = ExecutionPlan(
             intent="generic",
-            original_query=query
+            original_query=query,
         )
 
         retrieve_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.RETRIEVE,
             description="Retrieve relevant documents",
-            query=query
+            query=query,
         )
         plan.tasks.append(retrieve_step)
-
-        synthesis_step = PlanStep(
-            step_id=self._next_id(),
-            step_type=StepType.SYNTHESIS,
-            description="Synthesize findings",
-            depends_on=[retrieve_step.step_id]
-        )
-        plan.tasks.append(synthesis_step)
 
         return plan

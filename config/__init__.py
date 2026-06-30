@@ -51,7 +51,10 @@ UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", ROOT_DIR / "storage" / "uploads")
 PDF_DIR = Path(os.environ.get("PDF_DIR", ROOT_DIR / "storage" / "pdfs"))
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
-LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+
+# Backward compatibility for old env vars
+if not os.environ.get("LLM_MODEL") and os.environ.get("DEEPSEEK_MODEL"):
+    os.environ["LLM_MODEL"] = os.environ["DEEPSEEK_MODEL"]
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
@@ -61,3 +64,35 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 # =========================
 
 from .ui import *  # noqa: E402, F403
+# =========================
+# LLM (V5 Phase 1 — Provider abstraction)
+# =========================
+
+from .llm import (
+    LLM_PROVIDER,
+    LLM_MODEL,
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_TEMPERATURE,
+    LLM_MAX_TOKENS,
+    LLM_TIMEOUT,
+    LLM_STREAM,
+    DEEPSEEK_API_KEY as _DEEPSEEK_API_KEY,
+    DEEPSEEK_MODEL,
+    DEEPSEEK_BASE_URL,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+)
+
+__all__ = [
+    "PDFS_DIR", "DEBUG_MODE", "DOCUMENT_HINTS", "CACHE_DIR", "TOP_K",
+    "EMBEDDING_MODEL", "CACHE_VERSION", "CHUNK_SIZE", "CHUNK_OVERLAP",
+    "LLM_TEMPERATURE", "LLM_MAX_TOKENS",
+    "APP_ENV", "APP_VERSION", "LOG_LEVEL", "ROOT_DIR",
+    "CHROMA_PATH", "UPLOAD_DIR", "PDF_DIR", "DEEPSEEK_API_KEY",
+    "REDIS_HOST", "REDIS_PORT",
+    "LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "LLM_BASE_URL",
+    "LLM_TEMPERATURE", "LLM_MAX_TOKENS", "LLM_TIMEOUT", "LLM_STREAM",
+    "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL",
+    "GEMINI_API_KEY", "GEMINI_MODEL",
+]

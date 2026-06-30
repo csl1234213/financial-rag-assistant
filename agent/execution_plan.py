@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from agent.planning import ComplexityLevel, TaskType
+
 # =========================
 # Step Types
 # =========================
@@ -76,3 +78,14 @@ class ExecutionPlan:
     tasks: List[PlanStep] = field(default_factory=list)
 
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # Planner information
+    task_type: TaskType | None = None
+
+    complexity: ComplexityLevel | None = None
+
+    estimated_tokens: int = 0
+
+    planner_reason: str = ""
+
+    planner_version: str = "rule-v1"
