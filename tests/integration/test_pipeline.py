@@ -43,6 +43,8 @@ def _fake_run_rag(question, company=None):
         {"intent": "SINGLE_COMPANY", "companies": ["TestCorp"]},
         [],
         _make_fake_plan(),
+        None,
+        None,
     )
 
 

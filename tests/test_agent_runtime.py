@@ -11,8 +11,16 @@ import pytest
 from agent.agent_runtime import AgentRuntime
 from agent.execution_plan import ExecutionPlan, PlanStep, StepStatus, StepType
 from agent.execution_result import ExecutionResult
+from agent.planning import (
+    ComplexityLevel,
+    PlanningContext,
+    TaskModel,
+    TaskResult,
+    TaskType,
+)
 from agent.reasoning_models import Evidence, ReasoningResult
 from agent.runtime_result import RuntimeResult
+from llm.router import RoutingContext, RoutingPriority
 
 
 class FakeRetriever:
@@ -37,17 +45,34 @@ class FakeIntentAnalyzer:
 
 
 class FakePlanner:
-    def plan(self, query, intent):
-        return ExecutionPlan(
+    def plan(
+        self,
+        context: PlanningContext,
+    ) -> tuple[ExecutionPlan, TaskResult]:
+        task = TaskModel(
+            task_type=TaskType.DOCUMENT_QA,
+            complexity=ComplexityLevel.MEDIUM,
+        )
+        task_result = TaskResult(
+            task=task,
+            reason="Detected document qa keyword",
+            extracted_entities=["Apple"],
+            estimated_tokens=500,
+        )
+        plan = ExecutionPlan(
             intent="single_company",
-            original_query=query,
+            original_query=context.question,
+            task_type=TaskType.DOCUMENT_QA,
+            complexity=ComplexityLevel.MEDIUM,
+            estimated_tokens=500,
+            planner_reason="Detected document qa keyword",
             tasks=[
                 PlanStep(
                     step_id=1,
                     step_type=StepType.RETRIEVE,
                     description="Retrieve Apple financial report",
                     company="Apple",
-                    query=query,
+                    query=context.question,
                 ),
                 PlanStep(
                     step_id=2,
@@ -56,6 +81,14 @@ class FakePlanner:
                     depends_on=[1],
                 ),
             ],
+        )
+        return plan, task_result
+
+    def build_routing_context(self, task_result: TaskResult) -> RoutingContext:
+        return RoutingContext(
+            task=task_result.task.task_type,
+            estimated_tokens=task_result.estimated_tokens,
+            priority=RoutingPriority.BALANCED,
         )
 
 

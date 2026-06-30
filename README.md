@@ -9,6 +9,41 @@
 
 ---
 
+## 🚀 Quick Start / 快速开始
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/csl1234213/financial-rag-assistant.git
+cd financial-rag-assistant
+
+# 2. One-command start
+./scripts/start.sh
+
+# 3. Open in browser
+#    UI:  http://localhost:8501
+#    API: http://localhost:8000/docs
+```
+
+**Prerequisites:** Docker Desktop (or Docker Engine + Docker Compose)
+
+On first run, the script will:
+- Auto-create `.env` from `.env.example` (you'll be prompted to set your `DEEPSEEK_API_KEY`)
+- Build and start all containers
+- Wait for the API to become healthy
+- Print access URLs
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\start.ps1
+```
+
+**Development mode (hot-reload):**
+```bash
+./scripts/start.sh dev
+```
+
+---
+
 ## 🧭 1. Product Vision / 产品定位
 
 ### English

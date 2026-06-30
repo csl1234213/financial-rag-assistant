@@ -19,8 +19,11 @@ services:
       - financial_uploads:/app/storage/uploads
       - financial_chroma:/app/chroma_db
       - financial_logs:/app/logs
+      - ${USERPROFILE}/.cache/huggingface:/home/appuser/.cache/huggingface
     env_file:
       - ../.env
+    environment:
+      - HF_ENDPOINT=https://hf-mirror.com
     networks:
       - financial_network
 

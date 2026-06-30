@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from agent.execution_plan import ExecutionPlan, StepType
+from agent.planning import PlanningContext, TaskResult, TaskType
 from agent.query_planner import QueryPlanner
 
 
@@ -16,14 +17,16 @@ class TestQueryPlanner:
         return QueryPlanner()
 
     def test_compare_companies_plan(self, planner):
-        intent = {
-            "intent": "COMPARE_COMPANIES",
-            "companies": ["Apple", "Tesla"],
-        }
-        plan = planner.plan("Compare Apple and Tesla revenue", intent)
+        context = PlanningContext(
+            question="Compare Apple and Tesla revenue",
+            companies=["Apple", "Tesla"],
+        )
+        plan, task_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
+        assert isinstance(task_result, TaskResult)
         assert plan.intent == "comparison"
         assert plan.original_query == "Compare Apple and Tesla revenue"
+        assert plan.task_type == TaskType.COMPARISON
 
         step_types = [t.step_type for t in plan.tasks]
         assert StepType.RETRIEVE in step_types
@@ -42,69 +45,102 @@ class TestQueryPlanner:
         assert compare_step.step_id in synthesis_step.depends_on
 
     def test_single_company_plan(self, planner):
-        intent = {
-            "intent": "SINGLE_COMPANY",
-            "companies": ["Apple"],
-        }
-        plan = planner.plan("Apple revenue analysis", intent)
+        context = PlanningContext(
+            question="Apple revenue 10-K report",
+            companies=["Apple"],
+        )
+        plan, task_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "single_company"
+        assert plan.task_type == TaskType.DOCUMENT_QA
 
         step_types = [t.step_type for t in plan.tasks]
         assert StepType.RETRIEVE in step_types
-        assert StepType.SYNTHESIS in step_types
+        assert StepType.REASONING in step_types
 
         retrieve_step = [t for t in plan.tasks if t.step_type == StepType.RETRIEVE][0]
         assert retrieve_step.company == "Apple"
 
     def test_single_company_no_company(self, planner):
-        intent = {
-            "intent": "SINGLE_COMPANY",
-            "companies": [],
-        }
-        plan = planner.plan("Revenue analysis", intent)
+        context = PlanningContext(
+            question="Revenue analysis",
+            companies=[],
+        )
+        plan, task_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         retrieve_step = [t for t in plan.tasks if t.step_type == StepType.RETRIEVE][0]
         assert retrieve_step.company is None
 
     def test_global_research_plan(self, planner):
-        intent = {
-            "intent": "GLOBAL_RESEARCH",
-            "companies": None,
-        }
-        plan = planner.plan("Market trends analysis", intent)
+        context = PlanningContext(
+            question="Research market trends analysis",
+            companies=[],
+        )
+        plan, task_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "global_research"
+        assert plan.task_type == TaskType.RESEARCH
 
         step_types = [t.step_type for t in plan.tasks]
         assert StepType.RETRIEVE in step_types
         assert StepType.SYNTHESIS in step_types
 
     def test_generic_fallback_plan(self, planner):
-        intent = {
-            "intent": "UNKNOWN",
-            "companies": [],
-        }
-        plan = planner.plan("Hello", intent)
+        context = PlanningContext(
+            question="Hello",
+            companies=[],
+        )
+        plan, task_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "generic"
+        assert plan.task_type == TaskType.CHAT
 
         step_types = [t.step_type for t in plan.tasks]
         assert StepType.RETRIEVE in step_types
-        assert StepType.SYNTHESIS in step_types
 
     def test_step_ids_are_sequential(self, planner):
-        intent = {"intent": "COMPARE_COMPANIES", "companies": ["Apple", "Tesla"]}
-        plan = planner.plan("Compare", intent)
+        context = PlanningContext(
+            question="Compare Apple and Tesla",
+            companies=["Apple", "Tesla"],
+        )
+        plan, _ = planner.plan(context)
         ids = [t.step_id for t in plan.tasks]
         assert ids == sorted(ids)
         assert ids[0] == 1
 
     def test_step_counter_resets(self, planner):
-        intent1 = {"intent": "SINGLE_COMPANY", "companies": ["Apple"]}
-        plan1 = planner.plan("Q1", intent1)
+        context1 = PlanningContext(
+            question="Apple revenue",
+            companies=["Apple"],
+        )
+        plan1, _ = planner.plan(context1)
         assert plan1.tasks[0].step_id == 1
 
-        intent2 = {"intent": "SINGLE_COMPANY", "companies": ["Tesla"]}
-        plan2 = planner.plan("Q2", intent2)
+        context2 = PlanningContext(
+            question="Tesla revenue",
+            companies=["Tesla"],
+        )
+        plan2, _ = planner.plan(context2)
         assert plan2.tasks[0].step_id == 1
+
+    def test_planning_metadata_set(self, planner):
+        context = PlanningContext(
+            question="Compare Apple and Tesla",
+            companies=["Apple", "Tesla"],
+        )
+        plan, _ = planner.plan(context)
+        assert plan.task_type is not None
+        assert plan.complexity is not None
+        assert plan.estimated_tokens > 0
+        assert plan.planner_reason != ""
+        assert plan.planner_version == "rule-v1"
+
+    def test_build_routing_context_from_task_result(self, planner):
+        context = PlanningContext(
+            question="Research AI chip market trends",
+            companies=[],
+        )
+        _, task_result = planner.plan(context)
+        routing_ctx = planner.build_routing_context(task_result)
+        assert routing_ctx.task == TaskType.RESEARCH
+        assert routing_ctx.estimated_tokens > 0
