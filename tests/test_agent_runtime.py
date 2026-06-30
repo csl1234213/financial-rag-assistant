@@ -13,6 +13,8 @@ from agent.execution_plan import ExecutionPlan, PlanStep, StepStatus, StepType
 from agent.execution_result import ExecutionResult
 from agent.planning import (
     ComplexityLevel,
+    ComplexityModel,
+    ComplexityResult,
     PlanningContext,
     TaskModel,
     TaskResult,
@@ -48,7 +50,7 @@ class FakePlanner:
     def plan(
         self,
         context: PlanningContext,
-    ) -> tuple[ExecutionPlan, TaskResult]:
+    ) -> tuple[ExecutionPlan, TaskResult, ComplexityResult]:
         task = TaskModel(
             task_type=TaskType.DOCUMENT_QA,
             complexity=ComplexityLevel.MEDIUM,
@@ -59,13 +61,34 @@ class FakePlanner:
             extracted_entities=["Apple"],
             estimated_tokens=500,
         )
+        complexity_result = ComplexityResult(
+            complexity=ComplexityModel(
+                level=ComplexityLevel.MEDIUM,
+                score=0.45,
+                estimated_tokens=500,
+                estimated_latency_ms=1500,
+                estimated_cost=0.008,
+            ),
+            reason="Document QA task",
+            factors={
+                "prompt_length": 0.5,
+                "company_count": 0.3,
+                "year_count": 0.0,
+                "task_weight": 0.5,
+                "comparison": 0.0,
+            },
+        )
         plan = ExecutionPlan(
             intent="single_company",
             original_query=context.question,
             task_type=TaskType.DOCUMENT_QA,
             complexity=ComplexityLevel.MEDIUM,
+            complexity_score=0.45,
             estimated_tokens=500,
+            estimated_latency_ms=1500,
+            estimated_cost=0.008,
             planner_reason="Detected document qa keyword",
+            complexity_reason="Document QA task",
             tasks=[
                 PlanStep(
                     step_id=1,
@@ -82,14 +105,21 @@ class FakePlanner:
                 ),
             ],
         )
-        return plan, task_result
+        return plan, task_result, complexity_result
 
-    def build_routing_context(self, task_result: TaskResult) -> RoutingContext:
-        return RoutingContext(
+    def build_routing_context(
+        self,
+        task_result: TaskResult,
+        complexity_result: ComplexityResult | None = None,
+    ) -> RoutingContext:
+        ctx = RoutingContext(
             task=task_result.task.task_type,
             estimated_tokens=task_result.estimated_tokens,
             priority=RoutingPriority.BALANCED,
         )
+        if complexity_result is not None:
+            ctx.complexity_score = complexity_result.complexity.score
+        return ctx
 
 
 class FakeReasoner:

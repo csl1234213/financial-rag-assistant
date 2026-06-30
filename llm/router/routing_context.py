@@ -37,4 +37,6 @@ class RoutingContext:
 
     max_cost: float | None = None
 
+    complexity_score: float | None = None
+
     preferred_provider: str | None = None

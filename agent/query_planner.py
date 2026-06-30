@@ -1,6 +1,8 @@
 from agent.execution_plan import ExecutionPlan, PlanStep, StepType
 from agent.planning import (
+    ComplexityAnalyzer,
     ComplexityLevel,
+    ComplexityResult,
     PlanningContext,
     TaskAnalyzer,
     TaskResult,
@@ -14,15 +16,22 @@ class QueryPlanner:
     V4 Query Planner
 
     Consumes TaskResult from TaskAnalyzer and produces
-    ExecutionPlan with full planner metadata.
+    ExecutionPlan with full planner + complexity metadata.
 
-    Single responsibility: task → plan.
-    Keyword / intent classification lives in TaskAnalyzer.
+    Pipeline:
+      PlanningContext
+          ↓
+      TaskAnalyzer → TaskResult
+          ↓
+      ComplexityAnalyzer → ComplexityResult
+          ↓
+      ExecutionPlan
     """
 
     def __init__(self):
         self._step_counter = 1
         self.task_analyzer = TaskAnalyzer()
+        self.complexity_analyzer = ComplexityAnalyzer()
 
     def _next_id(self):
         sid = self._step_counter
@@ -39,10 +48,11 @@ class QueryPlanner:
     def plan(
         self,
         context: PlanningContext,
-    ) -> tuple[ExecutionPlan, TaskResult]:
+    ) -> tuple[ExecutionPlan, TaskResult, ComplexityResult]:
         self._reset_counter()
 
         task_result = self.task_analyzer.analyze(context)
+        complexity_result = self.complexity_analyzer.analyze(task_result)
         task_type = task_result.task.task_type
 
         companies = [
@@ -60,11 +70,15 @@ class QueryPlanner:
             plan = self._build_generic_plan(context.question)
 
         plan.task_type = task_result.task.task_type
-        plan.complexity = task_result.task.complexity
-        plan.estimated_tokens = task_result.estimated_tokens
+        plan.complexity = complexity_result.complexity.level
+        plan.complexity_score = complexity_result.complexity.score
+        plan.estimated_tokens = complexity_result.complexity.estimated_tokens
+        plan.estimated_latency_ms = complexity_result.complexity.estimated_latency_ms
+        plan.estimated_cost = complexity_result.complexity.estimated_cost
         plan.planner_reason = task_result.reason
+        plan.complexity_reason = complexity_result.reason
 
-        return plan, task_result
+        return plan, task_result, complexity_result
 
     # =========================
     # Routing Context
@@ -73,14 +87,20 @@ class QueryPlanner:
     def build_routing_context(
         self,
         task_result: TaskResult,
+        complexity_result: ComplexityResult | None = None,
     ) -> RoutingContext:
         task_type = task_result.task.task_type
 
-        return RoutingContext(
+        ctx = RoutingContext(
             task=task_type,
             priority=self._priority_for(task_type),
             estimated_tokens=task_result.estimated_tokens,
         )
+
+        if complexity_result is not None:
+            ctx.complexity_score = complexity_result.complexity.score
+
+        return ctx
 
     def _priority_for(self, task_type: TaskType) -> RoutingPriority:
         if task_type in (TaskType.RESEARCH, TaskType.FINANCIAL_ANALYSIS):

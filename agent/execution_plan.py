@@ -84,8 +84,16 @@ class ExecutionPlan:
 
     complexity: ComplexityLevel | None = None
 
+    complexity_score: float = 0.0
+
     estimated_tokens: int = 0
 
+    estimated_latency_ms: int = 0
+
+    estimated_cost: float = 0.0
+
     planner_reason: str = ""
+
+    complexity_reason: str = ""
 
     planner_version: str = "rule-v1"
