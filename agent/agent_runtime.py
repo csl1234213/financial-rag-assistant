@@ -64,18 +64,19 @@ class AgentRuntime:
         if company is None and intent_result.get("companies"):
             company = intent_result["companies"][0]
 
-        # 2. Plan — TaskAnalyzer runs inside QueryPlanner
+        # 2. Plan — TaskAnalyzer + ComplexityAnalyzer run inside QueryPlanner
         planning_context = PlanningContext(
             question=question,
             companies=intent_result.get("companies") or [],
         )
-        plan, task_result = self.planner.plan(planning_context)
+        plan, task_result, complexity_result = self.planner.plan(planning_context)
 
-        # 3. Routing — from TaskResult
+        # 3. Routing — from TaskResult + ComplexityResult
         routing_info = None
         if self.router is not None:
             routing_context = self.planner.build_routing_context(
-                task_result
+                task_result,
+                complexity_result,
             )
             routed = self.router.route(routing_context)
             routing_info = {
@@ -90,9 +91,13 @@ class AgentRuntime:
         # 4. Planning info
         planning_info = {
             "task_type": task_result.task.task_type.value,
-            "complexity": task_result.task.complexity.value,
-            "estimated_tokens": task_result.estimated_tokens,
+            "complexity": complexity_result.complexity.level.value,
+            "complexity_score": complexity_result.complexity.score,
+            "estimated_tokens": complexity_result.complexity.estimated_tokens,
+            "estimated_latency_ms": complexity_result.complexity.estimated_latency_ms,
+            "estimated_cost": complexity_result.complexity.estimated_cost,
             "reason": task_result.reason,
+            "complexity_reason": complexity_result.reason,
             "planner_version": "rule-v1",
         }
 

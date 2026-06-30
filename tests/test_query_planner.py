@@ -7,7 +7,12 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from agent.execution_plan import ExecutionPlan, StepType
-from agent.planning import PlanningContext, TaskResult, TaskType
+from agent.planning import (
+    ComplexityResult,
+    PlanningContext,
+    TaskResult,
+    TaskType,
+)
 from agent.query_planner import QueryPlanner
 
 
@@ -21,9 +26,10 @@ class TestQueryPlanner:
             question="Compare Apple and Tesla revenue",
             companies=["Apple", "Tesla"],
         )
-        plan, task_result = planner.plan(context)
+        plan, task_result, complexity_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert isinstance(task_result, TaskResult)
+        assert isinstance(complexity_result, ComplexityResult)
         assert plan.intent == "comparison"
         assert plan.original_query == "Compare Apple and Tesla revenue"
         assert plan.task_type == TaskType.COMPARISON
@@ -49,7 +55,7 @@ class TestQueryPlanner:
             question="Apple revenue 10-K report",
             companies=["Apple"],
         )
-        plan, task_result = planner.plan(context)
+        plan, task_result, complexity_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "single_company"
         assert plan.task_type == TaskType.DOCUMENT_QA
@@ -66,7 +72,7 @@ class TestQueryPlanner:
             question="Revenue analysis",
             companies=[],
         )
-        plan, task_result = planner.plan(context)
+        plan, task_result, complexity_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         retrieve_step = [t for t in plan.tasks if t.step_type == StepType.RETRIEVE][0]
         assert retrieve_step.company is None
@@ -76,7 +82,7 @@ class TestQueryPlanner:
             question="Research market trends analysis",
             companies=[],
         )
-        plan, task_result = planner.plan(context)
+        plan, task_result, complexity_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "global_research"
         assert plan.task_type == TaskType.RESEARCH
@@ -90,7 +96,7 @@ class TestQueryPlanner:
             question="Hello",
             companies=[],
         )
-        plan, task_result = planner.plan(context)
+        plan, task_result, complexity_result = planner.plan(context)
         assert isinstance(plan, ExecutionPlan)
         assert plan.intent == "generic"
         assert plan.task_type == TaskType.CHAT
@@ -103,7 +109,7 @@ class TestQueryPlanner:
             question="Compare Apple and Tesla",
             companies=["Apple", "Tesla"],
         )
-        plan, _ = planner.plan(context)
+        plan, _, _ = planner.plan(context)
         ids = [t.step_id for t in plan.tasks]
         assert ids == sorted(ids)
         assert ids[0] == 1
@@ -113,14 +119,14 @@ class TestQueryPlanner:
             question="Apple revenue",
             companies=["Apple"],
         )
-        plan1, _ = planner.plan(context1)
+        plan1, _, _ = planner.plan(context1)
         assert plan1.tasks[0].step_id == 1
 
         context2 = PlanningContext(
             question="Tesla revenue",
             companies=["Tesla"],
         )
-        plan2, _ = planner.plan(context2)
+        plan2, _, _ = planner.plan(context2)
         assert plan2.tasks[0].step_id == 1
 
     def test_planning_metadata_set(self, planner):
@@ -128,7 +134,7 @@ class TestQueryPlanner:
             question="Compare Apple and Tesla",
             companies=["Apple", "Tesla"],
         )
-        plan, _ = planner.plan(context)
+        plan, _, _ = planner.plan(context)
         assert plan.task_type is not None
         assert plan.complexity is not None
         assert plan.estimated_tokens > 0
@@ -140,7 +146,7 @@ class TestQueryPlanner:
             question="Research AI chip market trends",
             companies=[],
         )
-        _, task_result = planner.plan(context)
-        routing_ctx = planner.build_routing_context(task_result)
+        _, task_result, complexity_result = planner.plan(context)
+        routing_ctx = planner.build_routing_context(task_result, complexity_result)
         assert routing_ctx.task == TaskType.RESEARCH
         assert routing_ctx.estimated_tokens > 0
