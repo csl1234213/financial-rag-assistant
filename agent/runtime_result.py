@@ -30,3 +30,5 @@ class RuntimeResult:
     routing: Optional[Dict[str, Any]] = None
 
     planning: Optional[Dict[str, Any]] = None
+
+    execution: Optional[Dict[str, Any]] = None

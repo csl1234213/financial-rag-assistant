@@ -6,6 +6,15 @@ sys.path.append(str(ROOT))
 
 from agent.agent_runtime import AgentRuntime
 from agent.execution_engine import ExecutionEngine
+from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
+from agent.execution.execution_dispatcher import ExecutionDispatcher
+from agent.execution.strategies import (
+    RagStrategy,
+    DirectLLMStrategy,
+    ParallelStrategy,
+    MultiStepStrategy,
+    ToolCallingStrategy,
+)
 from agent.execution_plan import StepType
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
@@ -116,6 +125,10 @@ query_planner = QueryPlanner()
 engine = ExecutionEngine()
 reasoning_engine = ReasoningEngine()
 
+strategy_engine = StrategyExecutionEngine()
+
+dispatcher = ExecutionDispatcher()
+
 
 def _retrieve_handler(step, shared_context):
     store = _get_store()
@@ -151,6 +164,8 @@ runtime = AgentRuntime(
     retriever=retriever,
     intent_analyzer=intent_analyzer,
     router=router,
+    strategy_engine=strategy_engine,
+    dispatcher=dispatcher,
 )
 
 
@@ -180,6 +195,7 @@ def run_rag(question: str, company=None):
             result.plan,
             result.routing,
             result.planning,
+            result.execution,
         )
 
     if len(result.citations) == 0:
@@ -193,6 +209,7 @@ def run_rag(question: str, company=None):
             result.plan,
             result.routing,
             result.planning,
+            result.execution,
         )
 
     answer = call_llm(prompt)
@@ -221,4 +238,5 @@ def run_rag(question: str, company=None):
         result.plan,
         result.routing,
         result.planning,
+        result.execution,
     )
