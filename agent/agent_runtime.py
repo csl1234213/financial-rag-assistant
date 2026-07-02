@@ -1,6 +1,18 @@
+import logging
 from typing import Optional
 
 from agent.execution_engine import ExecutionEngine
+from agent.execution.execution_context import ExecutionContext
+from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
+from agent.execution.execution_dispatcher import ExecutionDispatcher
+from agent.execution.execution_handler import ExecutionHandlerContext
+from agent.execution.handlers import (  # noqa: F401 — auto-registration
+    RagHandler,
+    DirectLLMHandler,
+    ParallelHandler,
+    MultiStepHandler,
+    ToolCallingHandler,
+)
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
 from agent.runtime_context import RuntimeContext
@@ -8,6 +20,8 @@ from agent.runtime_result import RuntimeResult
 from agent.planning import PlanningContext
 from core.context_builder import build_context_from_evidence
 from llm.router import ModelRouter
+
+logger = logging.getLogger(__name__)
 
 
 class AgentRuntime:
@@ -37,6 +51,8 @@ class AgentRuntime:
         retriever,
         intent_analyzer,
         router: Optional[ModelRouter] = None,
+        strategy_engine: Optional[StrategyExecutionEngine] = None,
+        dispatcher: Optional[ExecutionDispatcher] = None,
     ):
         self.planner = planner
         self.executor = executor
@@ -44,6 +60,8 @@ class AgentRuntime:
         self.retriever = retriever
         self.intent_analyzer = intent_analyzer
         self.router = router
+        self.strategy_engine = strategy_engine
+        self.dispatcher = dispatcher
 
     # =========================
     # Main Entry
@@ -73,6 +91,7 @@ class AgentRuntime:
 
         # 3. Routing — from TaskResult + ComplexityResult
         routing_info = None
+        routing_context = None
         if self.router is not None:
             routing_context = self.planner.build_routing_context(
                 task_result,
@@ -88,7 +107,41 @@ class AgentRuntime:
                 "decision_time_ms": routed["routing"].decision_time_ms,
             }
 
-        # 4. Planning info
+        if routing_context is None:
+            from llm.router import RoutingContext as RC
+            routing_context = RC(task=task_result.task.task_type)
+
+        # 4. Execution Strategy — determine HOW to execute
+        strategy_result = None
+        if self.strategy_engine is not None:
+            exec_ctx = ExecutionContext(
+                task=task_result,
+                complexity=complexity_result,
+                routing=routing_context,
+            )
+            strategy_result = self.strategy_engine.execute(exec_ctx)
+            logger.info(
+                "Execution Strategy: %s | Reason: %s | Steps: %d | Parallelism: %d | Confidence: %.2f",
+                strategy_result.strategy.value,
+                strategy_result.reason,
+                strategy_result.estimated_steps,
+                strategy_result.parallelism,
+                strategy_result.confidence,
+            )
+
+        strategy_info = None
+        if strategy_result is not None:
+            strategy_info = {
+                "strategy": strategy_result.strategy.value,
+                "reason": strategy_result.reason,
+                "estimated_steps": strategy_result.estimated_steps,
+                "parallelism": strategy_result.parallelism,
+                "use_retrieval": strategy_result.use_retrieval,
+                "use_tools": strategy_result.use_tools,
+                "confidence": strategy_result.confidence,
+            }
+
+        # 5. Planning info
         planning_info = {
             "task_type": task_result.task.task_type.value,
             "complexity": complexity_result.complexity.level.value,
@@ -101,24 +154,34 @@ class AgentRuntime:
             "planner_version": "rule-v1",
         }
 
-        # 5. Execute
+        # 6. Execute — dispatch via ExecutionDispatcher if available
         ctx = RuntimeContext(question=question, company=company)
-        shared = {"_all_evidence": []}
-        self.executor.execute(plan, shared)
-        ctx.evidences = shared["_all_evidence"]
 
-        # 6. Build Context & Citations
-        context, citations = build_context_from_evidence(ctx.evidences)
+        if self.dispatcher is not None and strategy_result is not None:
+            handler_ctx = ExecutionHandlerContext(
+                plan=plan,
+                executor=self.executor,
+            )
+            output = self.dispatcher.dispatch(strategy_result, handler_ctx)
+            ctx.evidences = output.evidences
+            context = output.context
+            citations = output.citations
+            execution_results = output.execution_results
+        else:
+            shared = {"_all_evidence": []}
+            self.executor.execute(plan, shared)
+            ctx.evidences = shared["_all_evidence"]
+            context, citations = build_context_from_evidence(ctx.evidences)
+            execution_results = [
+                step.result for step in plan.tasks
+                if step.result is not None
+            ]
 
-        # 7. Reasoning
-        execution_results = [
-            step.result for step in plan.tasks
-            if step.result is not None
-        ]
+        # 8. Reasoning
         ctx.execution_results = execution_results
         reasoning_result = self.reasoner.analyze(execution_results)
 
-        # 8. Result
+        # 9. Result
         return RuntimeResult(
             reasoning_result=reasoning_result,
             context=context,
@@ -128,4 +191,5 @@ class AgentRuntime:
             intent_result=intent_result,
             routing=routing_info,
             planning=planning_info,
+            execution=strategy_info,
         )

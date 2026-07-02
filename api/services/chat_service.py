@@ -24,7 +24,7 @@ class ChatService:
     ) -> ChatResponse:
         t0 = time.time()
 
-        report, citations, context, research_mode, intent_result, evidence, plan, routing, planning = run_rag(
+        report, citations, context, research_mode, intent_result, evidence, plan, routing, planning, execution = run_rag(
             question,
             company=company,
         )
@@ -61,4 +61,5 @@ class ChatService:
             execution_time=execution_time,
             routing=routing,
             planning=planning,
+            execution=execution,
         )
