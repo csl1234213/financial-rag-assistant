@@ -7,14 +7,12 @@ from core.core_engine import run_rag
 
 class ChatService:
     """
-    V4 Chat Service
+    V5 Chat Service
 
     Single entry point for all clients (HTTP, CLI, Streamlit, etc.).
 
-    Responsibilities:
-    1. Accept ChatRequest
-    2. Delegate to Agent Runtime via core_engine
-    3. Map internal output to ChatResponse
+    Pipeline:
+    Planning → Workflow → Execution → Routing → Provider
     """
 
     def chat(
@@ -24,7 +22,7 @@ class ChatService:
     ) -> ChatResponse:
         t0 = time.time()
 
-        report, citations, context, research_mode, intent_result, evidence, plan, routing, planning, execution = run_rag(
+        report, citations, context, research_mode, intent_result, evidence, plan, routing, planning, execution, workflow = run_rag(
             question,
             company=company,
         )
@@ -62,4 +60,5 @@ class ChatService:
             routing=routing,
             planning=planning,
             execution=execution,
+            workflow=workflow,
         )

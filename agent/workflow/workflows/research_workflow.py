@@ -10,6 +10,7 @@ from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
+from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class ResearchWorkflow(BaseWorkflow):
@@ -30,6 +31,7 @@ class ResearchWorkflow(BaseWorkflow):
                     name="Plan",
                     description="Decompose research question into sub-questions",
                     required=True,
+                    metadata={"strategy": "multi_step"},
                 ),
                 WorkflowStep(
                     step_id="retrieve",
@@ -37,6 +39,7 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Retrieve documents for each sub-question",
                     required=True,
                     depends_on=["plan"],
+                    metadata={"strategy": "multi_step"},
                 ),
                 WorkflowStep(
                     step_id="analyze",
@@ -44,6 +47,7 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Analyze evidence across sub-questions",
                     required=True,
                     depends_on=["retrieve"],
+                    metadata={"strategy": "multi_step"},
                 ),
                 WorkflowStep(
                     step_id="synthesize",
@@ -51,6 +55,7 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Synthesize findings into coherent report",
                     required=True,
                     depends_on=["analyze"],
+                    metadata={"strategy": "multi_step"},
                 ),
                 WorkflowStep(
                     step_id="verify",
@@ -58,6 +63,7 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Verify claims against source documents",
                     required=False,
                     depends_on=["synthesize"],
+                    metadata={"strategy": "multi_step"},
                 ),
             ],
             estimated_time_ms=5000,
@@ -66,4 +72,8 @@ class ResearchWorkflow(BaseWorkflow):
             requires_human=False,
             confidence=0.85,
             reason="Multi-step research: Plan → Retrieve → Analyze → Synthesize → Verify",
+            execution_strategy=ExecutionStrategyType.MULTI_STEP,
+            requires_retrieval=True,
+            requires_parallel=False,
+            estimated_execution_steps=5,
         )

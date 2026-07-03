@@ -3,12 +3,16 @@
 # ============================================================
 # The ExecutionEngine is the single entry point for the
 # Execution Strategy Layer. It receives an ExecutionContext,
-# selects the best matching strategy via supports(), and
-# returns an ExecutionResult.
+# selects the best matching strategy, and returns an
+# ExecutionResult.
+#
+# When context.workflow is available (set by WorkflowBridge),
+# the Engine uses the workflow's execution_strategy directly,
+# bypassing the supports() loop.
 #
 # The Engine does NOT make business decisions.
 # It does NOT know about:
-#   - Which strategy to use (Strategy decides via supports())
+#   - Which strategy to use (workflow intent or strategy decides)
 #   - Task types or complexity levels
 #   - Provider selection
 #   - RAG vs Direct vs Parallel
@@ -53,6 +57,9 @@ class ExecutionEngine:
         self,
         context: ExecutionContext,
     ) -> ExecutionResult:
+        if context.workflow is not None:
+            return self._execute_from_workflow(context)
+
         strategies = self._get_sorted_strategies()
 
         for strategy in strategies:
@@ -64,6 +71,14 @@ class ExecutionEngine:
     # ============================================================
     # Internal helpers
     # ============================================================
+
+    def _execute_from_workflow(self, context: ExecutionContext) -> ExecutionResult:
+        strategy_name = context.workflow.execution_strategy.value
+        if StrategyRegistry.has_strategy(strategy_name):
+            strategy_class = StrategyRegistry.get(strategy_name)
+            strategy = strategy_class()
+            return strategy.build(context)
+        return self._fallback_execute(context)
 
     def _get_sorted_strategies(self) -> list[BaseExecutionStrategy]:
         strategies = StrategyRegistry.list_instances()

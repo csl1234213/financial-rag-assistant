@@ -10,6 +10,7 @@ from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
+from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class RAGWorkflow(BaseWorkflow):
@@ -30,6 +31,7 @@ class RAGWorkflow(BaseWorkflow):
                     name="Retrieve",
                     description="Retrieve relevant documents from knowledge base",
                     required=True,
+                    metadata={"strategy": "rag"},
                 ),
                 WorkflowStep(
                     step_id="reason",
@@ -37,6 +39,7 @@ class RAGWorkflow(BaseWorkflow):
                     description="Reason over retrieved evidence",
                     required=True,
                     depends_on=["retrieve"],
+                    metadata={"strategy": "rag"},
                 ),
                 WorkflowStep(
                     step_id="answer",
@@ -44,6 +47,7 @@ class RAGWorkflow(BaseWorkflow):
                     description="Generate final answer with citations",
                     required=True,
                     depends_on=["reason"],
+                    metadata={"strategy": "rag"},
                 ),
             ],
             estimated_time_ms=2000,
@@ -52,4 +56,8 @@ class RAGWorkflow(BaseWorkflow):
             requires_human=False,
             confidence=0.95,
             reason="Standard RAG: Retrieve → Reason → Answer",
+            execution_strategy=ExecutionStrategyType.RAG,
+            requires_retrieval=True,
+            requires_parallel=False,
+            estimated_execution_steps=3,
         )
