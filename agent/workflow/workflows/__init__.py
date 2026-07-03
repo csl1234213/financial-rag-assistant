@@ -1,0 +1,29 @@
+# ============================================================
+# Workflows — Auto-registration
+# ============================================================
+# Importing this package automatically registers all built-in
+# workflow classes into the WorkflowRegistry.
+#
+# Mirrors:
+#   agent.execution.strategies.__init__  (auto-registration via import)
+#   agent.execution.handlers.__init__    (auto-registration via import)
+# ============================================================
+
+from agent.workflow.workflow_registry import WorkflowRegistry
+
+from .direct_chat_workflow import DirectChatWorkflow
+from .rag_workflow import RAGWorkflow
+from .research_workflow import ResearchWorkflow
+from .comparison_workflow import ComparisonWorkflow
+
+WorkflowRegistry.register("direct_chat", DirectChatWorkflow)
+WorkflowRegistry.register("rag", RAGWorkflow)
+WorkflowRegistry.register("multi_step", ResearchWorkflow)
+WorkflowRegistry.register("parallel", ComparisonWorkflow)
+
+__all__ = [
+    "DirectChatWorkflow",
+    "RAGWorkflow",
+    "ResearchWorkflow",
+    "ComparisonWorkflow",
+]

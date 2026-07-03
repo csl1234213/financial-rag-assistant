@@ -1,0 +1,55 @@
+# ============================================================
+# RAGWorkflow — Skeleton
+# ============================================================
+# 典型 RAG 流程：Retrieve → Reason → Answer
+# 三步串行，依赖检索结果。
+# ============================================================
+
+from agent.workflow.base_workflow import BaseWorkflow
+from agent.workflow.workflow_context import WorkflowContext
+from agent.workflow.workflow_enums import WorkflowType
+from agent.workflow.workflow_models import WorkflowStep
+from agent.workflow.workflow_result import WorkflowResult
+
+
+class RAGWorkflow(BaseWorkflow):
+
+    @property
+    def workflow_name(self) -> str:
+        return "rag"
+
+    def supports(self, context: WorkflowContext) -> bool:
+        return True
+
+    def build(self, context: WorkflowContext) -> WorkflowResult:
+        return WorkflowResult(
+            workflow=WorkflowType.RAG,
+            steps=[
+                WorkflowStep(
+                    step_id="retrieve",
+                    name="Retrieve",
+                    description="Retrieve relevant documents from knowledge base",
+                    required=True,
+                ),
+                WorkflowStep(
+                    step_id="reason",
+                    name="Reason",
+                    description="Reason over retrieved evidence",
+                    required=True,
+                    depends_on=["retrieve"],
+                ),
+                WorkflowStep(
+                    step_id="answer",
+                    name="Answer",
+                    description="Generate final answer with citations",
+                    required=True,
+                    depends_on=["reason"],
+                ),
+            ],
+            estimated_time_ms=2000,
+            requires_tools=False,
+            requires_memory=False,
+            requires_human=False,
+            confidence=0.95,
+            reason="Standard RAG: Retrieve → Reason → Answer",
+        )
