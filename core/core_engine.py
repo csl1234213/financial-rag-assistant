@@ -18,6 +18,14 @@ from agent.execution.strategies import (
 from agent.execution_plan import StepType
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
+from agent.workflow.workflow_engine import WorkflowEngine
+from agent.workflow.workflow_executor import WorkflowExecutor
+from agent.workflow.workflows import (  # noqa: F401 — auto-registration
+    DirectChatWorkflow,
+    RAGWorkflow,
+    ResearchWorkflow,
+    ComparisonWorkflow,
+)
 from config import DEBUG_MODE
 from core.citation_formatter import format_citations
 from core.intent_analyzer import IntentAnalyzer
@@ -166,6 +174,8 @@ runtime = AgentRuntime(
     router=router,
     strategy_engine=strategy_engine,
     dispatcher=dispatcher,
+    workflow_engine=WorkflowEngine(),
+    workflow_executor=WorkflowExecutor(),
 )
 
 
@@ -196,6 +206,7 @@ def run_rag(question: str, company=None):
             result.routing,
             result.planning,
             result.execution,
+            result.workflow,
         )
 
     if len(result.citations) == 0:
@@ -210,6 +221,7 @@ def run_rag(question: str, company=None):
             result.routing,
             result.planning,
             result.execution,
+            result.workflow,
         )
 
     answer = call_llm(prompt)
@@ -239,4 +251,5 @@ def run_rag(question: str, company=None):
         result.routing,
         result.planning,
         result.execution,
+        result.workflow,
     )

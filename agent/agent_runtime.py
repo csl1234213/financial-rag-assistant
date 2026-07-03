@@ -17,7 +17,12 @@ from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
 from agent.runtime_context import RuntimeContext
 from agent.runtime_result import RuntimeResult
+from agent.runtime_state import RuntimeState
 from agent.planning import PlanningContext
+from agent.workflow.workflow_bridge import WorkflowBridge
+from agent.workflow.workflow_context import WorkflowContext
+from agent.workflow.workflow_engine import WorkflowEngine
+from agent.workflow.workflow_executor import WorkflowExecutor
 from core.context_builder import build_context_from_evidence
 from llm.router import ModelRouter
 
@@ -26,21 +31,19 @@ logger = logging.getLogger(__name__)
 
 class AgentRuntime:
     """
-    V4 Agent Runtime
+    V5 Agent Runtime
 
     Unified lifecycle manager for one AI Agent execution.
 
-    Responsibilities:
-    1. Build PlanningContext → TaskAnalyzer → TaskResult
-    2. QueryPlanner consumes TaskResult → ExecutionPlan
-    3. Generate RoutingContext from TaskResult → Route to best Provider
-    4. Execute via ExecutionEngine
-    5. Collect evidence
-    6. Build context & citations
-    7. Reason via ReasoningEngine
-    8. Return structured RuntimeResult with routing + planning info
+    Pipeline:
+    1. Planning — TaskAnalyzer + ComplexityAnalyzer
+    2. Execution Strategy — determine HOW to execute
+    3. Workflow — WorkflowEngine + WorkflowExecutor
+    4. Execution Dispatch — actual execution via handlers
+    5. Reasoning — ReasoningEngine
 
-    Future entry points: Tool Registry, Memory, Reflection, Evaluation.
+    Workflow is now the default entry point for execution.
+    Even a single-step DirectChatWorkflow goes through the same pipeline.
     """
 
     def __init__(
@@ -53,6 +56,8 @@ class AgentRuntime:
         router: Optional[ModelRouter] = None,
         strategy_engine: Optional[StrategyExecutionEngine] = None,
         dispatcher: Optional[ExecutionDispatcher] = None,
+        workflow_engine: Optional[WorkflowEngine] = None,
+        workflow_executor: Optional[WorkflowExecutor] = None,
     ):
         self.planner = planner
         self.executor = executor
@@ -62,6 +67,8 @@ class AgentRuntime:
         self.router = router
         self.strategy_engine = strategy_engine
         self.dispatcher = dispatcher
+        self.workflow_engine = workflow_engine or WorkflowEngine()
+        self.workflow_executor = workflow_executor or WorkflowExecutor()
 
     # =========================
     # Main Entry
@@ -154,7 +161,55 @@ class AgentRuntime:
             "planner_version": "rule-v1",
         }
 
-        # 6. Execute — dispatch via ExecutionDispatcher if available
+        # ============================================================
+        # 6. Workflow — WorkflowEngine → WorkflowExecutor → WorkflowResult
+        # ============================================================
+        workflow_info = None
+        workflow_result = None
+        runtime_state = RuntimeState()
+
+        if strategy_result is not None and self.strategy_engine is not None:
+            workflow_ctx = WorkflowContext(
+                task=task_result,
+                complexity=complexity_result,
+                execution=strategy_result,
+                routing=routing_context,
+            )
+
+            workflow_result = self.workflow_engine.build(workflow_ctx)
+
+            bridge_ctx = WorkflowBridge.to_execution_context(
+                workflow_ctx,
+                workflow_result,
+            )
+
+            workflow_result = self.workflow_executor.execute(
+                workflow_result,
+                self.strategy_engine,
+                bridge_ctx,
+            )
+
+            runtime_state.workflow = workflow_result
+
+            workflow_info = {
+                "type": workflow_result.workflow.value,
+                "status": workflow_result.status.value,
+                "completed_steps": len(workflow_result.completed_steps),
+                "total_steps": len(workflow_result.steps),
+                "estimated_time_ms": workflow_result.estimated_time_ms,
+                "confidence": workflow_result.confidence,
+                "reason": workflow_result.reason,
+            }
+
+            logger.info(
+                "Workflow: %s | Status: %s | Steps: %d/%d",
+                workflow_result.workflow.value,
+                workflow_result.status.value,
+                len(workflow_result.completed_steps),
+                len(workflow_result.steps),
+            )
+
+        # 7. Execute — dispatch via ExecutionDispatcher (unchanged)
         ctx = RuntimeContext(question=question, company=company)
 
         if self.dispatcher is not None and strategy_result is not None:
@@ -192,4 +247,5 @@ class AgentRuntime:
             routing=routing_info,
             planning=planning_info,
             execution=strategy_info,
+            workflow=workflow_info,
         )

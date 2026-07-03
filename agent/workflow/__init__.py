@@ -10,7 +10,7 @@
 #   agent.planning   → agent.workflow
 # ============================================================
 
-from .workflow_enums import WorkflowType
+from .workflow_enums import WorkflowStatus, WorkflowType
 from .workflow_context import WorkflowContext
 from .workflow_models import WorkflowStep
 from .workflow_result import WorkflowResult
@@ -23,8 +23,19 @@ from .workflow_exceptions import (
 from .workflow_registry import WorkflowRegistry
 from .workflow_factory import WorkflowFactory
 from .workflow_engine import WorkflowEngine
+from .workflow_bridge import WorkflowBridge
+from .workflow_executor import ExecutionRunner, WorkflowExecutor
+
+# Auto-register all workflow implementations
+from .workflows import (  # noqa: F401 — auto-registration
+    DirectChatWorkflow,
+    RAGWorkflow,
+    ResearchWorkflow,
+    ComparisonWorkflow,
+)
 
 __all__ = [
+    "WorkflowStatus",
     "WorkflowType",
     "WorkflowContext",
     "WorkflowStep",
@@ -36,4 +47,7 @@ __all__ = [
     "WorkflowRegistry",
     "WorkflowFactory",
     "WorkflowEngine",
+    "WorkflowBridge",
+    "ExecutionRunner",
+    "WorkflowExecutor",
 ]

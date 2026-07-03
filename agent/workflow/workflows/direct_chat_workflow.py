@@ -10,6 +10,7 @@ from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
+from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class DirectChatWorkflow(BaseWorkflow):
@@ -30,6 +31,7 @@ class DirectChatWorkflow(BaseWorkflow):
                     name="Direct Chat",
                     description="Single-step LLM response",
                     required=True,
+                    metadata={"strategy": "direct_llm"},
                 ),
             ],
             estimated_time_ms=500,
@@ -38,4 +40,8 @@ class DirectChatWorkflow(BaseWorkflow):
             requires_human=False,
             confidence=1.0,
             reason="Direct chat — no retrieval or multi-step needed",
+            execution_strategy=ExecutionStrategyType.DIRECT_LLM,
+            requires_retrieval=False,
+            requires_parallel=False,
+            estimated_execution_steps=1,
         )

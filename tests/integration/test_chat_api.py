@@ -41,8 +41,10 @@ def _fake_run_rag_success(question, company=None):
         {"intent": "SINGLE_COMPANY", "companies": ["Apple"]},
         [],
         _make_fake_plan("single_company", 2),
-        None,
-        None,
+        {"provider": "openai", "model": "gpt-4o"},
+        {"task_type": "document_qa", "complexity": "low"},
+        {"strategy": "rag"},
+        {"type": "rag", "status": "DONE", "completed_steps": 3},
     )
 
 
@@ -58,8 +60,10 @@ def _fake_run_rag_compare(question, company=None):
         {"intent": "COMPARE_COMPANIES", "companies": ["Apple", "Tesla"]},
         [],
         _make_fake_plan("comparison", 4),
-        None,
-        None,
+        {"provider": "openai", "model": "gpt-4o"},
+        {"task_type": "compare_companies", "complexity": "medium"},
+        {"strategy": "parallel"},
+        {"type": "parallel", "status": "DONE", "completed_steps": 4},
     )
 
 
@@ -72,8 +76,10 @@ def _fake_run_rag_empty(question, company=None):
         {"intent": "GLOBAL_RESEARCH", "companies": None},
         [],
         _make_fake_plan("global_research", 2),
-        None,
-        None,
+        {"provider": "openai", "model": "gpt-4o"},
+        {"task_type": "global_research", "complexity": "high"},
+        {"strategy": "multi_step"},
+        {"type": "multi_step", "status": "DONE", "completed_steps": 5},
     )
 
 

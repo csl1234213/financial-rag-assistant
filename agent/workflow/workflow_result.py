@@ -6,16 +6,20 @@
 # 预估耗时、所需能力、置信度。
 #
 # 不包含 Provider（模型选择是 Routing 的职责）。
+# 不包含 ExecutionResult（Workflow 不依赖 Execution）。
+# 包含 Execution Intent（执行意图），供 ExecutionEngine 消费。
 # ============================================================
 
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .workflow_enums import WorkflowType
+from agent.execution.strategy_enums import ExecutionStrategyType
+
+from .workflow_enums import WorkflowStatus, WorkflowType
 from .workflow_models import WorkflowStep
 
 
-@dataclass(slots=True)
+@dataclass
 class WorkflowResult:
     workflow: WorkflowType
 
@@ -34,3 +38,25 @@ class WorkflowResult:
     reason: str = ""
 
     next_workflow: Optional[WorkflowType] = None
+
+    # ============================================================
+    # Execution Intent — consumed by ExecutionEngine via Bridge
+    # ============================================================
+
+    execution_strategy: ExecutionStrategyType = ExecutionStrategyType.DIRECT_LLM
+
+    requires_retrieval: bool = False
+
+    requires_parallel: bool = False
+
+    estimated_execution_steps: int = 1
+
+    # ============================================================
+    # Runtime State — mutated by WorkflowExecutor during execution
+    # ============================================================
+
+    status: WorkflowStatus = WorkflowStatus.PENDING
+
+    current_step: Optional[WorkflowStep] = None
+
+    completed_steps: List[WorkflowStep] = field(default_factory=list)

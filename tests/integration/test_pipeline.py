@@ -43,8 +43,10 @@ def _fake_run_rag(question, company=None):
         {"intent": "SINGLE_COMPANY", "companies": ["TestCorp"]},
         [],
         _make_fake_plan(),
-        None,
-        None,
+        {"provider": "openai", "model": "gpt-4o"},
+        {"task_type": "document_qa", "complexity": "low"},
+        {"strategy": "rag"},
+        {"type": "rag", "status": "DONE", "completed_steps": 3},
     )
 
 
