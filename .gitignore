@@ -22,3 +22,7 @@ chroma_db_test_*/
 
 # Regression outputs
 regression_*.txt
+
+# Coverage
+.coverage
+htmlcov/
