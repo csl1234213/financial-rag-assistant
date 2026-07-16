@@ -189,6 +189,28 @@ def run_rag(question: str, company=None):
 
     result = runtime.run(question, company)
 
+    is_direct_chat = (
+        result.workflow
+        and result.workflow.get("type") == "direct_chat"
+    )
+
+    if is_direct_chat:
+        prompt = f"User: {question}\n\nAssistant:"
+        answer = call_llm(prompt)
+        return (
+            answer,
+            result.citations,
+            result.context,
+            research_mode,
+            result.intent_result,
+            result.evidence,
+            result.plan,
+            result.routing,
+            result.planning,
+            result.execution,
+            result.workflow,
+        )
+
     if research_mode == "compare":
         prompt = build_compare_prompt(question, result.context)
     else:

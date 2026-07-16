@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from agent.execution_plan import ExecutionPlan
 from agent.reasoning_models import Evidence, ReasoningResult
+
+if TYPE_CHECKING:
+    from agent.metrics.metric_result import MetricResult
 
 
 @dataclass
@@ -34,3 +37,9 @@ class RuntimeResult:
     execution: Optional[Dict[str, Any]] = None
 
     workflow: Optional[Dict[str, Any]] = None
+
+    memory: Optional[Dict[str, Any]] = None
+
+    metrics: Optional["MetricResult"] = None
+
+    reliability: Optional[Dict[str, Any]] = None

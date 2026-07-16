@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from agent.__version__ import __version__
 from api.routers.chat import router as chat_router
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
@@ -9,7 +10,7 @@ from api.routers.upload import router as upload_router
 app = FastAPI(
     title="Financial Research Copilot API",
     description="Production API for Financial Research Copilot",
-    version="4.0.0"
+    version=__version__
 )
 
 app.include_router(health_router, prefix="/api/v1")
@@ -23,5 +24,5 @@ app.include_router(refresh_router, prefix="/api/v1")
 def root():
     return {
         "service": "Financial Research Copilot",
-        "version": "4.0.0"
+        "version": __version__
     }

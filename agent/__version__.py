@@ -1,11 +1,24 @@
 # ============================================================
-# V5.4.2 — Workflow Runtime Integration
+# V7.3.0 — Reliability Framework
 # ============================================================
-# Benchmark & Freeze — Phase 4 Sprint 2 Step 4
+# Benchmark & Freeze — Phase 3 Sprint 2 Step 4
 # ============================================================
-# 全量回归: 382 passed, 2 skipped, 0 failed
-# Workflow Benchmark: 80 passed, 2 skipped, 0 failed
-# Accuracy: 100% (15/15)
+# Reliability Pipeline:
+#   HealthCheck → RateLimiter → Timeout → Retry → CircuitBreaker → Fallback
+#
+# 全量测试: 1156 passed, 0 failed (51 benchmark + 1105 existing)
+# Reliability Benchmark: 51/51 passed
+#   - Retry Accuracy:        5/5 passed
+#   - Timeout Accuracy:      4/4 passed
+#   - Circuit Breaker:       5/5 passed
+#   - Health Check:          3/3 passed
+#   - Rate Limiter:          4/4 passed
+#   - Fallback:              4/4 passed
+#   - Pipeline:              5/5 passed
+#   - Performance:           6/6 passed
+#   - Stability:             4/4 passed
+#   - Failure Benchmark:     7/7 passed
+#   - Regression:            4/4 passed
 # ============================================================
 
-__version__ = "5.4.2"
+__version__ = "7.3.1"

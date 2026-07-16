@@ -3,6 +3,10 @@ Unified config — backward compatible with old config.py imports.
 All existing imports like `from config import DEBUG_MODE` still work.
 """
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import os
 from pathlib import Path
 
@@ -37,11 +41,11 @@ LLM_TEMPERATURE = 0.2
 LLM_MAX_TOKENS = 1000
 
 # =========================
-# New (V4.3 — env-driven)
+# New (V7.3 — env-driven)
 # =========================
 
 APP_ENV = os.environ.get("APP_ENV", "development")
-APP_VERSION = os.environ.get("APP_VERSION", "4.3.0")
+APP_VERSION = os.environ.get("APP_VERSION", "7.3.1")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -60,7 +64,7 @@ REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 
 # =========================
-# UI (V4.3 Phase 2.2)
+# UI (V7.3 Phase 2.2)
 # =========================
 
 from .ui import *  # noqa: E402, F403

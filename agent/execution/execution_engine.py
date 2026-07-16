@@ -33,6 +33,22 @@ from .strategy_registry import StrategyRegistry
 
 
 class ExecutionEngine:
+    """
+    Strategy Execution Engine
+
+    Responsible for selecting execution strategy:
+    - RAG
+    - Direct LLM
+    - Parallel execution
+    - Multi-step workflow
+    - Tool calling
+
+    Different from:
+    agent.execution_engine.ExecutionEngine (Step Execution Engine)
+    which dispatches individual steps to registered handlers.
+
+    This engine delegates actual step execution to the Step Execution Engine.
+    """
 
     def __init__(self) -> None:
         self._fallback_strategy_name: Optional[str] = None
@@ -57,6 +73,9 @@ class ExecutionEngine:
         self,
         context: ExecutionContext,
     ) -> ExecutionResult:
+        if context.tool_context is not None:
+            return self._execute_from_tool(context)
+
         if context.workflow is not None:
             return self._execute_from_workflow(context)
 
@@ -77,8 +96,75 @@ class ExecutionEngine:
         if StrategyRegistry.has_strategy(strategy_name):
             strategy_class = StrategyRegistry.get(strategy_name)
             strategy = strategy_class()
-            return strategy.build(context)
+            result = strategy.build(context)
+            result = self._execute_workflow_tools(context, result)
+            return result
         return self._fallback_execute(context)
+
+    def _execute_workflow_tools(
+        self,
+        context: ExecutionContext,
+        result: ExecutionResult,
+    ) -> ExecutionResult:
+        from agent.tools.tool_bridge import ToolBridge
+        from agent.tools.tool_engine import ToolEngine
+        from agent.tools.tool_exceptions import ToolNotFound, ToolNotSupported
+
+        workflow = context.workflow
+        if workflow is None:
+            return result
+
+        tool_engine = ToolEngine()
+
+        for step in workflow.steps:
+            if not ToolBridge.has_tool(step):
+                continue
+
+            tool_name = ToolBridge.get_tool_name(step)
+            if tool_name is None:
+                continue
+
+            tool_context = ToolBridge.to_tool_context(
+                step,
+                runtime_state=(
+                    context.tool_context.runtime_state
+                    if context.tool_context is not None
+                    else None
+                ),
+                workflow=workflow,
+                execution=result,
+            )
+
+            try:
+                tool_result = tool_engine.execute(tool_context, tool_name)
+                result.tool_results.append(tool_result)
+            except (ToolNotFound, ToolNotSupported):
+                continue
+            except Exception:
+                continue
+
+        return result
+
+    def _execute_from_tool(self, context: ExecutionContext) -> ExecutionResult:
+        result = self._execute_tool(context)
+        return ExecutionResult(
+            strategy=result.metadata.get("execution_strategy", "tool_calling"),
+            reason=f"Tool execution: {result.status.value}",
+            estimated_steps=1,
+            parallelism=1,
+            use_retrieval=False,
+            use_tools=True,
+            confidence=0.95,
+            tool_results=[result],
+        )
+
+    def _execute_tool(self, context: ExecutionContext):
+        from agent.tools.tool_engine import ToolEngine
+        from agent.tools.tool_enums import ToolType
+
+        tool_engine = ToolEngine()
+        tool = context.tool_context.parameters.get("tool", ToolType.CUSTOM)
+        return tool_engine.execute(context.tool_context, tool)
 
     def _get_sorted_strategies(self) -> list[BaseExecutionStrategy]:
         strategies = StrategyRegistry.list_instances()

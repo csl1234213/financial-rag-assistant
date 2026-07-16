@@ -1,2 +1,7 @@
-# Azure Provider — Sprint 5
-# ============================================================
+"""
+Azure OpenAI Provider
+
+Reserved extension point for Azure OpenAI integration.
+
+Implementation pending.
+"""

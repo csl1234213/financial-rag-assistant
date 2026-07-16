@@ -1,0 +1,30 @@
+# ============================================================
+# Tool Context
+# ============================================================
+# Unified input for the Tool Layer.
+# Aggregates all upstream information — runtime_state,
+# workflow, execution, memory — into a single context object.
+#
+# ToolEngine 永远只接收一个 Context。
+#
+# 保持与 MemoryContext / WorkflowContext 统一的
+# 单一 Context 入口风格。
+# ============================================================
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent.memory.memory_result import MemoryResult
+    from agent.execution.execution_result import ExecutionResult as StrategyResult
+    from agent.workflow.workflow_result import WorkflowResult
+    from agent.runtime_state import RuntimeState
+
+
+@dataclass(slots=True)
+class ToolContext:
+    runtime_state: Optional["RuntimeState"] = None
+    workflow: Optional["WorkflowResult"] = None
+    execution: Optional["StrategyResult"] = None
+    memory: Optional["MemoryResult"] = None
+    parameters: Dict[str, Any] = field(default_factory=dict)

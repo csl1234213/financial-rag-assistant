@@ -31,7 +31,13 @@ class RAGWorkflow(BaseWorkflow):
                     name="Retrieve",
                     description="Retrieve relevant documents from knowledge base",
                     required=True,
-                    metadata={"strategy": "rag"},
+                    metadata={
+                        "strategy": "rag",
+                        "tool": {
+                            "name": "retrieval",
+                            "parameters": {"top_k": 5},
+                        },
+                    },
                 ),
                 WorkflowStep(
                     step_id="reason",

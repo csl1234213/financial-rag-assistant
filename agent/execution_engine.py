@@ -8,13 +8,16 @@ Handler = Callable[[PlanStep, Dict[str, Any]], Any]
 
 class ExecutionEngine:
     """
-    V3 Execution Engine
+    Step Execution Engine
 
-    Iterates over ExecutionPlan tasks, dispatches by StepType,
-    resolves dependencies, and saves results.
+    Responsible for executing individual workflow steps
+    through registered handlers.
 
-    The engine itself does NOT know about business logic.
-    All step handlers are registered externally.
+    Different from:
+    agent.execution.execution_engine.ExecutionEngine (StrategyExecutionEngine)
+    which decides execution strategy (RAG / DirectLLM / Parallel / MultiStep).
+
+    This engine delegates actual step execution to handlers.
     """
 
     def __init__(self):

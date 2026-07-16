@@ -11,3 +11,14 @@ venv/
 .venv/
 
 *.pyc
+
+# Test output
+test_*.txt
+*.log
+
+# ChromaDB
+chroma_db/
+chroma_db_test_*/
+
+# Regression outputs
+regression_*.txt
