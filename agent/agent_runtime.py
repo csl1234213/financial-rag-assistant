@@ -1,24 +1,32 @@
 import logging
+import time
 from typing import Optional
 
-from agent.execution_engine import ExecutionEngine
 from agent.execution.execution_context import ExecutionContext
-from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_dispatcher import ExecutionDispatcher
+from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_handler import ExecutionHandlerContext
 from agent.execution.handlers import (  # noqa: F401 — auto-registration
-    RagHandler,
     DirectLLMHandler,
-    ParallelHandler,
     MultiStepHandler,
+    ParallelHandler,
+    RagHandler,
     ToolCallingHandler,
 )
+from agent.execution_engine import ExecutionEngine
+from agent.memory.memory_bridge import MemoryBridge
+from agent.memory.memory_engine import MemoryEngine
+from agent.metrics.metric_bridge import MetricBridge
+from agent.metrics.metric_engine import MetricEngine
+from agent.metrics.metric_enums import MetricScope, MetricType
+from agent.planning import PlanningContext
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
+from agent.reliability.reliability_bridge import ReliabilityBridge
+from agent.reliability.reliability_engine import ReliabilityEngine
 from agent.runtime_context import RuntimeContext
 from agent.runtime_result import RuntimeResult
 from agent.runtime_state import RuntimeState
-from agent.planning import PlanningContext
 from agent.workflow.workflow_bridge import WorkflowBridge
 from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_engine import WorkflowEngine
@@ -36,11 +44,15 @@ class AgentRuntime:
     Unified lifecycle manager for one AI Agent execution.
 
     Pipeline:
-    1. Planning — TaskAnalyzer + ComplexityAnalyzer
-    2. Execution Strategy — determine HOW to execute
-    3. Workflow — WorkflowEngine + WorkflowExecutor
-    4. Execution Dispatch — actual execution via handlers
-    5. Reasoning — ReasoningEngine
+    1. Intent Analysis
+    2. Memory Retrieve — retrieve historical context
+    3. Planning — TaskAnalyzer + ComplexityAnalyzer
+    4. Routing — ModelRouter
+    5. Execution Strategy — determine HOW to execute
+    6. Workflow — WorkflowEngine + WorkflowExecutor
+    7. Execution Dispatch — actual execution via handlers
+    8. Reasoning — ReasoningEngine
+    9. Memory Store — persist execution result
 
     Workflow is now the default entry point for execution.
     Even a single-step DirectChatWorkflow goes through the same pipeline.
@@ -58,6 +70,9 @@ class AgentRuntime:
         dispatcher: Optional[ExecutionDispatcher] = None,
         workflow_engine: Optional[WorkflowEngine] = None,
         workflow_executor: Optional[WorkflowExecutor] = None,
+        memory_engine: Optional[MemoryEngine] = None,
+        metric_engine: Optional[MetricEngine] = None,
+        reliability_engine: Optional[ReliabilityEngine] = None,
     ):
         self.planner = planner
         self.executor = executor
@@ -69,6 +84,9 @@ class AgentRuntime:
         self.dispatcher = dispatcher
         self.workflow_engine = workflow_engine or WorkflowEngine()
         self.workflow_executor = workflow_executor or WorkflowExecutor()
+        self.memory_engine = memory_engine
+        self.metric_engine = metric_engine
+        self.reliability_engine = reliability_engine
 
     # =========================
     # Main Entry
@@ -83,20 +101,43 @@ class AgentRuntime:
         Execute the full Agent pipeline for one question.
         """
 
+        runtime_start = time.time()
+
         # 1. Intent Analysis (legacy — for backward compat)
         intent_result = self.intent_analyzer.analyze(question)
 
         if company is None and intent_result.get("companies"):
             company = intent_result["companies"][0]
 
-        # 2. Plan — TaskAnalyzer + ComplexityAnalyzer run inside QueryPlanner
+        # 2. Memory Retrieve — retrieve historical context
+        memory_retrieve_info = None
+        if self.memory_engine is not None:
+            retrieve_ctx = MemoryBridge.to_memory_context(
+                task_result=None,
+                runtime_state=RuntimeState(),
+                question=question,
+                company=company,
+            )
+            retrieve_result = self.memory_engine.retrieve(retrieve_ctx)
+            memory_retrieve_info = {
+                "retrieved_count": retrieve_result.retrieved_count,
+                "confidence": retrieve_result.confidence,
+                "reason": retrieve_result.reason,
+            }
+            logger.info(
+                "Memory Retrieve: %d records | Confidence: %.2f",
+                retrieve_result.retrieved_count,
+                retrieve_result.confidence,
+            )
+
+        # 3. Plan — TaskAnalyzer + ComplexityAnalyzer run inside QueryPlanner
         planning_context = PlanningContext(
             question=question,
             companies=intent_result.get("companies") or [],
         )
         plan, task_result, complexity_result = self.planner.plan(planning_context)
 
-        # 3. Routing — from TaskResult + ComplexityResult
+        # 4. Routing — from TaskResult + ComplexityResult
         routing_info = None
         routing_context = None
         if self.router is not None:
@@ -118,7 +159,7 @@ class AgentRuntime:
             from llm.router import RoutingContext as RC
             routing_context = RC(task=task_result.task.task_type)
 
-        # 4. Execution Strategy — determine HOW to execute
+        # 5. Execution Strategy — determine HOW to execute
         strategy_result = None
         if self.strategy_engine is not None:
             exec_ctx = ExecutionContext(
@@ -148,7 +189,7 @@ class AgentRuntime:
                 "confidence": strategy_result.confidence,
             }
 
-        # 5. Planning info
+        # 6. Planning info
         planning_info = {
             "task_type": task_result.task.task_type.value,
             "complexity": complexity_result.complexity.level.value,
@@ -162,7 +203,7 @@ class AgentRuntime:
         }
 
         # ============================================================
-        # 6. Workflow — WorkflowEngine → WorkflowExecutor → WorkflowResult
+        # 7. Workflow — WorkflowEngine → WorkflowExecutor → WorkflowResult
         # ============================================================
         workflow_info = None
         workflow_result = None
@@ -209,15 +250,149 @@ class AgentRuntime:
                 len(workflow_result.steps),
             )
 
-        # 7. Execute — dispatch via ExecutionDispatcher (unchanged)
+        # 8. Execute — dispatch via ExecutionDispatcher
         ctx = RuntimeContext(question=question, company=company)
+        reliability_info = None
 
         if self.dispatcher is not None and strategy_result is not None:
             handler_ctx = ExecutionHandlerContext(
                 plan=plan,
                 executor=self.executor,
             )
-            output = self.dispatcher.dispatch(strategy_result, handler_ctx)
+
+            _execution_output: list = []
+
+            def _execution_callable():
+                output = self.dispatcher.dispatch(strategy_result, handler_ctx)
+                _execution_output.append(output)
+
+            if self.reliability_engine is not None:
+                reliability_ctx = ReliabilityBridge.to_reliability_context(
+                    runtime_state,
+                    metadata={
+                        "_callable": _execution_callable,
+                        "phase": "execution",
+                    },
+                )
+
+                pipeline_result = self.reliability_engine.execute_pipeline(
+                    reliability_ctx,
+                )
+
+                runtime_state.retry_count = 0
+                runtime_state.timeout_count = 0
+                runtime_state.fallback_used = False
+                for mechanism_name, result in pipeline_result.results.items():
+                    if mechanism_name == "retry":
+                        runtime_state.retry_count = result.retry_count
+                    elif mechanism_name == "timeout":
+                        if result.timeout_occurred:
+                            runtime_state.timeout_count += 1
+                    elif mechanism_name == "circuit_breaker":
+                        runtime_state.circuit_state = result.circuit_state
+                        runtime_state.failure_count = result.metadata.get(
+                            "failure_count", 0
+                        )
+                    elif mechanism_name == "health_check":
+                        runtime_state.health_status = result.metadata.get(
+                            "health_status"
+                        )
+                    elif mechanism_name == "rate_limiter":
+                        runtime_state.rate_limit_remaining = result.metadata.get(
+                            "rate_limit_remaining", 0
+                        )
+                    elif mechanism_name == "fallback":
+                        runtime_state.fallback_used = result.metadata.get(
+                            "fallback_used", False
+                        )
+
+                reliability_info = {
+                    "pipeline": pipeline_result.pipeline_order,
+                    "total_latency_ms": pipeline_result.total_latency_ms,
+                    "retry_count": runtime_state.retry_count,
+                    "timeout_count": runtime_state.timeout_count,
+                    "circuit_state": runtime_state.circuit_state,
+                    "failure_count": runtime_state.failure_count,
+                    "health_status": runtime_state.health_status,
+                    "rate_limit_remaining": runtime_state.rate_limit_remaining,
+                    "fallback_used": runtime_state.fallback_used,
+                }
+
+                if not pipeline_result.success:
+                    raise RuntimeError(
+                        "Execution failed after reliability pipeline: "
+                        f"{pipeline_result.pipeline_order}"
+                    )
+
+                if self.metric_engine is not None:
+                    metric_ctx = MetricBridge.to_metric_context(
+                        state=runtime_state,
+                        metadata={"phase": "reliability"},
+                    )
+                    self.metric_engine.increment(
+                        metric_ctx,
+                        "retry_total",
+                        value=float(runtime_state.retry_count),
+                        scope=MetricScope.RUNTIME,
+                    )
+                    if runtime_state.retry_count == 0:
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            "retry_success",
+                            value=1.0,
+                            scope=MetricScope.RUNTIME,
+                        )
+                    if runtime_state.timeout_count > 0:
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            "timeout_total",
+                            value=float(runtime_state.timeout_count),
+                            scope=MetricScope.RUNTIME,
+                        )
+                    if runtime_state.circuit_state:
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            f"circuit_{runtime_state.circuit_state}_total",
+                            value=1.0,
+                            scope=MetricScope.RUNTIME,
+                        )
+                    if runtime_state.health_status == "unhealthy":
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            "health_check_failed",
+                            value=1.0,
+                            scope=MetricScope.RUNTIME,
+                        )
+                    self.metric_engine.increment(
+                        metric_ctx,
+                        "health_check_total",
+                        value=1.0,
+                        scope=MetricScope.RUNTIME,
+                    )
+                    self.metric_engine.increment(
+                        metric_ctx,
+                        "rate_limit_total",
+                        value=1.0,
+                        scope=MetricScope.RUNTIME,
+                    )
+                    if runtime_state.rate_limit_remaining == 0:
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            "rate_limit_blocked",
+                            value=1.0,
+                            scope=MetricScope.RUNTIME,
+                        )
+                    if runtime_state.fallback_used:
+                        self.metric_engine.increment(
+                            metric_ctx,
+                            "fallback_total",
+                            value=1.0,
+                            scope=MetricScope.RUNTIME,
+                        )
+            else:
+                _execution_callable()
+
+            output = _execution_output[0]
             ctx.evidences = output.evidences
             context = output.context
             citations = output.citations
@@ -232,11 +407,89 @@ class AgentRuntime:
                 if step.result is not None
             ]
 
-        # 8. Reasoning
+        # 9. Reasoning
         ctx.execution_results = execution_results
         reasoning_result = self.reasoner.analyze(execution_results)
 
-        # 9. Result
+        # 10. Memory Store — persist execution result
+        memory_store_info = None
+        if self.memory_engine is not None:
+            memory_ctx = MemoryBridge.to_memory_context(
+                task_result=task_result,
+                runtime_state=runtime_state,
+                question=question,
+                company=company,
+            )
+            store_result = self.memory_engine.store(memory_ctx)
+            memory_store_info = {
+                "stored_count": store_result.retrieved_count,
+                "confidence": store_result.confidence,
+                "reason": store_result.reason,
+            }
+            logger.info(
+                "Memory Store: %d records | Confidence: %.2f",
+                store_result.retrieved_count,
+                store_result.confidence,
+            )
+
+        # 11. Metrics — collect runtime metrics
+        metrics_result = None
+        if self.metric_engine is not None:
+            metric_ctx = MetricBridge.to_metric_context(
+                state=runtime_state,
+                metadata={
+                    "runtime_id": str(id(self)),
+                    "question": question,
+                    "company": company or "",
+                },
+            )
+
+            runtime_duration_ms = (time.time() - runtime_start) * 1000
+            self.metric_engine.observe(
+                metric_ctx,
+                "runtime_duration",
+                runtime_duration_ms,
+                metric_type=MetricType.TIMER,
+                scope=MetricScope.RUNTIME,
+            )
+
+            if workflow_info is not None:
+                workflow_duration = workflow_info.get("estimated_time_ms", 0)
+                labels = MetricBridge.extract_labels(runtime_state)
+                self.metric_engine.observe(
+                    metric_ctx,
+                    "workflow_duration",
+                    float(workflow_duration),
+                    metric_type=MetricType.TIMER,
+                    scope=MetricScope.WORKFLOW,
+                    labels=labels,
+                )
+
+            if workflow_info is not None:
+                completed_steps = workflow_info.get("completed_steps", 0)
+                self.metric_engine.increment(
+                    metric_ctx,
+                    "workflow_completed_steps",
+                    value=float(completed_steps),
+                    scope=MetricScope.WORKFLOW,
+                )
+
+            if planning_info is not None:
+                self.metric_engine.observe(
+                    metric_ctx,
+                    "estimated_tokens",
+                    float(planning_info.get("estimated_tokens", 0)),
+                    metric_type=MetricType.HISTOGRAM,
+                    scope=MetricScope.RUNTIME,
+                )
+
+            metrics_result = self.metric_engine.collect(metric_ctx)
+            logger.info(
+                "Metrics: %d records collected",
+                metrics_result.count,
+            )
+
+        # 12. Result
         return RuntimeResult(
             reasoning_result=reasoning_result,
             context=context,
@@ -248,4 +501,10 @@ class AgentRuntime:
             planning=planning_info,
             execution=strategy_info,
             workflow=workflow_info,
+            memory={
+                "retrieve": memory_retrieve_info,
+                "store": memory_store_info,
+            } if self.memory_engine is not None else None,
+            metrics=metrics_result,
+            reliability=reliability_info,
         )

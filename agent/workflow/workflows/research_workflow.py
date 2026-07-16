@@ -39,7 +39,13 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Retrieve documents for each sub-question",
                     required=True,
                     depends_on=["plan"],
-                    metadata={"strategy": "multi_step"},
+                    metadata={
+                        "strategy": "multi_step",
+                        "tool": {
+                            "name": "retrieval",
+                            "parameters": {"top_k": 10, "threshold": 0.7},
+                        },
+                    },
                 ),
                 WorkflowStep(
                     step_id="analyze",
@@ -47,7 +53,13 @@ class ResearchWorkflow(BaseWorkflow):
                     description="Analyze evidence across sub-questions",
                     required=True,
                     depends_on=["retrieve"],
-                    metadata={"strategy": "multi_step"},
+                    metadata={
+                        "strategy": "multi_step",
+                        "tool": {
+                            "name": "python",
+                            "parameters": {"mode": "analysis"},
+                        },
+                    },
                 ),
                 WorkflowStep(
                     step_id="synthesize",

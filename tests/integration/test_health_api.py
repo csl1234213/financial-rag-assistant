@@ -6,6 +6,8 @@ sys.path.insert(0, str(ROOT))
 
 import pytest
 
+from agent.__version__ import __version__
+
 
 @pytest.mark.integration
 class TestHealthAPI:
@@ -23,7 +25,7 @@ class TestHealthAPI:
         response = client.get("/api/v1/health")
         data = response.json()
         assert "version" in data
-        assert data["version"] == "4.0.0"
+        assert data["version"] == __version__
 
     def test_health_service_name(self, client):
         response = client.get("/api/v1/health")
@@ -45,4 +47,4 @@ class TestHealthAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["service"] == "Financial Research Copilot"
-        assert data["version"] == "4.0.0"
+        assert data["version"] == __version__

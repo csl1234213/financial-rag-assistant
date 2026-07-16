@@ -9,6 +9,8 @@ markers = [
     "unit: Unit tests (fast, isolated)",
     "integration: Integration tests (module collaboration)",
     "slow: Slow tests (e2e, benchmark)",
+    "perf: Performance benchmark tests",
+    "e2e: End-to-end tests",
 ]
 
 [tool.ruff]

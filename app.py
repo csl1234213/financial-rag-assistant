@@ -1,8 +1,4 @@
-from dotenv import load_dotenv
-
 from core.core_engine import run_rag
-
-load_dotenv()
 
 
 

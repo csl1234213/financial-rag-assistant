@@ -9,10 +9,11 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from agent.execution.execution_result import ExecutionResult
+    from agent.tools.tool_result import ToolResult
     from agent.workflow.workflow_result import WorkflowResult
 
 
@@ -25,3 +26,19 @@ class RuntimeState:
     routing: List[Any] = field(default_factory=list)
 
     outputs: List[Any] = field(default_factory=list)
+
+    tool_results: List["ToolResult"] = field(default_factory=list)
+
+    retry_count: int = 0
+
+    timeout_count: int = 0
+
+    circuit_state: Optional[str] = None
+
+    failure_count: int = 0
+
+    health_status: Optional[str] = None
+
+    rate_limit_remaining: int = 0
+
+    fallback_used: bool = False

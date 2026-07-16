@@ -17,6 +17,7 @@ from agent.planning import TaskResult, ComplexityResult
 from llm.router import RoutingContext
 
 if TYPE_CHECKING:
+    from agent.tools.tool_context import ToolContext
     from agent.workflow.workflow_result import WorkflowResult
 
 
@@ -29,3 +30,5 @@ class ExecutionContext:
     routing: RoutingContext
 
     workflow: Optional["WorkflowResult"] = field(default=None)
+
+    tool_context: Optional["ToolContext"] = field(default=None)

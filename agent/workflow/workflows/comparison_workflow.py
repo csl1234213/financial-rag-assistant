@@ -31,14 +31,26 @@ class ComparisonWorkflow(BaseWorkflow):
                     name="Retrieve Entity A",
                     description="Retrieve documents for first entity",
                     required=True,
-                    metadata={"strategy": "parallel"},
+                    metadata={
+                        "strategy": "parallel",
+                        "tool": {
+                            "name": "retrieval",
+                            "parameters": {"top_k": 5, "entity": "A"},
+                        },
+                    },
                 ),
                 WorkflowStep(
                     step_id="retrieve_b",
                     name="Retrieve Entity B",
                     description="Retrieve documents for second entity",
                     required=True,
-                    metadata={"strategy": "parallel"},
+                    metadata={
+                        "strategy": "parallel",
+                        "tool": {
+                            "name": "retrieval",
+                            "parameters": {"top_k": 5, "entity": "B"},
+                        },
+                    },
                 ),
                 WorkflowStep(
                     step_id="compare",

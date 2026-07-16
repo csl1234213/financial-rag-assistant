@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from agent.__version__ import __version__
 from core.knowledge_manager import get_document_count
 
 router = APIRouter(tags=["Health"])
@@ -15,7 +16,7 @@ def health():
     return {
         "status": "ok",
         "service": "Financial Research Copilot",
-        "version": "4.0.0",
+        "version": __version__,
         "api": "ok",
         "runtime": "ok",
         "embedding_model": "loaded",

@@ -121,11 +121,38 @@ class TestIntentAnalyzerGlobal:
 
 
 @pytest.mark.unit
+class TestIntentAnalyzerDirectChat:
+    def test_hello_returns_direct_chat(self):
+        analyzer = IntentAnalyzer()
+        result = analyzer.analyze("Hello")
+        assert result["intent"] == "DIRECT_CHAT"
+        assert result["companies"] is None
+
+    def test_hi_returns_direct_chat(self):
+        analyzer = IntentAnalyzer()
+        result = analyzer.analyze("Hi")
+        assert result["intent"] == "DIRECT_CHAT"
+        assert result["companies"] is None
+
+    def test_what_is_ai_returns_direct_chat(self):
+        analyzer = IntentAnalyzer()
+        result = analyzer.analyze("What is AI?")
+        assert result["intent"] == "DIRECT_CHAT"
+        assert result["companies"] is None
+
+    def test_explain_python_returns_direct_chat(self):
+        analyzer = IntentAnalyzer()
+        result = analyzer.analyze("Explain Python")
+        assert result["intent"] == "DIRECT_CHAT"
+        assert result["companies"] is None
+
+
+@pytest.mark.unit
 class TestIntentAnalyzerEdgeCases:
-    def test_empty_query_returns_global(self):
+    def test_empty_query_returns_direct_chat(self):
         analyzer = IntentAnalyzer()
         result = analyzer.analyze("")
-        assert result["intent"] == "GLOBAL_RESEARCH"
+        assert result["intent"] == "DIRECT_CHAT"
 
     def test_document_ids_always_none(self):
         analyzer = IntentAnalyzer()
