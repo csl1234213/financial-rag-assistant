@@ -6,16 +6,15 @@
 # The LLM call itself is handled by the caller (core_engine).
 # ============================================================
 
-from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution.execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
+from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class DirectLLMHandler(BaseExecutionHandler):
-
     @property
     def strategy_type(self) -> ExecutionStrategyType:
         return ExecutionStrategyType.DIRECT_LLM

@@ -8,7 +8,7 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, List
 
 from .strategy_enums import ExecutionStrategyType
 

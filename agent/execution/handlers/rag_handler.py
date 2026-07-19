@@ -6,17 +6,16 @@
 # and builds context and citations from the retrieved evidence.
 # ============================================================
 
-from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution.execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
+from agent.execution.strategy_enums import ExecutionStrategyType
 from core.context_builder import build_context_from_evidence
 
 
 class RagHandler(BaseExecutionHandler):
-
     @property
     def strategy_type(self) -> ExecutionStrategyType:
         return ExecutionStrategyType.RAG
@@ -31,10 +30,7 @@ class RagHandler(BaseExecutionHandler):
 
         context, citations = build_context_from_evidence(evidences)
 
-        execution_results = [
-            step.result for step in ctx.plan.tasks
-            if step.result is not None
-        ]
+        execution_results = [step.result for step in ctx.plan.tasks if step.result is not None]
 
         return ExecutionOutput(
             context=context,

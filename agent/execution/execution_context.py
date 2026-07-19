@@ -11,9 +11,9 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from agent.planning import TaskResult, ComplexityResult
+from agent.planning import ComplexityResult, TaskResult
 from llm.router import RoutingContext
 
 if TYPE_CHECKING:

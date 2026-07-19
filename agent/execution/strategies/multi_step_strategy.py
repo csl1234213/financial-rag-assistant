@@ -5,15 +5,14 @@
 # analysis tasks that require multiple reasoning steps.
 # ============================================================
 
-from ..execution_strategy import BaseExecutionStrategy
+from ...planning import ComplexityLevel, TaskType
 from ..execution_context import ExecutionContext
 from ..execution_result import ExecutionResult
+from ..execution_strategy import BaseExecutionStrategy
 from ..strategy_enums import ExecutionStrategyType
-from ...planning import TaskType, ComplexityLevel
 
 
 class MultiStepStrategy(BaseExecutionStrategy):
-
     @property
     def strategy_name(self) -> str:
         return "multi_step"
@@ -26,7 +25,8 @@ class MultiStepStrategy(BaseExecutionStrategy):
         task_type = context.task.task.task_type
         complexity = context.complexity.complexity.level
         return (
-            task_type in (
+            task_type
+            in (
                 TaskType.COMPARISON,
                 TaskType.RESEARCH,
                 TaskType.FINANCIAL_ANALYSIS,

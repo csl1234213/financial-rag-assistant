@@ -8,19 +8,18 @@
 
 import logging
 
-from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution.execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
 from agent.execution.handlers.rag_handler import RagHandler
+from agent.execution.strategy_enums import ExecutionStrategyType
 
 logger = logging.getLogger(__name__)
 
 
 class ParallelHandler(BaseExecutionHandler):
-
     @property
     def strategy_type(self) -> ExecutionStrategyType:
         return ExecutionStrategyType.PARALLEL

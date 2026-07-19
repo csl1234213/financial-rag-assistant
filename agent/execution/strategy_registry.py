@@ -17,7 +17,6 @@ from .execution_strategy import BaseExecutionStrategy
 
 
 class StrategyRegistry:
-
     _registry: Dict[str, Type[BaseExecutionStrategy]] = {}
 
     @classmethod

@@ -15,11 +15,9 @@ from .execution_result import ExecutionResult
 
 
 class BaseExecutionStrategy(ABC):
-
     @property
     @abstractmethod
-    def strategy_name(self) -> str:
-        ...
+    def strategy_name(self) -> str: ...
 
     @property
     def priority(self) -> int:
@@ -29,12 +27,10 @@ class BaseExecutionStrategy(ABC):
     def supports(
         self,
         context: ExecutionContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def build(
         self,
         context: ExecutionContext,
-    ) -> ExecutionResult:
-        ...
+    ) -> ExecutionResult: ...

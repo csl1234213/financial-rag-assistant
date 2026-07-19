@@ -6,14 +6,14 @@
 # The Dispatcher uses the Registry to resolve handlers.
 # ============================================================
 
-from .rag_handler import RagHandler
-from .direct_llm_handler import DirectLLMHandler
-from .parallel_handler import ParallelHandler
-from .multi_step_handler import MultiStepHandler
-from .tool_calling_handler import ToolCallingHandler
-
-from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution.execution_handler_registry import ExecutionHandlerRegistry
+from agent.execution.strategy_enums import ExecutionStrategyType
+
+from .direct_llm_handler import DirectLLMHandler
+from .multi_step_handler import MultiStepHandler
+from .parallel_handler import ParallelHandler
+from .rag_handler import RagHandler
+from .tool_calling_handler import ToolCallingHandler
 
 # Auto-registration
 ExecutionHandlerRegistry.register(ExecutionStrategyType.RAG, RagHandler)

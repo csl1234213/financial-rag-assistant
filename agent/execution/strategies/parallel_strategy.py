@@ -5,15 +5,14 @@
 # benefit from parallel retrieval and processing.
 # ============================================================
 
-from ..execution_strategy import BaseExecutionStrategy
+from ...planning import ComplexityLevel, TaskType
 from ..execution_context import ExecutionContext
 from ..execution_result import ExecutionResult
+from ..execution_strategy import BaseExecutionStrategy
 from ..strategy_enums import ExecutionStrategyType
-from ...planning import TaskType, ComplexityLevel
 
 
 class ParallelStrategy(BaseExecutionStrategy):
-
     @property
     def strategy_name(self) -> str:
         return "parallel"

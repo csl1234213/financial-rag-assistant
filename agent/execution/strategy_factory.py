@@ -19,7 +19,6 @@ from .strategy_registry import StrategyRegistry
 
 
 class StrategyFactory:
-
     _default_strategy: Optional[str] = None
 
     # ============================================================
@@ -29,10 +28,7 @@ class StrategyFactory:
     @classmethod
     def create(cls, name: str) -> BaseExecutionStrategy:
         if not StrategyRegistry.has_strategy(name):
-            raise KeyError(
-                f"Strategy '{name}' not registered. "
-                f"Available: {StrategyRegistry.list_strategies()}"
-            )
+            raise KeyError(f"Strategy '{name}' not registered. Available: {StrategyRegistry.list_strategies()}")
         strategy_class = StrategyRegistry.get(name)
         return strategy_class()
 
@@ -43,9 +39,7 @@ class StrategyFactory:
     @classmethod
     def set_default(cls, name: str) -> None:
         if not StrategyRegistry.has_strategy(name):
-            raise KeyError(
-                f"Cannot set default. Strategy '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Strategy '{name}' not registered.")
         cls._default_strategy = name
 
     @classmethod
@@ -55,9 +49,7 @@ class StrategyFactory:
     @classmethod
     def create_default(cls) -> BaseExecutionStrategy:
         if cls._default_strategy is None:
-            raise KeyError(
-                "No default strategy set. Call StrategyFactory.set_default(name) first."
-            )
+            raise KeyError("No default strategy set. Call StrategyFactory.set_default(name) first.")
         return cls.create(cls._default_strategy)
 
     # ============================================================

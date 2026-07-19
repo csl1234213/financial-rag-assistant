@@ -17,11 +17,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from agent.execution_plan import ExecutionPlan
+from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution_engine import ExecutionEngine
+from agent.execution_plan import ExecutionPlan
 from agent.execution_result import ExecutionResult
 from agent.reasoning_models import Evidence
-from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 @dataclass
@@ -43,15 +43,12 @@ class ExecutionOutput:
 
 
 class BaseExecutionHandler(ABC):
-
     @property
     @abstractmethod
-    def strategy_type(self) -> ExecutionStrategyType:
-        ...
+    def strategy_type(self) -> ExecutionStrategyType: ...
 
     @abstractmethod
     def execute(
         self,
         ctx: ExecutionHandlerContext,
-    ) -> ExecutionOutput:
-        ...
+    ) -> ExecutionOutput: ...

@@ -6,13 +6,12 @@
 # and is automatically registered in StrategyRegistry.
 # ============================================================
 
-from .rag_strategy import RagStrategy
-from .direct_llm_strategy import DirectLLMStrategy
-from .parallel_strategy import ParallelStrategy
-from .multi_step_strategy import MultiStepStrategy
-from .tool_calling_strategy import ToolCallingStrategy
-
 from ..strategy_registry import StrategyRegistry
+from .direct_llm_strategy import DirectLLMStrategy
+from .multi_step_strategy import MultiStepStrategy
+from .parallel_strategy import ParallelStrategy
+from .rag_strategy import RagStrategy
+from .tool_calling_strategy import ToolCallingStrategy
 
 # Auto-registration
 StrategyRegistry.register("rag", RagStrategy)

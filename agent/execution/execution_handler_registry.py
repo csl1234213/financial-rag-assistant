@@ -15,11 +15,11 @@
 from typing import Dict, List, Type
 
 from agent.execution.strategy_enums import ExecutionStrategyType
+
 from .execution_handler import BaseExecutionHandler
 
 
 class ExecutionHandlerRegistry:
-
     _registry: Dict[ExecutionStrategyType, Type[BaseExecutionHandler]] = {}
 
     @classmethod

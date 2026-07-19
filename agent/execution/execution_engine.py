@@ -60,8 +60,7 @@ class ExecutionEngine:
     def set_fallback(self, strategy_name: str) -> None:
         if not StrategyRegistry.has_strategy(strategy_name):
             raise KeyError(
-                f"Fallback strategy '{strategy_name}' not registered. "
-                f"Available: {StrategyRegistry.list_strategies()}"
+                f"Fallback strategy '{strategy_name}' not registered. Available: {StrategyRegistry.list_strategies()}"
             )
         self._fallback_strategy_name = strategy_name
 
@@ -126,11 +125,7 @@ class ExecutionEngine:
 
             tool_context = ToolBridge.to_tool_context(
                 step,
-                runtime_state=(
-                    context.tool_context.runtime_state
-                    if context.tool_context is not None
-                    else None
-                ),
+                runtime_state=(context.tool_context.runtime_state if context.tool_context is not None else None),
                 workflow=workflow,
                 execution=result,
             )
@@ -178,6 +173,7 @@ class ExecutionEngine:
             return strategy.build(context)
 
         from .strategy_enums import ExecutionStrategyType
+
         return ExecutionResult(
             strategy=ExecutionStrategyType.DIRECT_LLM,
             reason="No strategy matched; using direct LLM fallback",

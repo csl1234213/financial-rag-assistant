@@ -19,6 +19,7 @@ import logging
 from typing import Optional
 
 from agent.execution.strategy_enums import ExecutionStrategyType
+
 from .execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
@@ -31,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 class ExecutionDispatcher:
-
     def __init__(self) -> None:
         self._fallback_strategy_type: Optional[ExecutionStrategyType] = None
 

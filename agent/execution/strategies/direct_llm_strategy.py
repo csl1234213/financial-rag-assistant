@@ -5,15 +5,14 @@
 # retrieval, multi-step reasoning, or tool use.
 # ============================================================
 
-from ..execution_strategy import BaseExecutionStrategy
+from ...planning import ComplexityLevel, TaskType
 from ..execution_context import ExecutionContext
 from ..execution_result import ExecutionResult
+from ..execution_strategy import BaseExecutionStrategy
 from ..strategy_enums import ExecutionStrategyType
-from ...planning import TaskType, ComplexityLevel
 
 
 class DirectLLMStrategy(BaseExecutionStrategy):
-
     @property
     def strategy_name(self) -> str:
         return "direct_llm"
@@ -25,9 +24,9 @@ class DirectLLMStrategy(BaseExecutionStrategy):
     def supports(self, context: ExecutionContext) -> bool:
         task_type = context.task.task.task_type
         complexity = context.complexity.complexity.level
-        return (
-            task_type in (TaskType.CHAT, TaskType.SUMMARIZATION)
-            and complexity in (ComplexityLevel.LOW, ComplexityLevel.MEDIUM)
+        return task_type in (TaskType.CHAT, TaskType.SUMMARIZATION) and complexity in (
+            ComplexityLevel.LOW,
+            ComplexityLevel.MEDIUM,
         )
 
     def build(self, context: ExecutionContext) -> ExecutionResult:

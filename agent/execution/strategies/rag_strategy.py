@@ -5,15 +5,14 @@
 # tasks that require retrieval from a knowledge base.
 # ============================================================
 
-from ..execution_strategy import BaseExecutionStrategy
+from ...planning import ComplexityLevel, TaskType
 from ..execution_context import ExecutionContext
 from ..execution_result import ExecutionResult
+from ..execution_strategy import BaseExecutionStrategy
 from ..strategy_enums import ExecutionStrategyType
-from ...planning import TaskType, ComplexityLevel
 
 
 class RagStrategy(BaseExecutionStrategy):
-
     @property
     def strategy_name(self) -> str:
         return "rag"
@@ -25,14 +24,11 @@ class RagStrategy(BaseExecutionStrategy):
     def supports(self, context: ExecutionContext) -> bool:
         task_type = context.task.task.task_type
         complexity = context.complexity.complexity.level
-        return (
-            task_type in (
-                TaskType.DOCUMENT_QA,
-                TaskType.RESEARCH,
-                TaskType.FINANCIAL_ANALYSIS,
-            )
-            and complexity in (ComplexityLevel.LOW, ComplexityLevel.MEDIUM)
-        )
+        return task_type in (
+            TaskType.DOCUMENT_QA,
+            TaskType.RESEARCH,
+            TaskType.FINANCIAL_ANALYSIS,
+        ) and complexity in (ComplexityLevel.LOW, ComplexityLevel.MEDIUM)
 
     def build(self, context: ExecutionContext) -> ExecutionResult:
         task_type = context.task.task.task_type.value
