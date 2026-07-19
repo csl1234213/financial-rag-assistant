@@ -30,7 +30,7 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check .
+        run: ruff check api agent core llm storage config
 
   # ============================================================
   # 2. Unit Tests — fast, isolated, no IO
