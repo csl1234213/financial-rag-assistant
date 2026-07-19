@@ -1,4 +1,4 @@
-# Financial Agent Runtime Assistant V7.3.1
+# Financial Agent Runtime Assistant V7.3.3
 
 [![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
@@ -260,6 +260,8 @@ V2.2  → Stable Architecture
 V3.0  → Agent Runtime Edition
 V4.0  → Production Architecture
 V7.3.1 → Agent Runtime Framework
+V7.3.2 → Docker Production Packaging
+V7.3.3 → Demo Knowledge Bootstrap
 ```
 
 ---
@@ -298,6 +300,40 @@ Every answer must be traceable to source documents. The system provides:
 
 ## Demo Showcase
 
+### Docker Quick Demo
+
+```bash
+$ docker compose up
+```
+
+```
+=== Financial Agent Runtime Assistant v7.3.3 ===
+[Entrypoint] Running knowledge bootstrap...
+[Bootstrap] Knowledge base empty — initializing demo data...
+Loaded Documents: 5 (Tesla, NVIDIA, Apple)
+Total Chunks: 257
+[Bootstrap] Done — 257 chunks indexed.
+[Entrypoint] Starting API server...
+```
+
+**Health Check:**
+```json
+{
+  "status": "ok",
+  "service": "Financial Research Copilot",
+  "version": "7.3.3",
+  "api": "ok",
+  "runtime": "ok",
+  "embedding_model": "loaded",
+  "documents": 5
+}
+```
+
+> First run auto-bootstraps demo knowledge base with Tesla, NVIDIA, Apple financial PDFs.  
+> Subsequent runs skip init (idempotent). `docker compose down` persists data in named volumes.
+
+---
+
 ### Direct Chat
 
 ```
@@ -309,13 +345,14 @@ Response:
 ```json
 {
   "workflow": {"type": "direct_chat"},
-  "execution": {"use_retrieval": false},
+  "reasoning": {"intent": "DIRECT_CHAT", "companies": null, "evidence_count": 0},
+  "execution": {"strategy": "direct_llm", "use_retrieval": false},
   "routing": {"provider": "deepseek", "model": "deepseek-chat"},
   "report": "Artificial Intelligence (AI) is..."
 }
 ```
 
-> No retrieval, no citations — direct LLM conversation.
+> No retrieval, no citations — direct LLM conversation. Intent Router classifies as `DIRECT_CHAT`.
 
 ---
 
@@ -330,16 +367,20 @@ Response:
 ```json
 {
   "workflow": {"type": "rag"},
-  "execution": {"use_retrieval": true},
+  "reasoning": {"intent": "SINGLE_COMPANY", "companies": ["Tesla"], "evidence_count": 4},
+  "execution": {"strategy": "rag", "use_retrieval": true},
   "citations": [
-    {"document": "tesla_2024_annual.pdf", "chunk": "Revenue increased 19%..."},
-    {"document": "tesla_2024_annual.pdf", "chunk": "Automotive revenue..."}
+    {"source": "Tesla_Q2_2025.pdf", "similarity": 0.97, "preview": "Total revenues 94,827 -3%..."},
+    {"source": "Tesla_Q2_2025.pdf", "similarity": 0.92, "preview": "Automotive revenues 69,526 -10%..."},
+    {"source": "Tesla_Q2_2025.pdf", "similarity": 0.90, "preview": "Energy generation and storage revenue..."},
+    {"source": "Tesla_Q2_2025.pdf", "similarity": 0.86, "preview": "results of operations..."}
   ],
   "report": "# Research Report\n\n## Summary\n..."
 }
 ```
 
-> Evidence-backed research with citations and source documents.
+> Evidence-backed research with 4 citations from `Tesla_Q2_2025.pdf`.  
+> Intent Router classifies as `SINGLE_COMPANY`, Strategy Engine selects `rag`.
 
 ---
 
@@ -352,9 +393,20 @@ FastAPI auto-generated API documentation at `/docs`:
 | `/api/v1/chat` | POST | Financial research chat |
 | `/api/v1/knowledge` | GET | Knowledge base overview |
 | `/api/v1/upload` | POST | Upload PDF documents |
-| `/api/v1/health` | GET | System health check (`APP_VERSION: "7.3.1"`) |
+| `/api/v1/health` | GET | System health check (`APP_VERSION: "7.3.3"`) |
 
-> Full demo script: [docs/demo/demo.md](docs/demo/demo.md)
+> Full demo script: [docs/demo/demo-script.md](docs/demo/demo-script.md)
+
+---
+
+## Screenshots
+
+| Screenshot | Description |
+|---|---|
+| ![Docker Startup](docs/demo/screenshots/docker-startup.png) | `docker compose up` — Bootstrap 5 PDFs, 257 chunks indexed, both services healthy |
+| ![Health API](docs/demo/screenshots/health-api.png) | `GET /api/v1/health` — All systems operational, embedding model loaded |
+| ![Swagger RAG](docs/demo/screenshots/swagger-rag.png) | `POST /api/v1/chat` — Tesla RAG research with 4 citations from `Tesla_Q2_2025.pdf` |
+| ![Streamlit RAG](docs/demo/screenshots/streamlit-rag.png) | Streamlit UI — NVIDIA RAG research multi-source (3 PDFs) with evidence |
 
 ---
 

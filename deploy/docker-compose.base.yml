@@ -2,6 +2,7 @@
 # Base Compose — shared services, volumes, networks
 # ============================================================
 # Usage:
+#   Root: docker compose up
 #   Dev:  docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.dev.yml up
 #   Prod: docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.prod.yml up
 # ============================================================
@@ -10,7 +11,7 @@ services:
   # ---------- FastAPI Backend ----------
   financial-api:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.api
     container_name: financial-api
     ports:
@@ -21,7 +22,7 @@ services:
       - financial_logs:/app/logs
       - ${USERPROFILE}/.cache/huggingface:/home/appuser/.cache/huggingface
     env_file:
-      - ../.env
+      - .env
     environment:
       - HF_ENDPOINT=https://hf-mirror.com
     networks:
@@ -30,7 +31,7 @@ services:
   # ---------- Streamlit Frontend ----------
   financial-ui:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.ui
     container_name: financial-ui
     ports:

@@ -29,6 +29,12 @@ htmlcov/
 coverage.xml
 chroma_db_test*/
 
+# Runtime data
+chroma_db/
+regression_*.txt
+test_*.txt
+*.log
+
 # Documentation
 docs/
 *.md
