@@ -11,7 +11,7 @@ from api.routers.upload import router as upload_router
 app = FastAPI(
     title="Financial Research Copilot API",
     description="Production API for Financial Research Copilot",
-    version=__version__
+    version=__version__,
 )
 
 app.add_middleware(
@@ -30,7 +30,4 @@ app.include_router(refresh_router, prefix="/api/v1")
 
 @app.get("/")
 def root():
-    return {
-        "service": "Financial Research Copilot",
-        "version": __version__
-    }
+    return {"service": "Financial Research Copilot", "version": __version__}

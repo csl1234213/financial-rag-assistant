@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 class CircuitBreakerReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._state: CircuitState = CircuitState.CLOSED
         self._failure_count: int = 0

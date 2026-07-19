@@ -27,7 +27,6 @@ from .memory_context import MemoryContext
 
 
 class MemoryBridge:
-
     @staticmethod
     def to_memory_context(
         task_result: Optional[TaskResult] = None,

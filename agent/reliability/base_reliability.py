@@ -26,32 +26,26 @@ from .reliability_result import ReliabilityResult
 
 
 class BaseReliability(ABC):
+    @property
+    @abstractmethod
+    def mechanism_name(self) -> str: ...
 
     @property
     @abstractmethod
-    def mechanism_name(self) -> str:
-        ...
-
-    @property
-    @abstractmethod
-    def mechanism_type(self) -> ReliabilityType:
-        ...
+    def mechanism_type(self) -> ReliabilityType: ...
 
     @abstractmethod
     def supports(
         self,
         context: ReliabilityContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def apply(
         self,
         context: ReliabilityContext,
         policy: ReliabilityPolicy,
-    ) -> ReliabilityResult:
-        ...
+    ) -> ReliabilityResult: ...
 
     @abstractmethod
-    def reset(self) -> None:
-        ...
+    def reset(self) -> None: ...

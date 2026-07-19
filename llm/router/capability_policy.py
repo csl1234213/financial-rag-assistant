@@ -7,19 +7,18 @@
 # ============================================================
 
 from config.llm import (
-    LLM_PROVIDER,
-    LLM_MODEL,
     DEEPSEEK_MODEL,
     GEMINI_MODEL,
+    LLM_MODEL,
+    LLM_PROVIDER,
 )
-from ..providers.provider_registry import ProviderRegistry
-from ..providers.provider_config import ProviderConfig
 
+from ..providers.provider_config import ProviderConfig
+from ..providers.provider_registry import ProviderRegistry
 from .base_policy import BaseRoutingPolicy
 from .routing_context import RoutingContext
-from .routing_result import RoutingResult
 from .routing_enums import TaskType
-
+from .routing_result import RoutingResult
 
 _DEFAULT_MODELS = {
     "deepseek": DEEPSEEK_MODEL,
@@ -28,7 +27,6 @@ _DEFAULT_MODELS = {
 
 
 class CapabilityRoutingPolicy(BaseRoutingPolicy):
-
     def __init__(
         self,
         default_provider: str | None = None,
@@ -112,20 +110,13 @@ class CapabilityRoutingPolicy(BaseRoutingPolicy):
         reasons = []
 
         checks = [
-            (context.requires_image, capability.supports_image,
-             "image"),
-            (context.requires_audio, capability.supports_audio,
-             "audio"),
-            (context.requires_video, capability.supports_video,
-             "video"),
-            (context.requires_reasoning, capability.supports_reasoning_effort,
-             "reasoning"),
-            (context.requires_tools, capability.supports_tools,
-             "tools"),
-            (context.requires_stream, capability.supports_stream,
-             "stream"),
-            (context.requires_json, capability.supports_json_mode,
-             "json"),
+            (context.requires_image, capability.supports_image, "image"),
+            (context.requires_audio, capability.supports_audio, "audio"),
+            (context.requires_video, capability.supports_video, "video"),
+            (context.requires_reasoning, capability.supports_reasoning_effort, "reasoning"),
+            (context.requires_tools, capability.supports_tools, "tools"),
+            (context.requires_stream, capability.supports_stream, "stream"),
+            (context.requires_json, capability.supports_json_mode, "json"),
         ]
 
         for required_flag, supports_flag, label in checks:
@@ -171,11 +162,7 @@ class CapabilityRoutingPolicy(BaseRoutingPolicy):
             provider_name,
             self._default_model,
         )
-        fallback = (
-            self._default_provider
-            if provider_name != self._default_provider
-            else None
-        )
+        fallback = self._default_provider if provider_name != self._default_provider else None
         return RoutingResult(
             provider=provider_name,
             model=model,

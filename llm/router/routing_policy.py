@@ -12,7 +12,6 @@ from .routing_result import RoutingResult
 
 
 class RoutingPolicy:
-
     def __init__(
         self,
         policy: BaseRoutingPolicy,

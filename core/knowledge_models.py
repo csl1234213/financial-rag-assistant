@@ -46,7 +46,6 @@ class KnowledgeSource:
 
 @dataclass
 class KnowledgeStatistics:
-
     companies: int
 
     reports: int

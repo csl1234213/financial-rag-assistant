@@ -22,7 +22,6 @@ from .reliability_models import ReliabilityPolicy
 
 
 class ReliabilityRegistry:
-
     _registry: Dict[str, Type[BaseReliability]] = {}
     _policies: Dict[str, ReliabilityPolicy] = {}
 
@@ -38,13 +37,9 @@ class ReliabilityRegistry:
         default_policy: Optional[ReliabilityPolicy] = None,
     ) -> None:
         if not issubclass(mechanism_cls, BaseReliability):
-            raise ReliabilityRegistrationError(
-                f"'{mechanism_cls.__name__}' must be a subclass of BaseReliability"
-            )
+            raise ReliabilityRegistrationError(f"'{mechanism_cls.__name__}' must be a subclass of BaseReliability")
         if name in cls._registry:
-            raise ReliabilityRegistrationError(
-                f"Reliability mechanism '{name}' is already registered"
-            )
+            raise ReliabilityRegistrationError(f"Reliability mechanism '{name}' is already registered")
         cls._registry[name] = mechanism_cls
         if default_policy is not None:
             cls._policies[name] = default_policy
@@ -57,8 +52,7 @@ class ReliabilityRegistry:
     def get(cls, name: str) -> Type[BaseReliability]:
         if not cls.has_mechanism(name):
             raise ReliabilityNotFound(
-                f"Reliability mechanism '{name}' not registered. "
-                f"Available: {cls.list_mechanisms()}"
+                f"Reliability mechanism '{name}' not registered. Available: {cls.list_mechanisms()}"
             )
         return cls._registry[name]
 
@@ -66,8 +60,7 @@ class ReliabilityRegistry:
     def get_default_policy(cls, name: str) -> ReliabilityPolicy:
         if name not in cls._policies:
             raise ReliabilityNotFound(
-                f"Default policy for mechanism '{name}' not found. "
-                f"Available policies: {list(cls._policies.keys())}"
+                f"Default policy for mechanism '{name}' not found. Available policies: {list(cls._policies.keys())}"
             )
         return cls._policies[name]
 

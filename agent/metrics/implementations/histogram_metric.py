@@ -18,7 +18,6 @@ from agent.metrics.metric_result import MetricResult
 
 
 class HistogramMetric(BaseMetric):
-
     def __init__(self) -> None:
         self._records: list[MetricRecord] = []
 

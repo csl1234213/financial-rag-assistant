@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimiterReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._timestamps: list = []
         self._total_requests: int = 0

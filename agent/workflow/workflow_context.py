@@ -10,8 +10,8 @@
 
 from dataclasses import dataclass
 
-from agent.planning import TaskResult, ComplexityResult
 from agent.execution import ExecutionResult
+from agent.planning import ComplexityResult, TaskResult
 from llm.router import RoutingContext
 
 

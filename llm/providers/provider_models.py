@@ -19,6 +19,7 @@ class ProviderCapability:
     Each provider declares its own capabilities truthfully.
     Planner / Agent uses these fields to auto-select the best provider.
     """
+
     supports_stream: bool = False
     supports_function_call: bool = False
     supports_image: bool = False

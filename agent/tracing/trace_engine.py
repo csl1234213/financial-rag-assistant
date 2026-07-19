@@ -34,16 +34,15 @@ from typing import Callable, List, Optional, Union
 from .base_tracer import BaseTracer
 from .trace_context import TraceContext
 from .trace_enums import TraceLevel, TraceStatus, TraceType
+from .trace_factory import TraceFactory
 from .trace_models import TraceEvent, TraceSpan
 from .trace_result import TraceResult
 from .tracer_enums import TracerType
-from .trace_factory import TraceFactory
 
 logger = logging.getLogger(__name__)
 
 
 class TraceEngine:
-
     def __init__(self) -> None:
         self._default_tracer_type: Union[str, TracerType] = TracerType.CONSOLE
         self._tracer: Optional[BaseTracer] = None
@@ -143,9 +142,7 @@ class TraceEngine:
         metadata: Optional[dict] = None,
     ) -> TraceSpan:
         if self._tracer is None or self._context is None:
-            raise RuntimeError(
-                "TraceEngine not started. Call start_trace() first."
-            )
+            raise RuntimeError("TraceEngine not started. Call start_trace() first.")
 
         parent_id = self._span_stack[-1].id if self._span_stack else None
 

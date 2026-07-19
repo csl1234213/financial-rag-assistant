@@ -7,22 +7,23 @@
 # Output: TaskResult (task, reason, entities, estimated_tokens)
 # ============================================================
 
+from .entity_extractor import (
+    extract_companies as extract_companies_from_question,
+)
+from .entity_extractor import (
+    extract_years as extract_years_from_question,
+)
+from .keyword_rules import classify_by_keyword
+from .planning_context import PlanningContext
 from .task_enums import (
-    TaskType,
     ComplexityLevel,
+    TaskType,
 )
 from .task_models import TaskModel
 from .task_result import TaskResult
-from .planning_context import PlanningContext
-from .keyword_rules import classify_by_keyword
-from .entity_extractor import (
-    extract_companies as extract_companies_from_question,
-    extract_years as extract_years_from_question,
-)
 
 
 class TaskAnalyzer:
-
     def analyze(
         self,
         context: PlanningContext,

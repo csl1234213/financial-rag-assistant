@@ -8,7 +8,6 @@
 
 import re
 
-
 _COMPANY_MAP = {
     "apple": "Apple",
     "苹果": "Apple",

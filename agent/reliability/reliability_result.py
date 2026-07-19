@@ -20,7 +20,6 @@ from .reliability_enums import ReliabilityType
 
 @dataclass
 class PipelineResult:
-
     success: bool = True
 
     results: Dict[str, "ReliabilityResult"] = field(default_factory=dict)
@@ -34,7 +33,6 @@ class PipelineResult:
 
 @dataclass
 class ReliabilityResult:
-
     success: bool = True
 
     policy: Optional[ReliabilityType] = None

@@ -8,13 +8,11 @@
 
 from agent.memory.base_memory import BaseMemory
 from agent.memory.memory_context import MemoryContext
-from agent.memory.memory_enums import MemoryImportance, MemoryType
-from agent.memory.memory_models import MemoryRecord
+from agent.memory.memory_enums import MemoryType
 from agent.memory.memory_result import MemoryResult
 
 
 class LongTermMemory(BaseMemory):
-
     @property
     def memory_name(self) -> str:
         return MemoryType.LONG_TERM.value

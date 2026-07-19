@@ -8,6 +8,7 @@ from agent.planning import ComplexityLevel, TaskType
 # Step Types
 # =========================
 
+
 class StepType(str, Enum):
     RETRIEVE = "retrieve"
     COMPARE = "compare"
@@ -20,6 +21,7 @@ class StepType(str, Enum):
 # Step Status
 # =========================
 
+
 class StepStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -31,6 +33,7 @@ class StepStatus(str, Enum):
 # =========================
 # Plan Step
 # =========================
+
 
 @dataclass
 class PlanStep:
@@ -64,6 +67,7 @@ class PlanStep:
 # =========================
 # Execution Plan
 # =========================
+
 
 @dataclass
 class ExecutionPlan:

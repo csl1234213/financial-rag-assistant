@@ -9,11 +9,11 @@
 # ============================================================
 
 from typing import Dict, Type
+
 from .base_provider import BaseProvider
 
 
 class ProviderRegistry:
-
     _registry: Dict[str, Type[BaseProvider]] = {}
 
     @classmethod

@@ -3,12 +3,13 @@ Unified config — backward compatible with old config.py imports.
 All existing imports like `from config import DEBUG_MODE` still work.
 """
 
+import os
+from importlib import import_module
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
-
-import os
-from pathlib import Path
 
 # =========================
 # Legacy (from config.py)
@@ -18,16 +19,33 @@ PDFS_DIR = "pdfs"
 DEBUG_MODE = False
 DOCUMENT_HINTS = {
     "Tesla": [
-        "tesla", "robotaxi", "cybercab", "optimus", "fsd",
-        "supercharger", "megapack",
+        "tesla",
+        "robotaxi",
+        "cybercab",
+        "optimus",
+        "fsd",
+        "supercharger",
+        "megapack",
     ],
     "NVIDIA": [
-        "nvidia", "blackwell", "cuda", "dgx", "nvlink",
-        "ai factory", "grace", "hopper",
+        "nvidia",
+        "blackwell",
+        "cuda",
+        "dgx",
+        "nvlink",
+        "ai factory",
+        "grace",
+        "hopper",
     ],
     "Apple": [
-        "apple", "apple intelligence", "vision pro", "iphone",
-        "ipad", "mac", "services", "app store",
+        "apple",
+        "apple intelligence",
+        "vision pro",
+        "iphone",
+        "ipad",
+        "mac",
+        "services",
+        "app store",
     ],
 }
 
@@ -37,8 +55,6 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 CACHE_VERSION = "1.8"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-LLM_TEMPERATURE = 0.2
-LLM_MAX_TOKENS = 1000
 
 # =========================
 # New (V7.3 — env-driven)
@@ -67,36 +83,65 @@ REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 # UI (V7.3 Phase 2.2)
 # =========================
 
-from .ui import *  # noqa: E402, F403
+
 # =========================
 # LLM (V5 Phase 1 — Provider abstraction)
 # =========================
+_llm_config = import_module(".llm", __package__)
+LLM_PROVIDER = _llm_config.LLM_PROVIDER
+LLM_MODEL = _llm_config.LLM_MODEL
+LLM_API_KEY = _llm_config.LLM_API_KEY
+LLM_BASE_URL = _llm_config.LLM_BASE_URL
+LLM_TEMPERATURE = _llm_config.LLM_TEMPERATURE
+LLM_MAX_TOKENS = _llm_config.LLM_MAX_TOKENS
+LLM_TIMEOUT = _llm_config.LLM_TIMEOUT
+LLM_STREAM = _llm_config.LLM_STREAM
+DEEPSEEK_MODEL = _llm_config.DEEPSEEK_MODEL
+DEEPSEEK_BASE_URL = _llm_config.DEEPSEEK_BASE_URL
+GEMINI_API_KEY = _llm_config.GEMINI_API_KEY
+GEMINI_MODEL = _llm_config.GEMINI_MODEL
 
-from .llm import (
-    LLM_PROVIDER,
-    LLM_MODEL,
-    LLM_API_KEY,
-    LLM_BASE_URL,
-    LLM_TEMPERATURE,
-    LLM_MAX_TOKENS,
-    LLM_TIMEOUT,
-    LLM_STREAM,
-    DEEPSEEK_API_KEY as _DEEPSEEK_API_KEY,
-    DEEPSEEK_MODEL,
-    DEEPSEEK_BASE_URL,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
+_ui_config = import_module(".ui", __package__)
+_ui_exports = getattr(
+    _ui_config,
+    "__all__",
+    (name for name in vars(_ui_config) if not name.startswith("_")),
 )
+for _name in _ui_exports:
+    globals()[_name] = getattr(_ui_config, _name)
 
 __all__ = [
-    "PDFS_DIR", "DEBUG_MODE", "DOCUMENT_HINTS", "CACHE_DIR", "TOP_K",
-    "EMBEDDING_MODEL", "CACHE_VERSION", "CHUNK_SIZE", "CHUNK_OVERLAP",
-    "LLM_TEMPERATURE", "LLM_MAX_TOKENS",
-    "APP_ENV", "APP_VERSION", "LOG_LEVEL", "ROOT_DIR",
-    "CHROMA_PATH", "UPLOAD_DIR", "PDF_DIR", "DEEPSEEK_API_KEY",
-    "REDIS_HOST", "REDIS_PORT",
-    "LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "LLM_BASE_URL",
-    "LLM_TEMPERATURE", "LLM_MAX_TOKENS", "LLM_TIMEOUT", "LLM_STREAM",
-    "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL",
-    "GEMINI_API_KEY", "GEMINI_MODEL",
+    "PDFS_DIR",
+    "DEBUG_MODE",
+    "DOCUMENT_HINTS",
+    "CACHE_DIR",
+    "TOP_K",
+    "EMBEDDING_MODEL",
+    "CACHE_VERSION",
+    "CHUNK_SIZE",
+    "CHUNK_OVERLAP",
+    "LLM_TEMPERATURE",
+    "LLM_MAX_TOKENS",
+    "APP_ENV",
+    "APP_VERSION",
+    "LOG_LEVEL",
+    "ROOT_DIR",
+    "CHROMA_PATH",
+    "UPLOAD_DIR",
+    "PDF_DIR",
+    "DEEPSEEK_API_KEY",
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "LLM_PROVIDER",
+    "LLM_MODEL",
+    "LLM_API_KEY",
+    "LLM_BASE_URL",
+    "LLM_TEMPERATURE",
+    "LLM_MAX_TOKENS",
+    "LLM_TIMEOUT",
+    "LLM_STREAM",
+    "DEEPSEEK_MODEL",
+    "DEEPSEEK_BASE_URL",
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
 ]

@@ -18,12 +18,11 @@
 from typing import Optional, Union
 
 from .base_tracer import BaseTracer
-from .tracer_enums import TracerType
 from .trace_registry import TraceRegistry
+from .tracer_enums import TracerType
 
 
 class TraceFactory:
-
     _default_tracer: Optional[str] = None
 
     # ============================================================
@@ -46,9 +45,7 @@ class TraceFactory:
         if isinstance(name, TracerType):
             name = name.value
         if not TraceRegistry.has_tracer(name):
-            raise KeyError(
-                f"Cannot set default. Tracer '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Tracer '{name}' not registered.")
         cls._default_tracer = name
 
     @classmethod
@@ -58,8 +55,5 @@ class TraceFactory:
     @classmethod
     def create_default(cls) -> BaseTracer:
         if cls._default_tracer is None:
-            raise RuntimeError(
-                "No default tracer set. "
-                "Call TraceFactory.set_default(...) first."
-            )
+            raise RuntimeError("No default tracer set. Call TraceFactory.set_default(...) first.")
         return cls.create(cls._default_tracer)

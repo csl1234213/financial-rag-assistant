@@ -20,11 +20,7 @@ class ReasoningEngine:
     Later versions can introduce LLM reasoning.
     """
 
-    def analyze(
-        self,
-        results: List[ExecutionResult]
-    ) -> ReasoningResult:
-
+    def analyze(self, results: List[ExecutionResult]) -> ReasoningResult:
         evidences = self._collect_evidence(results)
 
         facts = self._extract_facts(evidences)
@@ -33,32 +29,18 @@ class ReasoningEngine:
 
         opportunities = self._extract_opportunities(evidences)
 
-        conclusion = self._build_conclusion(
-            facts,
-            risks,
-            opportunities
-        )
+        conclusion = self._build_conclusion(facts, risks, opportunities)
 
-        return ReasoningResult(
-            facts=facts,
-            risks=risks,
-            opportunities=opportunities,
-            conclusion=conclusion
-        )
+        return ReasoningResult(facts=facts, risks=risks, opportunities=opportunities, conclusion=conclusion)
 
     # =====================================================
     # Step 1
     # =====================================================
 
-    def _collect_evidence(
-        self,
-        results: List[ExecutionResult]
-    ) -> List[Evidence]:
-
+    def _collect_evidence(self, results: List[ExecutionResult]) -> List[Evidence]:
         evidences = []
 
         for result in results:
-
             if not result.success:
                 continue
 
@@ -68,9 +50,7 @@ class ReasoningEngine:
                 continue
 
             if isinstance(output, list):
-
                 for item in output:
-
                     if isinstance(item, Evidence):
                         evidences.append(item)
 
@@ -83,15 +63,10 @@ class ReasoningEngine:
     # Step 2
     # =====================================================
 
-    def _extract_facts(
-        self,
-        evidences: List[Evidence]
-    ) -> List[str]:
-
+    def _extract_facts(self, evidences: List[Evidence]) -> List[str]:
         facts = []
 
         for e in evidences:
-
             if "revenue" in e.content.lower():
                 facts.append(e.content)
 
@@ -107,24 +82,12 @@ class ReasoningEngine:
     # Step 3
     # =====================================================
 
-    def _extract_risks(
-        self,
-        evidences: List[Evidence]
-    ) -> List[str]:
-
+    def _extract_risks(self, evidences: List[Evidence]) -> List[str]:
         risks = []
 
-        keywords = [
-            "risk",
-            "uncertain",
-            "decline",
-            "decrease",
-            "weak",
-            "challenge"
-        ]
+        keywords = ["risk", "uncertain", "decline", "decrease", "weak", "challenge"]
 
         for e in evidences:
-
             text = e.content.lower()
 
             if any(k in text for k in keywords):
@@ -136,23 +99,12 @@ class ReasoningEngine:
     # Step 4
     # =====================================================
 
-    def _extract_opportunities(
-        self,
-        evidences: List[Evidence]
-    ) -> List[str]:
-
+    def _extract_opportunities(self, evidences: List[Evidence]) -> List[str]:
         opportunities = []
 
-        keywords = [
-            "growth",
-            "increase",
-            "expand",
-            "strong",
-            "guidance"
-        ]
+        keywords = ["growth", "increase", "expand", "strong", "guidance"]
 
         for e in evidences:
-
             text = e.content.lower()
 
             if any(k in text for k in keywords):
@@ -164,13 +116,7 @@ class ReasoningEngine:
     # Step 5
     # =====================================================
 
-    def _build_conclusion(
-        self,
-        facts: List[str],
-        risks: List[str],
-        opportunities: List[str]
-    ) -> str:
-
+    def _build_conclusion(self, facts: List[str], risks: List[str], opportunities: List[str]) -> str:
         return (
             f"Collected {len(facts)} financial facts, "
             f"{len(risks)} risk signals, "
@@ -181,11 +127,7 @@ class ReasoningEngine:
     # Future Extension
     # =====================================================
 
-    def group_by_company(
-        self,
-        evidences: List[Evidence]
-    ) -> Dict[str, List[Evidence]]:
-
+    def group_by_company(self, evidences: List[Evidence]) -> Dict[str, List[Evidence]]:
         grouped = defaultdict(list)
 
         for evidence in evidences:

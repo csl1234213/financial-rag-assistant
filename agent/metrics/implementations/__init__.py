@@ -6,13 +6,13 @@
 # through MetricFactory without any code changes.
 # ============================================================
 
-from agent.metrics.metric_models import MetricDefinition
 from agent.metrics.metric_enums import MetricType
+from agent.metrics.metric_models import MetricDefinition
 from agent.metrics.metric_registry import MetricRegistry
 
 from .counter_metric import CounterMetric
-from .timer_metric import TimerMetric
 from .histogram_metric import HistogramMetric
+from .timer_metric import TimerMetric
 
 MetricRegistry.register(
     "counter",

@@ -23,7 +23,6 @@ from .tool_models import ToolMetadata
 
 
 class ToolRegistry:
-
     _registry: Dict[str, Type[BaseTool]] = {}
     _metadata: Dict[str, ToolMetadata] = {}
 
@@ -39,9 +38,7 @@ class ToolRegistry:
         metadata: Optional[ToolMetadata] = None,
     ) -> None:
         if not issubclass(tool_cls, BaseTool):
-            raise ToolRegistrationError(
-                f"'{tool_cls.__name__}' must be a subclass of BaseTool"
-            )
+            raise ToolRegistrationError(f"'{tool_cls.__name__}' must be a subclass of BaseTool")
         cls._registry[name] = tool_cls
         if metadata is not None:
             cls._metadata[name] = metadata
@@ -53,18 +50,14 @@ class ToolRegistry:
     @classmethod
     def get(cls, name: str) -> Type[BaseTool]:
         if not cls.has_tool(name):
-            raise ToolNotFound(
-                f"Tool '{name}' not registered. "
-                f"Available: {cls.list_tools()}"
-            )
+            raise ToolNotFound(f"Tool '{name}' not registered. Available: {cls.list_tools()}")
         return cls._registry[name]
 
     @classmethod
     def get_metadata(cls, name: str) -> ToolMetadata:
         if name not in cls._metadata:
             raise ToolNotFound(
-                f"Metadata for tool '{name}' not found. "
-                f"Available metadata: {list(cls._metadata.keys())}"
+                f"Metadata for tool '{name}' not found. Available metadata: {list(cls._metadata.keys())}"
             )
         return cls._metadata[name]
 

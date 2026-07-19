@@ -19,7 +19,6 @@ from .metric_models import MetricRecord
 
 @dataclass
 class MetricResult:
-
     records: List[MetricRecord] = field(default_factory=list)
 
     count: int = 0

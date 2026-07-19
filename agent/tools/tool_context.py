@@ -12,13 +12,13 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
-    from agent.memory.memory_result import MemoryResult
     from agent.execution.execution_result import ExecutionResult as StrategyResult
-    from agent.workflow.workflow_result import WorkflowResult
+    from agent.memory.memory_result import MemoryResult
     from agent.runtime_state import RuntimeState
+    from agent.workflow.workflow_result import WorkflowResult
 
 
 @dataclass(slots=True)

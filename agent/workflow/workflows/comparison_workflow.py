@@ -5,16 +5,15 @@
 # 前两步可并行，最后两步串行。
 # ============================================================
 
+from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.workflow.base_workflow import BaseWorkflow
 from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
-from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class ComparisonWorkflow(BaseWorkflow):
-
     @property
     def workflow_name(self) -> str:
         return "parallel"

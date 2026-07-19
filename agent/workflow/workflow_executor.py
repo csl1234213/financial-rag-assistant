@@ -20,32 +20,30 @@
 # 具体的 ExecutionEngine 实现，只依赖 execute(context) 能力。
 # ============================================================
 
-from typing import List, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from agent.execution.execution_context import ExecutionContext
 from agent.execution.execution_result import ExecutionResult
 
 from .workflow_enums import WorkflowStatus
-from .workflow_models import WorkflowStep
 from .workflow_result import WorkflowResult
-
 
 # ============================================================
 # ExecutionRunner Protocol
 # ============================================================
 
+
 @runtime_checkable
 class ExecutionRunner(Protocol):
-    def execute(self, context: ExecutionContext) -> ExecutionResult:
-        ...
+    def execute(self, context: ExecutionContext) -> ExecutionResult: ...
 
 
 # ============================================================
 # WorkflowExecutor
 # ============================================================
 
-class WorkflowExecutor:
 
+class WorkflowExecutor:
     def execute(
         self,
         workflow: WorkflowResult,

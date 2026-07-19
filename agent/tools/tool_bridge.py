@@ -33,7 +33,6 @@ from agent.workflow.workflow_models import WorkflowStep
 
 
 class ToolBridge:
-
     # ============================================================
     # Detection
     # ============================================================

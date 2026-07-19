@@ -19,7 +19,6 @@ from .memory_enums import MemoryImportance, MemoryType
 
 @dataclass(slots=True)
 class MemoryRecord:
-
     id: str
 
     memory_type: MemoryType

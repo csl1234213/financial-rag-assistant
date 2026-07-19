@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class ReliabilityContext:
-
     runtime_state: Optional["RuntimeState"] = None
 
     workflow: Optional["WorkflowResult"] = None

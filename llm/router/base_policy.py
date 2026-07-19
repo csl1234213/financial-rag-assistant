@@ -7,15 +7,13 @@
 # implementations.
 # ============================================================
 
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from .routing_context import RoutingContext
 from .routing_result import RoutingResult
 
 
 class BaseRoutingPolicy(ABC):
-
     @abstractmethod
     def select(
         self,

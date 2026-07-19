@@ -16,24 +16,23 @@
 import time
 
 from config.llm import (
-    LLM_API_KEY,
-    LLM_BASE_URL,
-    LLM_TEMPERATURE,
-    LLM_MAX_TOKENS,
-    LLM_TIMEOUT,
-    LLM_STREAM,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     GEMINI_API_KEY,
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MAX_TOKENS,
+    LLM_STREAM,
+    LLM_TEMPERATURE,
+    LLM_TIMEOUT,
 )
-from ..providers.provider_registry import ProviderRegistry
-from ..providers.provider_config import ProviderConfig
-from ..factory.provider_factory import ProviderFactory
 
+from ..factory.provider_factory import ProviderFactory
+from ..providers.provider_config import ProviderConfig
+from ..providers.provider_registry import ProviderRegistry
 from .routing_context import RoutingContext
 from .routing_policy import RoutingPolicy
 from .routing_result import RoutingResult
-
 
 # Provider-specific config overrides.
 # Router uses this to build the correct ProviderConfig for each provider.
@@ -51,16 +50,13 @@ _PROVIDER_CONFIG_OVERRIDES = {
 
 
 class ModelRouter:
-
     def __init__(
         self,
         policy: RoutingPolicy,
         provider_configs: dict | None = None,
     ):
         self._policy = policy
-        self._provider_configs = (
-            provider_configs or _PROVIDER_CONFIG_OVERRIDES
-        )
+        self._provider_configs = provider_configs or _PROVIDER_CONFIG_OVERRIDES
 
     def route(
         self,

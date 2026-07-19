@@ -18,7 +18,6 @@ from agent.metrics.metric_result import MetricResult
 
 
 class CounterMetric(BaseMetric):
-
     def __init__(self) -> None:
         self._records: list[MetricRecord] = []
         self._count: float = 0.0

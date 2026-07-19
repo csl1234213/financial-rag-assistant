@@ -14,15 +14,14 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from agent.planning import TaskResult
-from agent.workflow.workflow_result import WorkflowResult
 from agent.execution.execution_result import ExecutionResult
+from agent.planning import TaskResult
 from agent.runtime_state import RuntimeState
+from agent.workflow.workflow_result import WorkflowResult
 
 
 @dataclass(slots=True)
 class MemoryContext:
-
     task: Optional[TaskResult] = None
 
     runtime_state: RuntimeState = field(default_factory=RuntimeState)

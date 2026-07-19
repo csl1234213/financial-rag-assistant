@@ -30,7 +30,6 @@ from .reliability_context import ReliabilityContext
 
 
 class ReliabilityBridge:
-
     @staticmethod
     def to_reliability_context(
         state: RuntimeState,

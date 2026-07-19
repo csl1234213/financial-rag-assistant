@@ -11,13 +11,12 @@ from .trace_enums import TraceLevel, TraceStatus, TraceType
 from .trace_exceptions import TraceError, TracerNotFound, TracerRegistrationError
 from .trace_factory import TraceFactory
 from .trace_models import TraceEvent, TraceSpan
-from .trace_registry import TracerMetadata, TraceRegistry
+from .trace_registry import TraceRegistry, TracerMetadata
 from .trace_result import TraceResult
 from .tracer_enums import TracerType
 
 # Auto-register built-in tracers
 from .tracers import (  # noqa: F401
-
     ConsoleTracer,
     FileTracer,
     MemoryTracer,

@@ -22,7 +22,6 @@ from .reliability_registry import ReliabilityRegistry
 
 
 class ReliabilityFactory:
-
     _default_mechanism: Optional[str] = None
 
     # ============================================================
@@ -45,9 +44,7 @@ class ReliabilityFactory:
         if isinstance(name, ReliabilityType):
             name = name.value
         if not ReliabilityRegistry.has_mechanism(name):
-            raise KeyError(
-                f"Cannot set default. Reliability mechanism '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Reliability mechanism '{name}' not registered.")
         cls._default_mechanism = name
 
     @classmethod

@@ -15,7 +15,7 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from agent.tools.tool_result import ToolResult

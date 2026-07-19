@@ -34,7 +34,6 @@ from typing import Callable, Dict, List, Optional, Union
 from .base_metric import BaseMetric
 from .metric_context import MetricContext
 from .metric_enums import MetricScope, MetricType
-from .metric_exceptions import MetricNotFound
 from .metric_factory import MetricFactory
 from .metric_models import MetricRecord
 from .metric_result import MetricResult
@@ -43,7 +42,6 @@ logger = logging.getLogger(__name__)
 
 
 class MetricEngine:
-
     def __init__(self) -> None:
         self._default_metric_type: Union[str, MetricType] = MetricType.TIMER
         self._instances: Dict[str, BaseMetric] = {}

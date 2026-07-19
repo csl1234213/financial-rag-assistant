@@ -15,7 +15,6 @@ from .task_enums import (
 
 @dataclass(slots=True)
 class TaskModel:
-
     task_type: TaskType
 
     confidence: float = 1.0

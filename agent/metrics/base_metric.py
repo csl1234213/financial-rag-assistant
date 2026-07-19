@@ -18,7 +18,6 @@
 # ============================================================
 
 from abc import ABC, abstractmethod
-from typing import List
 
 from .metric_context import MetricContext
 from .metric_models import MetricRecord
@@ -26,20 +25,16 @@ from .metric_result import MetricResult
 
 
 class BaseMetric(ABC):
-
     @property
     @abstractmethod
-    def metric_name(self) -> str:
-        ...
+    def metric_name(self) -> str: ...
 
     @abstractmethod
     def record(
         self,
         context: MetricContext,
         record: MetricRecord,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
-    def collect(self) -> MetricResult:
-        ...
+    def collect(self) -> MetricResult: ...

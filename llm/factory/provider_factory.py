@@ -11,14 +11,14 @@
 # ============================================================
 
 from typing import Optional, Union
+
 from ..providers.base_provider import BaseProvider
 from ..providers.provider_config import ProviderConfig
-from ..providers.provider_registry import ProviderRegistry
 from ..providers.provider_exceptions import ProviderNotFound
+from ..providers.provider_registry import ProviderRegistry
 
 
 class ProviderFactory:
-
     _default_provider: Optional[str] = None
 
     # ============================================================
@@ -26,26 +26,16 @@ class ProviderFactory:
     # ============================================================
 
     @classmethod
-    def create(
-        cls,
-        config_or_name: Union[ProviderConfig, str]
-    ) -> BaseProvider:
+    def create(cls, config_or_name: Union[ProviderConfig, str]) -> BaseProvider:
         if isinstance(config_or_name, ProviderConfig):
             config = config_or_name
             name = config.provider
         else:
             name = config_or_name
-            config = ProviderConfig(
-                provider=name,
-                model="",
-                api_key=""
-            )
+            config = ProviderConfig(provider=name, model="", api_key="")
 
         if not ProviderRegistry.has_provider(name):
-            raise ProviderNotFound(
-                f"Provider '{name}' not registered. "
-                f"Available: {ProviderRegistry.list_providers()}"
-            )
+            raise ProviderNotFound(f"Provider '{name}' not registered. Available: {ProviderRegistry.list_providers()}")
         provider_class = ProviderRegistry.get(name)
         return provider_class(config)
 
@@ -56,9 +46,7 @@ class ProviderFactory:
     @classmethod
     def set_default(cls, name: str) -> None:
         if not ProviderRegistry.has_provider(name):
-            raise ProviderNotFound(
-                f"Cannot set default. Provider '{name}' not registered."
-            )
+            raise ProviderNotFound(f"Cannot set default. Provider '{name}' not registered.")
         cls._default_provider = name
 
     @classmethod
@@ -68,9 +56,7 @@ class ProviderFactory:
     @classmethod
     def create_default(cls) -> BaseProvider:
         if cls._default_provider is None:
-            raise ProviderNotFound(
-                "No default provider set. Call ProviderFactory.set_default(name) first."
-            )
+            raise ProviderNotFound("No default provider set. Call ProviderFactory.set_default(name) first.")
         return cls.create(cls._default_provider)
 
     # ============================================================

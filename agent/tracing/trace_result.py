@@ -18,7 +18,6 @@ from .trace_models import TraceEvent, TraceSpan
 
 @dataclass
 class TraceResult:
-
     spans: List[TraceSpan] = field(default_factory=list)
 
     events: List[TraceEvent] = field(default_factory=list)

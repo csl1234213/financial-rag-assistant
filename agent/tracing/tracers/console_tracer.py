@@ -17,7 +17,6 @@ from agent.tracing.trace_result import TraceResult
 
 
 class ConsoleTracer(BaseTracer):
-
     def __init__(self) -> None:
         self._spans: list[TraceSpan] = []
         self._events: list[TraceEvent] = []
@@ -54,9 +53,7 @@ class ConsoleTracer(BaseTracer):
         span.status = status
         span.end_time = span.start_time
         if span.start_time and span.end_time:
-            span.duration_ms = (
-                span.end_time - span.start_time
-            ).total_seconds() * 1000
+            span.duration_ms = (span.end_time - span.start_time).total_seconds() * 1000
 
     def record_event(
         self,
@@ -77,7 +74,5 @@ class ConsoleTracer(BaseTracer):
             spans=list(self._spans),
             events=list(self._events),
             duration_ms=sum(s.duration_ms for s in self._spans),
-            success=all(
-                s.status != TraceStatus.FAILED for s in self._spans
-            ),
+            success=all(s.status != TraceStatus.FAILED for s in self._spans),
         )

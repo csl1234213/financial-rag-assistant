@@ -22,29 +22,24 @@ from .memory_result import MemoryResult
 
 
 class BaseMemory(ABC):
-
     @property
     @abstractmethod
-    def memory_name(self) -> str:
-        ...
+    def memory_name(self) -> str: ...
 
     @abstractmethod
     def supports(
         self,
         context: MemoryContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def store(
         self,
         context: MemoryContext,
-    ) -> MemoryResult:
-        ...
+    ) -> MemoryResult: ...
 
     @abstractmethod
     def retrieve(
         self,
         context: MemoryContext,
-    ) -> MemoryResult:
-        ...
+    ) -> MemoryResult: ...

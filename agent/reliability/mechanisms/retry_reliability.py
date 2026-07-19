@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class RetryReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._last_attempts: int = 0
         self._last_error: Optional[str] = None
@@ -97,7 +96,7 @@ class RetryReliability(BaseReliability):
                 self._last_error = str(e)
 
                 if attempt < max_retries:
-                    sleep_ms = backoff_ms * (2 ** attempt)
+                    sleep_ms = backoff_ms * (2**attempt)
                     logger.warning(
                         "Retry: attempt %d/%d failed (%s), retrying in %dms",
                         attempt + 1,

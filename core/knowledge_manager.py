@@ -1,5 +1,3 @@
-
-
 from config import PDF_DIR
 from core.knowledge_models import KnowledgeSource, KnowledgeStatistics
 from document_loader import get_company
@@ -12,12 +10,7 @@ def get_documents():
     if not PDF_DIR.exists():
         return []
 
-    return sorted(
-        [
-            pdf.name
-            for pdf in PDF_DIR.glob("*.pdf")
-        ]
-    )
+    return sorted([pdf.name for pdf in PDF_DIR.glob("*.pdf")])
 
 
 def get_document_count():
@@ -34,24 +27,22 @@ def refresh_registry():
     """
     return get_documents()
 
-def get_company_list():
 
+def get_company_list():
     companies = set()
 
     for pdf in PDF_DIR.glob("*.pdf"):
-
         company = get_company(pdf.name)
 
         companies.add(company)
 
     return sorted(companies)
 
-def get_sources():
 
+def get_sources():
     sources = []
 
     for pdf in PDF_DIR.glob("*.pdf"):
-
         stem = pdf.stem
 
         parts = stem.split("_")
@@ -60,11 +51,7 @@ def get_sources():
 
         period = "_".join(parts[1:]) if len(parts) > 1 else "Unknown"
 
-        document_id = (
-            stem.lower()
-            .replace(" ", "_")
-            .replace("-", "_")
-        )
+        document_id = stem.lower().replace(" ", "_").replace("-", "_")
 
         sources.append(
             KnowledgeSource(
@@ -78,8 +65,8 @@ def get_sources():
 
     return sources
 
-def get_statistics(chunks):
 
+def get_statistics(chunks):
     companies = len(get_company_list())
 
     reports = len(get_sources())

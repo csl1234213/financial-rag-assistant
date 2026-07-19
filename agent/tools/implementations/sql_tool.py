@@ -7,13 +7,12 @@
 
 from agent.tools.base_tool import BaseTool
 from agent.tools.tool_context import ToolContext
-from agent.tools.tool_enums import ToolPriority, ToolStatus, ToolType
+from agent.tools.tool_enums import ToolStatus, ToolType
 from agent.tools.tool_models import ToolCapability, ToolMetadata
 from agent.tools.tool_result import ToolResult
 
 
 class SQLTool(BaseTool):
-
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(

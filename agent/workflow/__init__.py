@@ -10,28 +10,28 @@
 #   agent.planning   → agent.workflow
 # ============================================================
 
-from .workflow_enums import WorkflowStatus, WorkflowType
-from .workflow_context import WorkflowContext
-from .workflow_models import WorkflowStep
-from .workflow_result import WorkflowResult
 from .base_workflow import BaseWorkflow
+from .workflow_bridge import WorkflowBridge
+from .workflow_context import WorkflowContext
+from .workflow_engine import WorkflowEngine
+from .workflow_enums import WorkflowStatus, WorkflowType
 from .workflow_exceptions import (
     WorkflowError,
     WorkflowNotFound,
     WorkflowRegistrationError,
 )
-from .workflow_registry import WorkflowRegistry
-from .workflow_factory import WorkflowFactory
-from .workflow_engine import WorkflowEngine
-from .workflow_bridge import WorkflowBridge
 from .workflow_executor import ExecutionRunner, WorkflowExecutor
+from .workflow_factory import WorkflowFactory
+from .workflow_models import WorkflowStep
+from .workflow_registry import WorkflowRegistry
+from .workflow_result import WorkflowResult
 
 # Auto-register all workflow implementations
 from .workflows import (  # noqa: F401 — auto-registration
+    ComparisonWorkflow,
     DirectChatWorkflow,
     RAGWorkflow,
     ResearchWorkflow,
-    ComparisonWorkflow,
 )
 
 __all__ = [

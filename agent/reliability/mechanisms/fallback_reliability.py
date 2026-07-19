@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 
 class FallbackReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._total_fallbacks: int = 0
         self._fallback_successes: int = 0
@@ -105,9 +104,7 @@ class FallbackReliability(BaseReliability):
                     },
                 )
             except Exception as e:
-                logger.warning(
-                    "Fallback: primary failed, no fallback configured"
-                )
+                logger.warning("Fallback: primary failed, no fallback configured")
                 return ReliabilityResult(
                     success=False,
                     policy=ReliabilityType.FALLBACK,
@@ -130,8 +127,7 @@ class FallbackReliability(BaseReliability):
         except Exception as primary_err:
             self._total_fallbacks += 1
             logger.info(
-                "Fallback: primary failed, attempting fallback "
-                "(total_fallbacks=%d)",
+                "Fallback: primary failed, attempting fallback (total_fallbacks=%d)",
                 self._total_fallbacks,
             )
 

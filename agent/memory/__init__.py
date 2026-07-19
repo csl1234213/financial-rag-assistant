@@ -10,6 +10,14 @@
 # ============================================================
 
 from .base_memory import BaseMemory
+
+# Auto-register all built-in memory implementations
+from .memories import (  # noqa: F401 — auto-registration
+    LongTermMemory,
+    SessionMemory,
+    ShortTermMemory,
+    WorkflowMemory,
+)
 from .memory_bridge import MemoryBridge
 from .memory_context import MemoryContext
 from .memory_engine import MemoryEngine
@@ -19,14 +27,6 @@ from .memory_factory import MemoryFactory
 from .memory_models import MemoryRecord
 from .memory_registry import MemoryRegistry
 from .memory_result import MemoryResult
-
-# Auto-register all built-in memory implementations
-from .memories import (  # noqa: F401 — auto-registration
-    ShortTermMemory,
-    SessionMemory,
-    WorkflowMemory,
-    LongTermMemory,
-)
 
 __all__ = [
     "BaseMemory",

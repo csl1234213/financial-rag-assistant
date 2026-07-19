@@ -20,24 +20,18 @@ from .memory_exceptions import MemoryNotFound, MemoryRegistrationError
 
 
 class MemoryRegistry:
-
     _registry: Dict[str, Type[BaseMemory]] = {}
 
     @classmethod
     def register(cls, name: str, memory_class: Type[BaseMemory]) -> None:
         if not issubclass(memory_class, BaseMemory):
-            raise MemoryRegistrationError(
-                f"'{memory_class.__name__}' must be a subclass of BaseMemory"
-            )
+            raise MemoryRegistrationError(f"'{memory_class.__name__}' must be a subclass of BaseMemory")
         cls._registry[name] = memory_class
 
     @classmethod
     def get(cls, name: str) -> Type[BaseMemory]:
         if not cls.has_memory(name):
-            raise MemoryNotFound(
-                f"Memory '{name}' not registered. "
-                f"Available: {cls.list_memories()}"
-            )
+            raise MemoryNotFound(f"Memory '{name}' not registered. Available: {cls.list_memories()}")
         return cls._registry[name]
 
     @classmethod

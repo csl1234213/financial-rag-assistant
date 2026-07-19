@@ -5,6 +5,13 @@
 # ============================================================
 
 from .base_metric import BaseMetric
+
+# Auto-register built-in metrics
+from .implementations import (  # noqa: F401
+    CounterMetric,
+    HistogramMetric,
+    TimerMetric,
+)
 from .metric_bridge import MetricBridge
 from .metric_collector import MetricCollector
 from .metric_context import MetricContext
@@ -16,14 +23,6 @@ from .metric_factory import MetricFactory
 from .metric_models import MetricDefinition, MetricRecord
 from .metric_registry import MetricRegistry
 from .metric_result import MetricResult
-
-# Auto-register built-in metrics
-from .implementations import (  # noqa: F401
-
-    CounterMetric,
-    HistogramMetric,
-    TimerMetric,
-)
 
 __all__ = [
     "BaseMetric",

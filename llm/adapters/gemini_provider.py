@@ -7,24 +7,24 @@
 
 import time
 from typing import List
+
 from ..providers.base_provider import BaseProvider
 from ..providers.provider_config import ProviderConfig
+from ..providers.provider_exceptions import (
+    AuthenticationError,
+    ModelNotFoundError,
+    ProviderConnectionError,
+    ProviderError,
+    RateLimitError,
+)
 from ..providers.provider_models import (
     ChatRequest,
     ChatResponse,
     ProviderCapability,
 )
-from ..providers.provider_exceptions import (
-    AuthenticationError,
-    RateLimitError,
-    ModelNotFoundError,
-    ProviderConnectionError,
-    ProviderError,
-)
 
 
 class GeminiProvider(BaseProvider):
-
     def __init__(self, config: ProviderConfig):
         self._config = config
         self._api_key = config.api_key
@@ -63,20 +63,16 @@ class GeminiProvider(BaseProvider):
             supports_system_prompt=True,
             supports_tools=True,
             supports_multimodal=True,
-            max_context_tokens=1048576
+            max_context_tokens=1048576,
         )
 
     def _get_client(self):
         if self._client is None:
             if not self._api_key:
-                raise AuthenticationError(
-                    "GEMINI_API_KEY not set in environment"
-                )
+                raise AuthenticationError("GEMINI_API_KEY not set in environment")
             from google import genai
-            self._client = genai.Client(
-                api_key=self._api_key,
-                http_options={"timeout": self._timeout * 1000}
-            )
+
+            self._client = genai.Client(api_key=self._api_key, http_options={"timeout": self._timeout * 1000})
         return self._client
 
     def _build_contents(self, request: ChatRequest) -> list:
@@ -134,23 +130,26 @@ class GeminiProvider(BaseProvider):
                     total_tokens=total_tokens,
                     metadata={
                         "finish_reason": getattr(
-                            response.candidates[0].finish_reason, "name",
-                            str(response.candidates[0].finish_reason)
-                        ) if response.candidates else "unknown",
-                    }
+                            response.candidates[0].finish_reason, "name", str(response.candidates[0].finish_reason)
+                        )
+                        if response.candidates
+                        else "unknown",
+                    },
                 )
 
             except Exception as e:
                 error_str = str(e).lower()
 
-                retryable = any([
-                    "timeout" in error_str,
-                    "connection" in error_str,
-                    "429" in error_str,
-                    "500" in error_str,
-                    "503" in error_str,
-                    "resource exhausted" in error_str,
-                ])
+                retryable = any(
+                    [
+                        "timeout" in error_str,
+                        "connection" in error_str,
+                        "429" in error_str,
+                        "500" in error_str,
+                        "503" in error_str,
+                        "resource exhausted" in error_str,
+                    ]
+                )
 
                 if "401" in error_str or "unauthorized" in error_str or "permission" in error_str:
                     raise AuthenticationError("Invalid Gemini API key") from e
@@ -160,17 +159,13 @@ class GeminiProvider(BaseProvider):
                     raise ModelNotFoundError(f"Model not found: {model}") from e
                 elif "connection" in error_str or "timeout" in error_str:
                     if not retryable or attempt >= self._max_retry - 1:
-                        raise ProviderConnectionError(
-                            f"Cannot connect to Gemini: {str(e)}"
-                        ) from e
+                        raise ProviderConnectionError(f"Cannot connect to Gemini: {str(e)}") from e
                 else:
                     if not retryable or attempt >= self._max_retry - 1:
-                        raise ProviderError(
-                            f"Gemini error: {str(e)}"
-                        ) from e
+                        raise ProviderError(f"Gemini error: {str(e)}") from e
 
                 if retryable and attempt < self._max_retry - 1:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     time.sleep(wait_time)
                     continue
 

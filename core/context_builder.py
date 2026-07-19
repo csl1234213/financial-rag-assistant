@@ -17,7 +17,6 @@ def build_context(result, question):
     max_len = len(chunks)
 
     for rank, idx in enumerate(top_k_indices):
-
         if idx >= max_len:
             continue
 
@@ -25,18 +24,17 @@ def build_context(result, question):
 
         chunk = chunks[idx]
 
-        local_context = extract_local_context(
-            chunk["text"],
-            question
-        )
+        local_context = extract_local_context(chunk["text"], question)
 
-        citations.append({
-            "rank": rank + 1,
-            "source": chunk["source"],
-            "chunk_id": chunk["chunk_id"],
-            "similarity": round(score, 4),
-            "preview": local_context[:150]
-        })
+        citations.append(
+            {
+                "rank": rank + 1,
+                "source": chunk["source"],
+                "chunk_id": chunk["chunk_id"],
+                "similarity": round(score, 4),
+                "preview": local_context[:150],
+            }
+        )
 
         context += f"""
 [Evidence {rank + 1}]
@@ -61,13 +59,15 @@ def build_context_from_evidence(evidences) -> tuple:
     citations: List[Dict[str, Any]] = []
 
     for i, ev in enumerate(evidences):
-        citations.append({
-            "rank": i + 1,
-            "source": ev.source,
-            "chunk_id": ev.metadata.get("chunk_id", ""),
-            "similarity": ev.confidence,
-            "preview": ev.content[:150],
-        })
+        citations.append(
+            {
+                "rank": i + 1,
+                "source": ev.source,
+                "chunk_id": ev.metadata.get("chunk_id", ""),
+                "similarity": ev.confidence,
+                "preview": ev.content[:150],
+            }
+        )
         context += f"""
 [Evidence {i + 1}]
 Source: {ev.source}

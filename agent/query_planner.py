@@ -1,7 +1,6 @@
 from agent.execution_plan import ExecutionPlan, PlanStep, StepType
 from agent.planning import (
     ComplexityAnalyzer,
-    ComplexityLevel,
     ComplexityResult,
     PlanningContext,
     TaskAnalyzer,
@@ -55,10 +54,7 @@ class QueryPlanner:
         complexity_result = self.complexity_analyzer.analyze(task_result)
         task_type = task_result.task.task_type
 
-        companies = [
-            e for e in task_result.extracted_entities
-            if not e.isdigit()
-        ]
+        companies = [e for e in task_result.extracted_entities if not e.isdigit()]
 
         if task_type == TaskType.COMPARISON:
             plan = self._build_compare_plan(context.question, companies)
@@ -114,11 +110,7 @@ class QueryPlanner:
     # =========================
 
     def _build_compare_plan(self, query, companies) -> ExecutionPlan:
-
-        plan = ExecutionPlan(
-            intent="comparison",
-            original_query=query
-        )
+        plan = ExecutionPlan(intent="comparison", original_query=query)
 
         retrieve_ids = []
 
@@ -129,7 +121,7 @@ class QueryPlanner:
                 description=f"Retrieve {c} financial report",
                 company=c,
                 query=query,
-                parameters={"metrics": ["revenue", "margin", "risk"]}
+                parameters={"metrics": ["revenue", "margin", "risk"]},
             )
             plan.tasks.append(step)
             retrieve_ids.append(step.step_id)
@@ -160,7 +152,6 @@ class QueryPlanner:
     # =========================
 
     def _build_single_plan(self, query, companies) -> ExecutionPlan:
-
         company = companies[0] if companies else None
 
         plan = ExecutionPlan(
@@ -171,8 +162,7 @@ class QueryPlanner:
         retrieve_step = PlanStep(
             step_id=self._next_id(),
             step_type=StepType.RETRIEVE,
-            description=f"Retrieve {company} documents"
-            if company else "Retrieve relevant documents",
+            description=f"Retrieve {company} documents" if company else "Retrieve relevant documents",
             company=company,
             query=query,
         )
@@ -194,7 +184,6 @@ class QueryPlanner:
     # =========================
 
     def _build_global_plan(self, query) -> ExecutionPlan:
-
         plan = ExecutionPlan(
             intent="global_research",
             original_query=query,
@@ -225,7 +214,6 @@ class QueryPlanner:
     # =========================
 
     def _build_generic_plan(self, query) -> ExecutionPlan:
-
         plan = ExecutionPlan(
             intent="generic",
             original_query=query,

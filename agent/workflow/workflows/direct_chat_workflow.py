@@ -5,16 +5,15 @@
 # 不需要检索、不需要工具、不需要多步推理。
 # ============================================================
 
+from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.workflow.base_workflow import BaseWorkflow
 from agent.workflow.workflow_context import WorkflowContext
 from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
-from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class DirectChatWorkflow(BaseWorkflow):
-
     @property
     def workflow_name(self) -> str:
         return "direct_chat"

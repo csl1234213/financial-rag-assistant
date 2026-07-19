@@ -13,7 +13,6 @@ from .task_models import TaskModel
 
 @dataclass(slots=True)
 class TaskResult:
-
     task: TaskModel
 
     reason: str

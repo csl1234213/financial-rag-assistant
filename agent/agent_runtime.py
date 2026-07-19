@@ -157,6 +157,7 @@ class AgentRuntime:
 
         if routing_context is None:
             from llm.router import RoutingContext as RC
+
             routing_context = RC(task=task_result.task.task_type)
 
         # 5. Execution Strategy — determine HOW to execute
@@ -290,21 +291,13 @@ class AgentRuntime:
                             runtime_state.timeout_count += 1
                     elif mechanism_name == "circuit_breaker":
                         runtime_state.circuit_state = result.circuit_state
-                        runtime_state.failure_count = result.metadata.get(
-                            "failure_count", 0
-                        )
+                        runtime_state.failure_count = result.metadata.get("failure_count", 0)
                     elif mechanism_name == "health_check":
-                        runtime_state.health_status = result.metadata.get(
-                            "health_status"
-                        )
+                        runtime_state.health_status = result.metadata.get("health_status")
                     elif mechanism_name == "rate_limiter":
-                        runtime_state.rate_limit_remaining = result.metadata.get(
-                            "rate_limit_remaining", 0
-                        )
+                        runtime_state.rate_limit_remaining = result.metadata.get("rate_limit_remaining", 0)
                     elif mechanism_name == "fallback":
-                        runtime_state.fallback_used = result.metadata.get(
-                            "fallback_used", False
-                        )
+                        runtime_state.fallback_used = result.metadata.get("fallback_used", False)
 
                 reliability_info = {
                     "pipeline": pipeline_result.pipeline_order,
@@ -319,10 +312,7 @@ class AgentRuntime:
                 }
 
                 if not pipeline_result.success:
-                    raise RuntimeError(
-                        "Execution failed after reliability pipeline: "
-                        f"{pipeline_result.pipeline_order}"
-                    )
+                    raise RuntimeError(f"Execution failed after reliability pipeline: {pipeline_result.pipeline_order}")
 
                 if self.metric_engine is not None:
                     metric_ctx = MetricBridge.to_metric_context(
@@ -402,10 +392,7 @@ class AgentRuntime:
             self.executor.execute(plan, shared)
             ctx.evidences = shared["_all_evidence"]
             context, citations = build_context_from_evidence(ctx.evidences)
-            execution_results = [
-                step.result for step in plan.tasks
-                if step.result is not None
-            ]
+            execution_results = [step.result for step in plan.tasks if step.result is not None]
 
         # 9. Reasoning
         ctx.execution_results = execution_results
@@ -504,7 +491,9 @@ class AgentRuntime:
             memory={
                 "retrieve": memory_retrieve_info,
                 "store": memory_store_info,
-            } if self.memory_engine is not None else None,
+            }
+            if self.memory_engine is not None
+            else None,
             metrics=metrics_result,
             reliability=reliability_info,
         )

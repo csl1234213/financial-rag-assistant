@@ -16,22 +16,18 @@ from .workflow_result import WorkflowResult
 
 
 class BaseWorkflow(ABC):
-
     @property
     @abstractmethod
-    def workflow_name(self) -> str:
-        ...
+    def workflow_name(self) -> str: ...
 
     @abstractmethod
     def supports(
         self,
         context: WorkflowContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def build(
         self,
         context: WorkflowContext,
-    ) -> WorkflowResult:
-        ...
+    ) -> WorkflowResult: ...

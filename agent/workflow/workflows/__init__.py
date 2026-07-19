@@ -11,10 +11,10 @@
 
 from agent.workflow.workflow_registry import WorkflowRegistry
 
+from .comparison_workflow import ComparisonWorkflow
 from .direct_chat_workflow import DirectChatWorkflow
 from .rag_workflow import RAGWorkflow
 from .research_workflow import ResearchWorkflow
-from .comparison_workflow import ComparisonWorkflow
 
 WorkflowRegistry.register("direct_chat", DirectChatWorkflow)
 WorkflowRegistry.register("rag", RAGWorkflow)

@@ -23,7 +23,7 @@
 # ============================================================
 
 import logging
-from typing import Optional, Union
+from typing import Union
 
 from .base_tool import BaseTool
 from .tool_context import ToolContext
@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 class ToolEngine:
-
     def __init__(self) -> None:
         pass
 
@@ -52,9 +51,7 @@ class ToolEngine:
         tool_instance = self._create_tool(tool)
 
         if not tool_instance.supports(context):
-            raise ToolNotSupported(
-                f"Tool '{tool}' does not support the given context."
-            )
+            raise ToolNotSupported(f"Tool '{tool}' does not support the given context.")
 
         self.before_execute(context)
         result = tool_instance.execute(context)

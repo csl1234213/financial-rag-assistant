@@ -23,7 +23,6 @@ from .metric_models import MetricDefinition
 
 
 class MetricRegistry:
-
     _registry: Dict[str, Type[BaseMetric]] = {}
     _definitions: Dict[str, MetricDefinition] = {}
 
@@ -39,13 +38,9 @@ class MetricRegistry:
         definition: Optional[MetricDefinition] = None,
     ) -> None:
         if not issubclass(metric_cls, BaseMetric):
-            raise MetricRegistrationError(
-                f"'{metric_cls.__name__}' must be a subclass of BaseMetric"
-            )
+            raise MetricRegistrationError(f"'{metric_cls.__name__}' must be a subclass of BaseMetric")
         if name in cls._registry:
-            raise MetricRegistrationError(
-                f"Metric '{name}' is already registered"
-            )
+            raise MetricRegistrationError(f"Metric '{name}' is already registered")
         cls._registry[name] = metric_cls
         if definition is not None:
             cls._definitions[name] = definition
@@ -57,18 +52,14 @@ class MetricRegistry:
     @classmethod
     def get(cls, name: str) -> Type[BaseMetric]:
         if not cls.has_metric(name):
-            raise MetricNotFound(
-                f"Metric '{name}' not registered. "
-                f"Available: {cls.list_metrics()}"
-            )
+            raise MetricNotFound(f"Metric '{name}' not registered. Available: {cls.list_metrics()}")
         return cls._registry[name]
 
     @classmethod
     def get_definition(cls, name: str) -> MetricDefinition:
         if name not in cls._definitions:
             raise MetricNotFound(
-                f"Definition for metric '{name}' not found. "
-                f"Available definitions: {list(cls._definitions.keys())}"
+                f"Definition for metric '{name}' not found. Available definitions: {list(cls._definitions.keys())}"
             )
         return cls._definitions[name]
 

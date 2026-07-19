@@ -27,18 +27,15 @@ from .trace_result import TraceResult
 
 
 class BaseTracer(ABC):
-
     @property
     @abstractmethod
-    def tracer_name(self) -> str:
-        ...
+    def tracer_name(self) -> str: ...
 
     @abstractmethod
     def supports(
         self,
         context: TraceContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def start_span(
@@ -47,16 +44,14 @@ class BaseTracer(ABC):
         trace_type: TraceType,
         context: TraceContext,
         parent_id: Optional[str] = None,
-    ) -> TraceSpan:
-        ...
+    ) -> TraceSpan: ...
 
     @abstractmethod
     def end_span(
         self,
         span: TraceSpan,
         status: TraceStatus = TraceStatus.SUCCESS,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     def record_event(
@@ -64,9 +59,7 @@ class BaseTracer(ABC):
         message: str,
         level: TraceLevel = TraceLevel.INFO,
         metadata: Optional[dict] = None,
-    ) -> TraceEvent:
-        ...
+    ) -> TraceEvent: ...
 
     @abstractmethod
-    def flush(self) -> TraceResult:
-        ...
+    def flush(self) -> TraceResult: ...

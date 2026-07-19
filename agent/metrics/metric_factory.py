@@ -23,7 +23,6 @@ from .metric_registry import MetricRegistry
 
 
 class MetricFactory:
-
     _default_metric: Optional[str] = None
 
     # ============================================================
@@ -46,9 +45,7 @@ class MetricFactory:
         if isinstance(name, MetricType):
             name = name.value
         if not MetricRegistry.has_metric(name):
-            raise KeyError(
-                f"Cannot set default. Metric '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Metric '{name}' not registered.")
         cls._default_metric = name
 
     @classmethod

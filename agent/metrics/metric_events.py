@@ -31,7 +31,6 @@ from .metric_enums import MetricScope, MetricType
 
 @dataclass(slots=True)
 class MetricEvent:
-
     name: str
     scope: MetricScope
     metric_type: MetricType

@@ -21,7 +21,6 @@ from .workflow_result import WorkflowResult
 
 
 class WorkflowBridge:
-
     @staticmethod
     def to_execution_context(
         context: WorkflowContext,

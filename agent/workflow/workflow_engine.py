@@ -21,11 +21,10 @@
 #   llm.router.ModelRouter           → WorkflowEngine
 # ============================================================
 
-from typing import Dict, Optional
+from typing import Dict
 
 from agent.execution.strategy_enums import ExecutionStrategyType
 
-from .base_workflow import BaseWorkflow
 from .workflow_context import WorkflowContext
 from .workflow_enums import WorkflowType
 from .workflow_factory import WorkflowFactory
@@ -33,7 +32,6 @@ from .workflow_result import WorkflowResult
 
 
 class WorkflowEngine:
-
     _STRATEGY_TO_WORKFLOW: Dict[ExecutionStrategyType, WorkflowType] = {
         ExecutionStrategyType.DIRECT_LLM: WorkflowType.DIRECT_CHAT,
         ExecutionStrategyType.RAG: WorkflowType.RAG,

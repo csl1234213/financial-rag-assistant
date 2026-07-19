@@ -31,7 +31,6 @@ from .metric_context import MetricContext
 
 
 class MetricBridge:
-
     # ============================================================
     # Context construction
     # ============================================================

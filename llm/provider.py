@@ -20,20 +20,21 @@
 # ============================================================
 
 from config.llm import (
-    LLM_PROVIDER,
-    LLM_MODEL,
     LLM_API_KEY,
     LLM_BASE_URL,
-    LLM_TEMPERATURE,
     LLM_MAX_TOKENS,
-    LLM_TIMEOUT,
+    LLM_MODEL,
+    LLM_PROVIDER,
     LLM_STREAM,
+    LLM_TEMPERATURE,
+    LLM_TIMEOUT,
 )
+
+from .adapters.deepseek_provider import DeepSeekProvider
+from .adapters.gemini_provider import GeminiProvider
 from .factory.provider_factory import ProviderFactory
 from .providers.provider_config import ProviderConfig
 from .providers.provider_models import ChatRequest
-from .adapters.deepseek_provider import DeepSeekProvider
-from .adapters.gemini_provider import GeminiProvider
 from .providers.provider_registry import ProviderRegistry
 
 # Register providers at import time
@@ -58,13 +59,10 @@ def call_llm(prompt: str) -> str:
     config = _build_config()
     provider = ProviderFactory.create(config)
     request = ChatRequest(
-        messages=[{
-            "role": "user",
-            "content": prompt
-        }],
+        messages=[{"role": "user", "content": prompt}],
         system_prompt="You are a professional financial analyst.",
         temperature=0.2,
-        max_tokens=1000
+        max_tokens=1000,
     )
     response = provider.chat(request)
     return response.content

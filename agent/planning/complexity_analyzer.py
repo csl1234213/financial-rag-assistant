@@ -17,15 +17,11 @@ from .task_result import TaskResult
 
 
 class ComplexityAnalyzer:
-
     def __init__(self, weights: ComplexityWeights | None = None):
         self._weights = weights or ComplexityWeights()
 
     def _weights_dict(self) -> dict[str, float]:
-        return {
-            f.name: getattr(self._weights, f.name)
-            for f in fields(ComplexityWeights)
-        }
+        return {f.name: getattr(self._weights, f.name) for f in fields(ComplexityWeights)}
 
     # =========================
     # Level thresholds
@@ -77,15 +73,10 @@ class ComplexityAnalyzer:
         }
 
         w = self._weights_dict()
-        score = sum(
-            factors[k] * w[k]
-            for k in w
-        )
+        score = sum(factors[k] * w[k] for k in w)
 
         level = self._score_to_level(score)
-        estimated_tokens = self._estimate_tokens(
-            len(companies), len(years), level
-        )
+        estimated_tokens = self._estimate_tokens(len(companies), len(years), level)
 
         complexity = ComplexityModel(
             level=level,

@@ -17,7 +17,6 @@ from .memory_models import MemoryRecord
 
 @dataclass
 class MemoryResult:
-
     records: List[MemoryRecord] = field(default_factory=list)
 
     retrieved_count: int = 0

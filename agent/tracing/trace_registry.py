@@ -32,7 +32,6 @@ class TracerMetadata:
 
 
 class TraceRegistry:
-
     _registry: Dict[str, Type[BaseTracer]] = {}
     _metadata: Dict[str, TracerMetadata] = {}
 
@@ -48,13 +47,9 @@ class TraceRegistry:
         metadata: Optional[TracerMetadata] = None,
     ) -> None:
         if not issubclass(tracer_cls, BaseTracer):
-            raise TracerRegistrationError(
-                f"'{tracer_cls.__name__}' must be a subclass of BaseTracer"
-            )
+            raise TracerRegistrationError(f"'{tracer_cls.__name__}' must be a subclass of BaseTracer")
         if name in cls._registry:
-            raise TracerRegistrationError(
-                f"Tracer '{name}' is already registered"
-            )
+            raise TracerRegistrationError(f"Tracer '{name}' is already registered")
         cls._registry[name] = tracer_cls
         if metadata is not None:
             cls._metadata[name] = metadata
@@ -66,18 +61,14 @@ class TraceRegistry:
     @classmethod
     def get(cls, name: str) -> Type[BaseTracer]:
         if not cls.has_tracer(name):
-            raise TracerNotFound(
-                f"Tracer '{name}' not registered. "
-                f"Available: {cls.list_tracers()}"
-            )
+            raise TracerNotFound(f"Tracer '{name}' not registered. Available: {cls.list_tracers()}")
         return cls._registry[name]
 
     @classmethod
     def get_metadata(cls, name: str) -> TracerMetadata:
         if name not in cls._metadata:
             raise TracerNotFound(
-                f"Metadata for tracer '{name}' not found. "
-                f"Available metadata: {list(cls._metadata.keys())}"
+                f"Metadata for tracer '{name}' not found. Available metadata: {list(cls._metadata.keys())}"
             )
         return cls._metadata[name]
 

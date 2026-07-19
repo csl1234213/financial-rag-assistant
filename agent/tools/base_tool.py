@@ -24,22 +24,18 @@ from .tool_result import ToolResult
 
 
 class BaseTool(ABC):
-
     @property
     @abstractmethod
-    def metadata(self) -> ToolMetadata:
-        ...
+    def metadata(self) -> ToolMetadata: ...
 
     @abstractmethod
     def supports(
         self,
         context: ToolContext,
-    ) -> bool:
-        ...
+    ) -> bool: ...
 
     @abstractmethod
     def execute(
         self,
         context: ToolContext,
-    ) -> ToolResult:
-        ...
+    ) -> ToolResult: ...

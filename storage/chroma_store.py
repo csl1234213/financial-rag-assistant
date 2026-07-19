@@ -49,18 +49,18 @@ class ChromaEmbeddingStore(EmbeddingStore):
     def add_documents(self, documents: List[VectorDocument]) -> None:
         try:
             for doc in documents:
-                collection = self.client.get_or_create_collection(
-                    name=doc.metadata.get("collection", "default")
-                )
+                collection = self.client.get_or_create_collection(name=doc.metadata.get("collection", "default"))
                 collection.add(
                     ids=[doc.chunk_id],
                     documents=[doc.content],
                     embeddings=[doc.embedding],
-                    metadatas=[{
-                        "document_id": doc.document_id,
-                        "company": doc.company,
-                        **doc.metadata,
-                    }],
+                    metadatas=[
+                        {
+                            "document_id": doc.document_id,
+                            "company": doc.company,
+                            **doc.metadata,
+                        }
+                    ],
                 )
         except Exception as e:
             raise EmbeddingStoreError(f"Add documents failed: {e}")

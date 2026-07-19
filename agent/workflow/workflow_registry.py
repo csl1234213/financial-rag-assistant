@@ -19,24 +19,18 @@ from .workflow_exceptions import WorkflowNotFound, WorkflowRegistrationError
 
 
 class WorkflowRegistry:
-
     _registry: Dict[str, Type[BaseWorkflow]] = {}
 
     @classmethod
     def register(cls, name: str, workflow_class: Type[BaseWorkflow]) -> None:
         if not issubclass(workflow_class, BaseWorkflow):
-            raise WorkflowRegistrationError(
-                f"'{workflow_class.__name__}' must be a subclass of BaseWorkflow"
-            )
+            raise WorkflowRegistrationError(f"'{workflow_class.__name__}' must be a subclass of BaseWorkflow")
         cls._registry[name] = workflow_class
 
     @classmethod
     def get(cls, name: str) -> Type[BaseWorkflow]:
         if not cls.has_workflow(name):
-            raise WorkflowNotFound(
-                f"Workflow '{name}' not registered. "
-                f"Available: {cls.list_workflows()}"
-            )
+            raise WorkflowNotFound(f"Workflow '{name}' not registered. Available: {cls.list_workflows()}")
         return cls._registry[name]
 
     @classmethod

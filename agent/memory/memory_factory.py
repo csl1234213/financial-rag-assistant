@@ -22,7 +22,6 @@ from .memory_registry import MemoryRegistry
 
 
 class MemoryFactory:
-
     _default_memory: Optional[str] = None
 
     # ============================================================
@@ -45,9 +44,7 @@ class MemoryFactory:
         if isinstance(name, MemoryType):
             name = name.value
         if not MemoryRegistry.has_memory(name):
-            raise KeyError(
-                f"Cannot set default. Memory '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Memory '{name}' not registered.")
         cls._default_memory = name
 
     @classmethod
@@ -57,8 +54,5 @@ class MemoryFactory:
     @classmethod
     def create_default(cls) -> BaseMemory:
         if cls._default_memory is None:
-            raise RuntimeError(
-                "No default memory set. "
-                "Call MemoryFactory.set_default(...) first."
-            )
+            raise RuntimeError("No default memory set. Call MemoryFactory.set_default(...) first.")
         return cls.create(cls._default_memory)

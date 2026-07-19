@@ -53,7 +53,6 @@ logger = logging.getLogger(__name__)
 
 
 class ReliabilityEngine:
-
     def __init__(self) -> None:
         self._default_reliability_type: Union[str, ReliabilityType] = ReliabilityType.RETRY
         self._before_apply_hooks: List[Callable[[ReliabilityContext], None]] = []
@@ -120,17 +119,20 @@ class ReliabilityEngine:
 
         if not mechanism.supports(context):
             raise ReliabilityNotSupported(
-                f"Reliability mechanism '{reliability_type}' "
-                f"does not support the given context."
+                f"Reliability mechanism '{reliability_type}' does not support the given context."
             )
 
         self._run_before_apply_hooks(context)
 
-        result = mechanism.apply(context, policy or ReliabilityPolicy(
-            policy_type=ReliabilityType(reliability_type.value)
-            if isinstance(reliability_type, ReliabilityType)
-            else ReliabilityType(reliability_type),
-        ))
+        result = mechanism.apply(
+            context,
+            policy
+            or ReliabilityPolicy(
+                policy_type=ReliabilityType(reliability_type.value)
+                if isinstance(reliability_type, ReliabilityType)
+                else ReliabilityType(reliability_type),
+            ),
+        )
 
         self._run_after_apply_hooks(result)
 
@@ -209,9 +211,7 @@ class ReliabilityEngine:
         wrapped = callable_fn
         for mechanism_name, policy in reversed(_pipeline):
             pipeline_order.insert(0, mechanism_name)
-            wrapped = self._make_mechanism_wrapper(
-                mechanism_name, wrapped, context, policy, pipeline_results
-            )
+            wrapped = self._make_mechanism_wrapper(mechanism_name, wrapped, context, policy, pipeline_results)
 
         try:
             wrapped()
@@ -251,9 +251,7 @@ class ReliabilityEngine:
             result = mechanism.apply(_wrapper_ctx, policy)
             pipeline_results[mechanism_name] = result
             if not result.success:
-                raise RuntimeError(
-                    f"Reliability mechanism '{mechanism_name}' failed: {result.error}"
-                )
+                raise RuntimeError(f"Reliability mechanism '{mechanism_name}' failed: {result.error}")
             if mechanism_name in ("health_check", "rate_limiter"):
                 return inner_callable()
             return result
@@ -271,7 +269,5 @@ class ReliabilityEngine:
         if isinstance(reliability_type, ReliabilityType):
             reliability_type = reliability_type.value
         if reliability_type not in self._mechanism_instances:
-            self._mechanism_instances[reliability_type] = ReliabilityFactory.create(
-                reliability_type
-            )
+            self._mechanism_instances[reliability_type] = ReliabilityFactory.create(reliability_type)
         return self._mechanism_instances[reliability_type]

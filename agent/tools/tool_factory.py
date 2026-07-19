@@ -23,7 +23,6 @@ from .tool_registry import ToolRegistry
 
 
 class ToolFactory:
-
     _default_tool: Optional[str] = None
 
     # ============================================================
@@ -46,9 +45,7 @@ class ToolFactory:
         if isinstance(name, ToolType):
             name = name.value
         if not ToolRegistry.has_tool(name):
-            raise KeyError(
-                f"Cannot set default. Tool '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Tool '{name}' not registered.")
         cls._default_tool = name
 
     @classmethod
@@ -58,8 +55,5 @@ class ToolFactory:
     @classmethod
     def create_default(cls) -> BaseTool:
         if cls._default_tool is None:
-            raise RuntimeError(
-                "No default tool set. "
-                "Call ToolFactory.set_default(...) first."
-            )
+            raise RuntimeError("No default tool set. Call ToolFactory.set_default(...) first.")
         return cls.create(cls._default_tool)

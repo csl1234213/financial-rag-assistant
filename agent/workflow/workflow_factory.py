@@ -21,7 +21,6 @@ from .workflow_registry import WorkflowRegistry
 
 
 class WorkflowFactory:
-
     _default_workflow: Optional[str] = None
 
     # ============================================================
@@ -44,9 +43,7 @@ class WorkflowFactory:
         if isinstance(name, WorkflowType):
             name = name.value
         if not WorkflowRegistry.has_workflow(name):
-            raise KeyError(
-                f"Cannot set default. Workflow '{name}' not registered."
-            )
+            raise KeyError(f"Cannot set default. Workflow '{name}' not registered.")
         cls._default_workflow = name
 
     @classmethod
@@ -56,10 +53,7 @@ class WorkflowFactory:
     @classmethod
     def create_default(cls) -> BaseWorkflow:
         if cls._default_workflow is None:
-            raise KeyError(
-                "No default workflow set. "
-                "Call WorkflowFactory.set_default(name) first."
-            )
+            raise KeyError("No default workflow set. Call WorkflowFactory.set_default(name) first.")
         return cls.create(cls._default_workflow)
 
     # ============================================================

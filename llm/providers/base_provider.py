@@ -7,11 +7,11 @@
 
 from abc import ABC, abstractmethod
 from typing import List
+
 from .provider_models import ChatRequest, ChatResponse, ProviderCapability
 
 
 class BaseProvider(ABC):
-
     @abstractmethod
     def chat(self, request: ChatRequest) -> ChatResponse:
         pass

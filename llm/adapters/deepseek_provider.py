@@ -7,25 +7,26 @@
 
 import time
 from typing import List
+
 from openai import OpenAI
+
 from ..providers.base_provider import BaseProvider
 from ..providers.provider_config import ProviderConfig
+from ..providers.provider_exceptions import (
+    AuthenticationError,
+    ModelNotFoundError,
+    ProviderConnectionError,
+    ProviderError,
+    RateLimitError,
+)
 from ..providers.provider_models import (
     ChatRequest,
     ChatResponse,
     ProviderCapability,
 )
-from ..providers.provider_exceptions import (
-    AuthenticationError,
-    RateLimitError,
-    ModelNotFoundError,
-    ProviderConnectionError,
-    ProviderError,
-)
 
 
 class DeepSeekProvider(BaseProvider):
-
     def __init__(self, config: ProviderConfig):
         self._config = config
         self._api_key = config.api_key
@@ -69,20 +70,14 @@ class DeepSeekProvider(BaseProvider):
             supports_system_prompt=True,
             supports_tools=True,
             supports_multimodal=False,
-            max_context_tokens=128000
+            max_context_tokens=128000,
         )
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
             if not self._api_key:
-                raise AuthenticationError(
-                    "DEEPSEEK_API_KEY not set in environment"
-                )
-            self._client = OpenAI(
-                api_key=self._api_key,
-                base_url=self._base_url,
-                timeout=self._timeout
-            )
+                raise AuthenticationError("DEEPSEEK_API_KEY not set in environment")
+            self._client = OpenAI(api_key=self._api_key, base_url=self._base_url, timeout=self._timeout)
         return self._client
 
     def chat(self, request: ChatRequest) -> ChatResponse:
@@ -90,10 +85,7 @@ class DeepSeekProvider(BaseProvider):
         messages = []
 
         if request.system_prompt:
-            messages.append({
-                "role": "system",
-                "content": request.system_prompt
-            })
+            messages.append({"role": "system", "content": request.system_prompt})
 
         messages.extend(request.messages)
 
@@ -122,20 +114,22 @@ class DeepSeekProvider(BaseProvider):
                     total_tokens=usage.total_tokens if usage else 0,
                     metadata={
                         "finish_reason": choice.finish_reason,
-                    }
+                    },
                 )
 
             except Exception as e:
                 error_str = str(e).lower()
 
-                retryable = any([
-                    "timeout" in error_str,
-                    "connection" in error_str,
-                    "nameresolution" in error_str,
-                    "429" in error_str,
-                    "500" in error_str,
-                    "503" in error_str,
-                ])
+                retryable = any(
+                    [
+                        "timeout" in error_str,
+                        "connection" in error_str,
+                        "nameresolution" in error_str,
+                        "429" in error_str,
+                        "500" in error_str,
+                        "503" in error_str,
+                    ]
+                )
 
                 if "401" in error_str or "unauthorized" in error_str:
                     raise AuthenticationError("Invalid DeepSeek API key") from e
@@ -147,17 +141,13 @@ class DeepSeekProvider(BaseProvider):
                     raise ModelNotFoundError(f"Model not found: {model}") from e
                 elif "connection" in error_str or "timeout" in error_str:
                     if not retryable or attempt >= self._max_retry - 1:
-                        raise ProviderConnectionError(
-                            f"Cannot connect to DeepSeek: {str(e)}"
-                        ) from e
+                        raise ProviderConnectionError(f"Cannot connect to DeepSeek: {str(e)}") from e
                 else:
                     if not retryable or attempt >= self._max_retry - 1:
-                        raise ProviderError(
-                            f"DeepSeek error: {str(e)}"
-                        ) from e
+                        raise ProviderError(f"DeepSeek error: {str(e)}") from e
 
                 if retryable and attempt < self._max_retry - 1:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     time.sleep(wait_time)
                     continue
 
@@ -168,10 +158,7 @@ class DeepSeekProvider(BaseProvider):
             client = self._get_client()
             response = client.chat.completions.create(
                 model=self._model,
-                messages=[{
-                    "role": "user",
-                    "content": "ping"
-                }],
+                messages=[{"role": "user", "content": "ping"}],
                 max_tokens=5,
             )
             return response is not None

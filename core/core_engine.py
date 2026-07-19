@@ -5,26 +5,19 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
 
 from agent.agent_runtime import AgentRuntime
-from agent.execution_engine import ExecutionEngine
-from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_dispatcher import ExecutionDispatcher
-from agent.execution.strategies import (
-    RagStrategy,
-    DirectLLMStrategy,
-    ParallelStrategy,
-    MultiStepStrategy,
-    ToolCallingStrategy,
-)
+from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
+from agent.execution_engine import ExecutionEngine
 from agent.execution_plan import StepType
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
 from agent.workflow.workflow_engine import WorkflowEngine
 from agent.workflow.workflow_executor import WorkflowExecutor
 from agent.workflow.workflows import (  # noqa: F401 — auto-registration
+    ComparisonWorkflow,
     DirectChatWorkflow,
     RAGWorkflow,
     ResearchWorkflow,
-    ComparisonWorkflow,
 )
 from config import DEBUG_MODE
 from core.citation_formatter import format_citations
@@ -74,6 +67,7 @@ def _get_store():
     global _store
     if _store is None:
         from storage.chroma_store import ChromaEmbeddingStore
+
         _store = ChromaEmbeddingStore()
     return _store
 
@@ -81,6 +75,7 @@ def _get_store():
 # =========================
 # Knowledge Base
 # =========================
+
 
 def refresh_knowledge_base():
     store = _get_store()
@@ -96,18 +91,20 @@ def refresh_knowledge_base():
     docs = []
     for chunk in chunks:
         embedding = model.encode(chunk["text"], convert_to_tensor=False).tolist()
-        docs.append(VectorDocument(
-            document_id=chunk["document_id"],
-            chunk_id="%s_%d" % (chunk["document_id"], chunk["chunk_id"]),
-            company=chunk["company"],
-            content=chunk["text"],
-            embedding=embedding,
-            metadata={
-                "source": chunk["source"],
-                "quarter": chunk.get("quarter", ""),
-                "collection": "financial_reports",
-            }
-        ))
+        docs.append(
+            VectorDocument(
+                document_id=chunk["document_id"],
+                chunk_id="%s_%d" % (chunk["document_id"], chunk["chunk_id"]),
+                company=chunk["company"],
+                content=chunk["text"],
+                embedding=embedding,
+                metadata={
+                    "source": chunk["source"],
+                    "quarter": chunk.get("quarter", ""),
+                    "collection": "financial_reports",
+                },
+            )
+        )
 
     store.add_documents(docs)
 
@@ -161,9 +158,7 @@ engine.register_handler(StepType.RETRIEVE, _retrieve_handler)
 engine.register_handler(StepType.COMPARE, lambda s, c: None)
 engine.register_handler(StepType.SYNTHESIS, lambda s, c: None)
 
-router = ModelRouter(
-    policy=RoutingPolicy(CapabilityRoutingPolicy())
-)
+router = ModelRouter(policy=RoutingPolicy(CapabilityRoutingPolicy()))
 
 runtime = AgentRuntime(
     planner=query_planner,
@@ -183,16 +178,13 @@ runtime = AgentRuntime(
 # RAG MAIN
 # =========================
 
-def run_rag(question: str, company=None):
 
+def run_rag(question: str, company=None):
     research_mode = detect_research_mode(question)
 
     result = runtime.run(question, company)
 
-    is_direct_chat = (
-        result.workflow
-        and result.workflow.get("type") == "direct_chat"
-    )
+    is_direct_chat = result.workflow and result.workflow.get("type") == "direct_chat"
 
     if is_direct_chat:
         prompt = f"User: {question}\n\nAssistant:"
@@ -250,13 +242,7 @@ def run_rag(question: str, company=None):
 
     evidence_stats = analyze_evidence(result.citations)
 
-    report = build_research_report(
-        question,
-        answer,
-        result.citations,
-        evidence_stats,
-        result.reasoning_result
-    )
+    report = build_research_report(question, answer, result.citations, evidence_stats, result.reasoning_result)
 
     citation_text = format_citations(result.citations)
 

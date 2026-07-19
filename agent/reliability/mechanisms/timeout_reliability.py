@@ -32,7 +32,6 @@ _TIMEOUT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="reliab
 
 
 class TimeoutReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._timeout_count: int = 0
         self._total_timeout_ms: float = 0.0

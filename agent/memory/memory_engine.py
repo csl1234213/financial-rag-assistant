@@ -32,7 +32,6 @@ from .memory_result import MemoryResult
 
 
 class MemoryEngine:
-
     def __init__(self) -> None:
         self._default_memory_type: MemoryType = MemoryType.SESSION
 

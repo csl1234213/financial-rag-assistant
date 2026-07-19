@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 class HealthCheckReliability(BaseReliability):
-
     def __init__(self) -> None:
         self._is_healthy: bool = True
         self._last_check_time: float = 0.0

@@ -22,7 +22,6 @@ from .trace_enums import TraceLevel, TraceStatus, TraceType
 
 @dataclass(slots=True)
 class TraceSpan:
-
     id: str
 
     trace_type: TraceType
@@ -46,7 +45,6 @@ class TraceSpan:
 
 @dataclass(slots=True)
 class TraceEvent:
-
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     level: TraceLevel = TraceLevel.INFO

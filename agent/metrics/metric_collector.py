@@ -22,7 +22,7 @@
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .metric_context import MetricContext
 from .metric_engine import MetricEngine
@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 class MetricCollector:
-
     def __init__(self, engine: MetricEngine) -> None:
         self._engine = engine
         self._events: List[MetricEvent] = []
@@ -83,13 +82,15 @@ class MetricCollector:
         value: float = 1.0,
         labels: Optional[Dict[str, str]] = None,
     ) -> None:
-        self.emit(MetricEvent(
-            name=name,
-            scope=scope,
-            metric_type=MetricType.COUNTER,
-            value=value,
-            labels=labels or {},
-        ))
+        self.emit(
+            MetricEvent(
+                name=name,
+                scope=scope,
+                metric_type=MetricType.COUNTER,
+                value=value,
+                labels=labels or {},
+            )
+        )
 
     def emit_timer(
         self,
@@ -98,13 +99,15 @@ class MetricCollector:
         value: float,
         labels: Optional[Dict[str, str]] = None,
     ) -> None:
-        self.emit(MetricEvent(
-            name=name,
-            scope=scope,
-            metric_type=MetricType.TIMER,
-            value=value,
-            labels=labels or {},
-        ))
+        self.emit(
+            MetricEvent(
+                name=name,
+                scope=scope,
+                metric_type=MetricType.TIMER,
+                value=value,
+                labels=labels or {},
+            )
+        )
 
     def emit_histogram(
         self,
@@ -113,13 +116,15 @@ class MetricCollector:
         value: float,
         labels: Optional[Dict[str, str]] = None,
     ) -> None:
-        self.emit(MetricEvent(
-            name=name,
-            scope=scope,
-            metric_type=MetricType.HISTOGRAM,
-            value=value,
-            labels=labels or {},
-        ))
+        self.emit(
+            MetricEvent(
+                name=name,
+                scope=scope,
+                metric_type=MetricType.HISTOGRAM,
+                value=value,
+                labels=labels or {},
+            )
+        )
 
     # ============================================================
     # Collect
