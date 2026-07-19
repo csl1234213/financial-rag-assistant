@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 LABEL org.opencontainers.image.title="Financial Research Copilot - API"
-LABEL org.opencontainers.image.version="4.3.0"
+LABEL org.opencontainers.image.version="7.3.3"
 LABEL org.opencontainers.image.description="AI Financial Research Platform — FastAPI Backend"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.source="https://github.com/your-org/financial-rag-assistant"
@@ -31,6 +31,9 @@ COPY . .
 # Storage directories
 RUN mkdir -p /app/storage/uploads /app/chroma_db
 
+# Entrypoint
+RUN chmod +x /app/docker/entrypoint.sh
+
 # Non-root user (security hardening)
 RUN adduser --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /app
@@ -41,4 +44,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/docker/entrypoint.sh"]

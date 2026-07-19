@@ -6,7 +6,7 @@ import os
 
 APP_TITLE = "Financial Research Copilot API"
 APP_DESCRIPTION = "Production API for Financial Research Copilot"
-APP_VERSION = os.environ.get("APP_VERSION", "7.3.1")
+APP_VERSION = os.environ.get("APP_VERSION", "7.3.3")
 
 API_HOST = os.environ.get("API_HOST", "0.0.0.0")
 API_PORT = int(os.environ.get("API_PORT", "8000"))

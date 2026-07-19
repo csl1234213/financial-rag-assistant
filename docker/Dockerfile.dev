@@ -4,7 +4,7 @@
 FROM python:3.11.13-slim-bookworm
 
 LABEL org.opencontainers.image.title="Financial Research Copilot - Dev"
-LABEL org.opencontainers.image.version="4.3.0"
+LABEL org.opencontainers.image.version="7.3.3"
 LABEL org.opencontainers.image.description="AI Financial Research Platform — Development Image"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.source="https://github.com/your-org/financial-rag-assistant"
@@ -40,4 +40,4 @@ EXPOSE 8000 8501
 
 # Run both API and UI via supervisord or a script
 # For dev, use docker-compose.dev.yml which handles this with separate services
-CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

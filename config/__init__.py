@@ -45,7 +45,7 @@ LLM_MAX_TOKENS = 1000
 # =========================
 
 APP_ENV = os.environ.get("APP_ENV", "development")
-APP_VERSION = os.environ.get("APP_VERSION", "7.3.1")
+APP_VERSION = os.environ.get("APP_VERSION", "7.3.3")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
