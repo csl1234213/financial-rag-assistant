@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from agent.__version__ import __version__
 from api.routers.chat import router as chat_router
@@ -11,6 +12,13 @@ app = FastAPI(
     title="Financial Research Copilot API",
     description="Production API for Financial Research Copilot",
     version=__version__
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(health_router, prefix="/api/v1")
