@@ -61,7 +61,7 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Run unit tests
-        run: pytest tests/ -m "unit" -v --tb=short --ignore=tests/benchmark
+        run: pytest tests/ -o addopts='' -m "unit" -v --tb=short --ignore=tests/benchmark
 
   # ============================================================
   # 3. Integration Tests — API layer, module collaboration
@@ -92,7 +92,7 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Run integration tests
-        run: pytest tests/ -m "integration" -v --tb=short --ignore=tests/benchmark
+        run: pytest tests/ -o addopts='' -m "integration" -v --tb=short --ignore=tests/benchmark
 
   # ============================================================
   # 4. Coverage — runs after unit + integration, enforces 85%
@@ -123,7 +123,7 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Run full test suite with coverage
-        run: pytest tests/ --cov --cov-report=term --cov-report=html --cov-fail-under=85 --ignore=tests/benchmark
+        run: pytest tests/ -o addopts='' --cov=api --cov=agent --cov=core --cov=llm --cov=storage --cov=config --cov-report=term --cov-report=html --cov-fail-under=85 --ignore=tests/benchmark
 
       - name: Upload coverage report
         if: always()
