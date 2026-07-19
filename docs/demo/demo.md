@@ -7,7 +7,7 @@
 1. Start the server: `uvicorn api.main:app --reload`
 2. Open `http://127.0.0.1:8000/docs`
 3. Execute `GET /api/v1/health`
-4. Capture the response showing `APP_VERSION: "7.3.1"`
+4. Capture the response showing `APP_VERSION: "7.3.3"`
 
 ### 2. Direct Chat Demo (`docs/images/direct_chat_demo.png`)
 

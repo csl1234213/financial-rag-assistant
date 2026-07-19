@@ -10,7 +10,7 @@ from core.intent_analyzer import IntentAnalyzer
 
 
 # ============================================================
-# V7.3.1 Intent Router Regression Matrix
+# Intent Router Regression Matrix
 # ============================================================
 
 @pytest.mark.unit
