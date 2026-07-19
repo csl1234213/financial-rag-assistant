@@ -1,0 +1,30 @@
+{
+  "report": "Tesla's latest quarterly filing shows that automotive revenue remains sensitive to vehicle deliveries and pricing, while energy generation and storage continues to be an important growth contributor. Automotive gross margin faces pressure from production costs and average selling prices. The evidence below is drawn from the Tesla filing used in this local demo.",
+  "reasoning": {
+    "intent": "SINGLE_COMPANY",
+    "companies": ["Tesla"],
+    "research_mode": "COMPANY_ANALYSIS"
+  },
+  "execution": {
+    "strategy": "rag",
+    "provider": "DeepSeek"
+  },
+  "workflow": {
+    "type": "RAG",
+    "status": "COMPLETED"
+  },
+  "citations": [
+    {
+      "filename": "Tesla_Q2_2025.pdf",
+      "page": 14,
+      "similarity": 0.9321,
+      "snippet": "Automotive revenue and gross margin reflect vehicle deliveries, average selling prices, and production costs during the quarter."
+    },
+    {
+      "filename": "Tesla_Q2_2025.pdf",
+      "page": 27,
+      "similarity": 0.8874,
+      "snippet": "Energy generation and storage revenue increased as deployment volumes and Megapack demand expanded."
+    }
+  ]
+}
