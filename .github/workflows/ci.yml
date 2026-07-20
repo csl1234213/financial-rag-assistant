@@ -201,6 +201,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create CI .env
+        run: |
+          cat > .env << 'EOF'
+          USERPROFILE=/tmp
+          LLM_PROVIDER=deepseek
+          DEEPSEEK_API_KEY=
+          EOF
+
       - name: Validate Docker Compose configuration
         run: docker compose config --quiet
 
