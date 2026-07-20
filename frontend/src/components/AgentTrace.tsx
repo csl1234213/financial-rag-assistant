@@ -40,15 +40,15 @@ export function AgentTrace({ response, labels }: AgentTraceProps) {
     {
       title: labels.execution,
       items: [
-        [labels.strategy, response.execution.strategy],
-        [labels.provider, response.execution.provider],
+        [labels.strategy, response.execution?.strategy ?? 'N/A'],
+        [labels.provider, response.execution?.provider ?? 'N/A'],
       ],
     },
     {
       title: labels.workflow,
       items: [
-        [labels.type, response.workflow.type],
-        [labels.status, response.workflow.status],
+        [labels.type, response.workflow?.type ?? 'N/A'],
+        [labels.status, response.workflow?.status ?? 'N/A'],
       ],
     },
   ];

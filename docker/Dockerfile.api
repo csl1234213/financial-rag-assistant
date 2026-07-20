@@ -1,47 +1,61 @@
 # ============================================================
-# financial-api — FastAPI Backend
+# Financial RAG Assistant — Backend API Dockerfile
 # ============================================================
-FROM python:3.11-slim
+# Multi-stage build for FastAPI backend
+# ============================================================
 
-LABEL org.opencontainers.image.title="Financial Research Copilot - API"
-LABEL org.opencontainers.image.version="7.3.3"
-LABEL org.opencontainers.image.description="AI Financial Research Platform — FastAPI Backend"
-LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.source="https://github.com/your-org/financial-rag-assistant"
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Python best practices
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# System dependencies
+# Install system dependencies for PyMuPDF and torch
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+     libgl1 \
+    libglib2.0-0t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# Runtime stage
+# ============================================================
+FROM python:3.12-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0t64 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies (API only — no Streamlit)
-COPY requirements/base.txt requirements/base.txt
-COPY requirements/api.txt requirements/api.txt
-RUN pip install --no-cache-dir -r requirements/api.txt
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
 
-# Application code
-COPY . .
+WORKDIR /app
 
-# Storage directories
-RUN mkdir -p /app/storage/uploads /app/chroma_db
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Entrypoint
-RUN chmod +x /app/docker/entrypoint.sh
+# Copy application code
+COPY --chown=appuser:appuser . .
 
-# Non-root user (security hardening)
-RUN adduser --disabled-password --gecos "" appuser \
-    && chown -R appuser:appuser /app
+# Create data directories
+RUN mkdir -p /app/chroma_db /app/storage/uploads /app/logs && \
+    chown -R appuser:appuser /app/chroma_db /app/storage/uploads /app/logs
+
+# Copy entrypoint
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown appuser:appuser /entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-ENTRYPOINT ["/app/docker/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

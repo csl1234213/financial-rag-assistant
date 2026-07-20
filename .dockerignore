@@ -1,44 +1,20 @@
-# ============================================================
-# .dockerignore
-# ============================================================
-
-# Version control
-.git/
-.gitignore
-.gitattributes
-
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
 *.egg-info/
 .eggs/
 dist/
 build/
+*.egg
 
 # Virtual environments
-.venv/
 venv/
+.venv/
 env/
 
-# Testing
-tests/
-.pytest_cache/
-.coverage
-htmlcov/
-coverage.xml
-chroma_db_test*/
-
-# Runtime data
-chroma_db/
-regression_*.txt
-test_*.txt
-*.log
-
-# Documentation
-docs/
-*.md
-!README.md
+# Node
+frontend/node_modules/
+frontend/dist/
 
 # IDE
 .vscode/
@@ -46,20 +22,34 @@ docs/
 *.swp
 *.swo
 
+# Git
+.git/
+.gitignore
+
 # Environment
 .env
 .env.local
-.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Docker
-docker-compose*.yml
-Dockerfile*
+docker-compose.override.yml
 .dockerignore
 
-# Trae
-.trae/
+# Logs
+logs/
+*.log
 
-# Working data (keep fresh)
+# Uploads
+storage/uploads/*
+
+# ChromaDB
 chroma_db/
-storage/uploads/
-cache/

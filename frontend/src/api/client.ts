@@ -2,16 +2,52 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 export const apiBaseUrl = (configuredBaseUrl || 'http://localhost:8000').replace(/\/+$/, '');
 
+export interface ApiErrorDetail {
+  detail?: string;
+  message?: string;
+  errors?: unknown[];
+  code?: string;
+}
+
 export class ApiClientError extends Error {
   readonly status?: number;
   readonly payload?: unknown;
+  readonly detail: ApiErrorDetail | null;
 
   constructor(message: string, status?: number, payload?: unknown) {
     super(message);
     this.name = 'ApiClientError';
     this.status = status;
     this.payload = payload;
+    this.detail = extractErrorDetail(payload);
   }
+
+  get errorCode(): string | undefined {
+    return this.detail?.code;
+  }
+
+  get errorMessages(): string[] {
+    if (Array.isArray(this.detail?.errors)) {
+      return this.detail.errors
+        .filter((e): e is string | { message: string } => typeof e === 'string' || (typeof e === 'object' && e !== null))
+        .map((e) => (typeof e === 'string' ? e : (e as { message: string }).message));
+    }
+    return [];
+  }
+}
+
+function extractErrorDetail(payload: unknown): ApiErrorDetail | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const p = payload as Record<string, unknown>;
+  const detail: ApiErrorDetail = {};
+
+  if (typeof p.detail === 'string') detail.detail = p.detail;
+  if (typeof p.message === 'string') detail.message = p.message;
+  if (Array.isArray(p.errors)) detail.errors = p.errors;
+  if (typeof p.code === 'string') detail.code = p.code;
+
+  return Object.keys(detail).length > 0 ? detail : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

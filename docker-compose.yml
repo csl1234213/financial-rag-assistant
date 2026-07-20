@@ -1,60 +1,112 @@
 # ============================================================
-# Financial Agent Runtime Assistant — Production Deploy
+# Financial RAG Assistant — Production Docker Compose
 # ============================================================
 # Usage:
-#   docker compose up
-#   docker compose up -d
-#   docker compose down
+#   docker compose up          # foreground
+#   docker compose up -d       # detached
+#   docker compose down        # stop and remove
+#   docker compose build       # rebuild images
 # ============================================================
 # Architecture:
-#   financial-api  (port 8000)  — FastAPI + Agent Runtime
-#   financial-ui   (port 8501)  — Streamlit UI
+#   frontend   (port 3000)  — React/Vite + Nginx
+#   backend    (port 8000)  — FastAPI + Agent Runtime
+#   chromadb   (port 8001)  — Vector Database
 # ============================================================
 
 services:
-  # ---------- FastAPI Backend ----------
-  financial-api:
+  # ==========================================================
+  # ChromaDB — Vector Database
+  # ==========================================================
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: financial-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ==========================================================
+  # FastAPI Backend
+  # ==========================================================
+  backend:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
-    container_name: financial-api
+    container_name: financial-backend
     ports:
       - "8000:8000"
     volumes:
-      - financial_uploads:/app/storage/uploads
-      - financial_chroma:/app/chroma_db
-      - financial_logs:/app/logs
-      - ${USERPROFILE}/.cache/huggingface:/home/appuser/.cache/huggingface
+      - uploads_data:/app/storage/uploads
+      - chroma_local:/app/chroma_db
+      - logs_data:/app/logs
+      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
     env_file:
       - .env
     environment:
-      - HF_ENDPOINT=https://hf-mirror.com
-    networks:
-      - financial_network
-
-  # ---------- Streamlit Frontend ----------
-  financial-ui:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.ui
-    container_name: financial-ui
-    ports:
-      - "8501:8501"
-    volumes:
-      - financial_uploads:/app/storage/uploads:ro
-    environment:
-      - API_BASE_URL=http://financial-api:8000
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
     depends_on:
-      financial-api:
+      chromadb:
         condition: service_healthy
     networks:
       - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ==========================================================
+  # React/Vite Frontend (Nginx)
+  # ==========================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: financial-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
-  financial_uploads:
-  financial_chroma:
-  financial_logs:
+  chroma_data:
+    name: financial_chroma_data
+  chroma_local:
+    name: financial_chroma_local
+  uploads_data:
+    name: financial_uploads
+  logs_data:
+    name: financial_logs
 
 networks:
   financial_network:
     driver: bridge
+    name: financial_network

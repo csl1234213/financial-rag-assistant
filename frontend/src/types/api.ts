@@ -1,0 +1,139 @@
+// ============================================================
+// Unified API Types — aligned with backend schemas
+// ============================================================
+
+// ---- Chat / Agent ----
+
+export interface Citation {
+  filename: string;
+  page: number;
+  similarity: number;
+  snippet: string;
+}
+
+export interface Reasoning {
+  intent: string;
+  companies: string[];
+  research_mode: string;
+}
+
+export interface Execution {
+  strategy: string;
+  provider: string;
+}
+
+export interface Workflow {
+  type: string;
+  status: string;
+}
+
+export interface Plan {
+  steps?: string[];
+  queries?: string[];
+  [key: string]: unknown;
+}
+
+export interface Routing {
+  agent?: string;
+  pipeline?: string;
+  [key: string]: unknown;
+}
+
+export interface Planning {
+  intent?: string;
+  companies?: string[];
+  research_mode?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Full chat response contract matching backend schemas/response.py ChatResponse.
+ */
+export interface ChatResponse {
+  report: string;
+  citations: Citation[];
+  reasoning: Reasoning;
+  plan: Plan;
+  execution_time: number;
+  routing?: Routing;
+  planning?: Planning;
+  execution?: Execution;
+  workflow?: Workflow;
+}
+
+// ---- Knowledge ----
+
+export type DocumentStatus = 'indexed' | 'processing' | 'failed';
+
+export interface KnowledgeDocument {
+  id: string;
+  filename: string;
+  company: string;
+  pages: number;
+  status: DocumentStatus;
+  uploadedAt: string;
+  size?: string;
+}
+
+export interface DocumentDetail extends KnowledgeDocument {
+  chunkCount: number;
+  embeddingStatus: 'completed' | 'pending' | 'failed';
+  vectorStatus: 'stored' | 'pending' | 'failed';
+  fileSize?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DocumentChunk {
+  index: number;
+  content: string;
+  metadata: Record<string, string>;
+  score?: number;
+}
+
+// ---- Retrieval ----
+
+export interface RetrievalChunk {
+  filename: string;
+  page: number;
+  content: string;
+  score: number;
+}
+
+export interface RetrievalMetrics {
+  latencyMs: number;
+  chunkCount: number;
+  retrieverType: string;
+}
+
+export interface RetrievalResponse {
+  query: string;
+  chunks: RetrievalChunk[];
+  metrics: RetrievalMetrics;
+}
+
+// ---- Health ----
+
+export interface HealthResponse {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  version?: string;
+  uptime?: number;
+  components?: Record<string, 'up' | 'down' | 'degraded'>;
+}
+
+// ---- Error ----
+
+export interface ApiErrorDetail {
+  detail?: string;
+  message?: string;
+  errors?: unknown[];
+  code?: string;
+}
+
+// ---- Chat Message (UI) ----
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
