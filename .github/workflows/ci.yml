@@ -137,7 +137,6 @@ jobs:
   # ============================================================
   e2e-real-llm:
     needs: [coverage]
-    if: ${{ secrets.DEEPSEEK_API_KEY != '' }}
     runs-on: ubuntu-latest
     env:
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -164,6 +163,7 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Run e2e tests
+        if: env.DEEPSEEK_API_KEY != ''
         run: pytest tests/ -o addopts='' -m "e2e" --tb=short
 
   # ============================================================
