@@ -123,7 +123,7 @@ jobs:
           pip install -r requirements/dev.txt
 
       - name: Run full test suite with coverage
-        run: pytest tests/ -o addopts='' --cov=api --cov=agent --cov=core --cov=llm --cov=storage --cov=config --cov-report=term --cov-report=html --cov-fail-under=85 --ignore=tests/benchmark
+        run: pytest tests/ -o addopts='' -m "not e2e" --cov=. --cov-report=term --cov-report=html --cov-fail-under=85 --ignore=tests/benchmark
 
       - name: Upload coverage report
         if: always()
@@ -131,6 +131,40 @@ jobs:
         with:
           name: coverage-report
           path: htmlcov/
+
+  # ============================================================
+  # 4.5. E2E Real LLM - only runs when DEEPSEEK_API_KEY is set
+  # ============================================================
+  e2e-real-llm:
+    needs: [coverage]
+    if: ${{ secrets.DEEPSEEK_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/**/*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Run e2e tests
+        run: pytest tests/ -o addopts='' -m "e2e" --tb=short
 
   # ============================================================
   # 5. Frontend — TypeScript and Vite production build
