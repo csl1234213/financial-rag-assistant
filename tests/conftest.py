@@ -17,6 +17,18 @@ def pytest_configure(config):
     )
 
 
+@pytest.fixture(autouse=True)
+def _ensure_providers_registered():
+    from llm.adapters.deepseek_provider import DeepSeekProvider
+    from llm.adapters.gemini_provider import GeminiProvider
+    from llm.providers.provider_registry import ProviderRegistry
+
+    if not ProviderRegistry.has_provider("deepseek"):
+        ProviderRegistry.register("deepseek", DeepSeekProvider)
+    if not ProviderRegistry.has_provider("gemini"):
+        ProviderRegistry.register("gemini", GeminiProvider)
+
+
 @pytest.fixture(scope="session")
 def client():
     return TestClient(app)

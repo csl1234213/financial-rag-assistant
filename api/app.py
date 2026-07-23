@@ -7,6 +7,12 @@ from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
 from api.routers.refresh import router as refresh_router
 from api.routers.upload import router as upload_router
+from api.routers.auth import router as auth_router
+from api.routers.tasks import router as tasks_router
+from api.routers.usage import router as usage_router
+from api.routers.subscription import router as subscription_router
+from api.routers.tenant import router as tenant_router
+
 
 app = FastAPI(
     title="Financial Research Copilot API",
@@ -26,6 +32,12 @@ app.include_router(chat_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(upload_router, prefix="/api/v1")
 app.include_router(refresh_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1/auth")
+app.include_router(tasks_router, prefix="/api/v1")
+app.include_router(usage_router, prefix="/api/v1")
+app.include_router(subscription_router, prefix="/api/v1")
+app.include_router(tenant_router, prefix="/api/v1")
+
 
 
 @app.get("/")

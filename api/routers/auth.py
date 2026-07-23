@@ -16,7 +16,7 @@ from storage.database import get_db
 router = APIRouter(tags=["Auth"])
 
 
-@router.post("/auth/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     try:
         user = AuthService.register(db, email=request.email, password=request.password)
@@ -27,7 +27,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     return RegisterResponse(id=user.id, email=user.email, token=token)
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     token = AuthService.login(db, email=request.email, password=request.password)
     if token is None:
@@ -35,6 +35,6 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     return LoginResponse(access_token=token, token_type="bearer")
 
 
-@router.get("/auth/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
