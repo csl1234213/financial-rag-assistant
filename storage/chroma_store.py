@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import chromadb
 
@@ -73,16 +73,21 @@ class ChromaEmbeddingStore(EmbeddingStore):
         self,
         query_embedding: List[float],
         top_k: int = 5,
+        tenant_id: Optional[str] = None,
     ) -> List[SearchResult]:
         try:
             collections = self.client.list_collections()
             results: List[SearchResult] = []
 
             for c in collections:
-                res = c.query(
-                    query_embeddings=[query_embedding],
-                    n_results=top_k,
-                )
+                query_kwargs = {
+                    "query_embeddings": [query_embedding],
+                    "n_results": top_k,
+                }
+                if tenant_id is not None:
+                    query_kwargs["where"] = {"tenant_id": tenant_id}
+
+                res = c.query(**query_kwargs)
 
                 if not res["ids"][0]:
                     continue

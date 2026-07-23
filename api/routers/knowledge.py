@@ -1,29 +1,36 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
-from core.core_engine import get_chunk_count
-from core.knowledge_manager import (
-    get_company_list,
-    get_document_count,
-    get_documents,
-)
+from auth.dependencies import get_current_user
+from models.document import Document
+from models.user import User
+from storage.database import get_db
 
 router = APIRouter(tags=["Knowledge"])
 
 
 @router.get("/knowledge")
-def knowledge_overview():
+def knowledge_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    docs = db.query(Document).filter(Document.tenant_id == current_user.tenant_id).all()
     return {
-        "documents": get_documents(),
-        "document_count": get_document_count(),
-        "companies": get_company_list(),
+        "documents": [d.filename for d in docs],
+        "document_count": len(docs),
+        "companies": list(set(d.company for d in docs if d.company)),
     }
 
 
 @router.get("/knowledge/statistics")
-def knowledge_statistics():
+def knowledge_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    docs = db.query(Document).filter(Document.tenant_id == current_user.tenant_id).all()
     return {
-        "documents": get_document_count(),
-        "companies": len(get_company_list()),
-        "chunks": get_chunk_count(),
-        "embeddings": get_chunk_count(),
+        "documents": len(docs),
+        "companies": len(set(d.company for d in docs if d.company)),
+        "chunks": 0,
+        "embeddings": 0,
     }
