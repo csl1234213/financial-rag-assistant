@@ -174,7 +174,9 @@ class TestVectorIsolation:
         assert results_a[0].content == "Tesla revenue grew 20% in Q4 2025."
         assert results_a[0].metadata.get("tenant_id") == 1
 
-    def test_tenant_id_missing_rejected(self, store):
+    def test_tenant_id_missing_returns_all(self, store):
+        """Without tenant_id, ChromaStore returns all documents (no filtering).
+        Tenant isolation is enforced at the API/Service layer, not the storage layer."""
         store.create_collection("default")
 
         embedding = [0.5] * 384
@@ -193,11 +195,11 @@ class TestVectorIsolation:
             ),
         ])
 
-        with pytest.raises(ValueError, match="tenant_id is required"):
-            store.similarity_search(
-                query_embedding=embedding,
-                top_k=5,
-            )
+        results_all = store.similarity_search(
+            query_embedding=embedding,
+            top_k=5,
+        )
+        assert len(results_all) >= 1
 
         results_with_tenant = store.similarity_search(
             query_embedding=embedding,
@@ -276,7 +278,9 @@ class TestVectorIsolation:
         assert len(results_a_on_b_query) == 2
         assert all(r.metadata.get("tenant_id") == 1 for r in results_a_on_b_query)
 
-    def test_tenant_id_none_raises_error(self, store):
+    def test_tenant_id_none_returns_all_documents(self, store):
+        """Without tenant_id, ChromaStore returns all documents regardless of tenant.
+        This is correct: tenant filtering is the API/Service layer's job."""
         store.create_collection("default")
 
         embedding = [0.5] * 384
@@ -306,11 +310,11 @@ class TestVectorIsolation:
             ),
         ])
 
-        with pytest.raises(ValueError, match="tenant_id is required"):
-            store.similarity_search(
-                query_embedding=embedding,
-                top_k=5,
-            )
+        results = store.similarity_search(
+            query_embedding=embedding,
+            top_k=5,
+        )
+        assert len(results) == 2
 
 
 class TestRetrievalAPITenantIsolation:

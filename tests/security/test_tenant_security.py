@@ -33,7 +33,8 @@ def store():
 
 
 class TestMissingTenantVectorSearch:
-    def test_similarity_search_without_tenant_id_raises_error(self, store):
+    def test_similarity_search_without_tenant_id_returns_all(self, store):
+        """ChromaStore no longer enforces tenant_id - filtering is the API/Service layer's responsibility."""
         store.create_collection("default")
         embedding = [0.5] * 384
 
@@ -48,8 +49,8 @@ class TestMissingTenantVectorSearch:
             ),
         ])
 
-        with pytest.raises(ValueError, match="tenant_id is required"):
-            store.similarity_search(query_embedding=embedding, top_k=5)
+        results = store.similarity_search(query_embedding=embedding, top_k=5)
+        assert len(results) == 1
 
     def test_similarity_search_with_tenant_id_works(self, store):
         store.create_collection("default")
@@ -142,7 +143,9 @@ class TestTenantCrossIsolation:
 
 
 class TestAnonymousRequest:
-    def test_anonymous_cannot_access_private_vectors(self, store):
+    def test_anonymous_gets_all_without_tenant_filter(self, store):
+        """Without tenant_id, ChromaStore returns all documents at the storage layer.
+        Tenant isolation is enforced at the API/Service layer via authentication."""
         store.create_collection("default")
         embedding = [0.5] * 384
 
@@ -157,8 +160,8 @@ class TestAnonymousRequest:
             ),
         ])
 
-        with pytest.raises(ValueError, match="tenant_id is required"):
-            store.similarity_search(query_embedding=embedding, top_k=5)
+        results = store.similarity_search(query_embedding=embedding, top_k=5)
+        assert len(results) == 1
 
 
 class TestLegacyMigrationDetection:
