@@ -6,12 +6,13 @@ import subprocess
 import time
 import uuid
 
+import pytest
 import requests
 
 BASE = "http://localhost:8000/api/v1"
 RESULTS = []
 
-def test(name, fn):
+def _e2e_test(name, fn):
     try:
         fn()
         RESULTS.append((name, "PASS", ""))
@@ -41,6 +42,7 @@ EMAIL_B = f"test_b_{uid}@example.com"
 # ============================================================
 # 1. Application Health
 # ============================================================
+@pytest.mark.e2e
 def test_health():
     resp = requests.get(f"{BASE}/health")
     assert resp.status_code == 200, f"Status: {resp.status_code}"
@@ -49,13 +51,14 @@ def test_health():
     assert data["service"] == "Financial Research Copilot"
 
 if __name__ == "__main__":
-    test("1.1 Health API", test_health)
+    _e2e_test("1.1 Health API", test_health)
 
 # ============================================================
 # 2. Authentication Flow
 # ============================================================
 tokens = {}
 
+@pytest.mark.e2e
 def test_register():
     resp = requests.post(f"{BASE}/auth/register", json={
         "email": EMAIL_A,
@@ -68,6 +71,7 @@ def test_register():
     assert data["email"] == EMAIL_A
     tokens["user_a"] = data["token"]
 
+@pytest.mark.e2e
 def test_me():
     resp = requests.get(f"{BASE}/auth/me", headers={"Authorization": f"Bearer {tokens['user_a']}"})
     assert resp.status_code == 200, f"Me: {resp.status_code} {resp.text}"
@@ -76,6 +80,7 @@ def test_me():
     assert "tenant" in data, "No tenant"
     assert "id" in data["tenant"], "No tenant id"
 
+@pytest.mark.e2e
 def test_login():
     resp = requests.post(f"{BASE}/auth/login", json={
         "email": EMAIL_A,
@@ -93,6 +98,7 @@ def test_login():
 # ============================================================
 task_ids = {}
 
+@pytest.mark.e2e
 def test_upload_pdf():
     pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\ntrailer<</Size 3/Root 1 0 R>>\n%%EOF"
     files = {"file": ("tesla_report.pdf", io.BytesIO(pdf_content), "application/pdf")}
@@ -104,6 +110,7 @@ def test_upload_pdf():
     assert data["status"] == "pending"
     task_ids["task_a"] = data["task_id"]
 
+@pytest.mark.e2e
 def test_task_processing():
     task_id = task_ids["task_a"]
     headers = {"Authorization": f"Bearer {tokens['user_a']}"}
@@ -123,6 +130,7 @@ def test_task_processing():
 # ============================================================
 # 4. Knowledge Workspace
 # ============================================================
+@pytest.mark.e2e
 def test_knowledge():
     headers = {"Authorization": f"Bearer {tokens['user_a']}"}
     resp = requests.get(f"{BASE}/knowledge", headers=headers)
@@ -134,6 +142,7 @@ def test_knowledge():
 # ============================================================
 # 5. Chat Copilot
 # ============================================================
+@pytest.mark.e2e
 def test_chat():
     headers = {"Authorization": f"Bearer {tokens['user_a']}"}
     resp = requests.post(f"{BASE}/chat", json={
@@ -148,6 +157,7 @@ def test_chat():
 # ============================================================
 # 6. Multi-Tenant Isolation
 # ============================================================
+@pytest.mark.e2e
 def test_tenant_isolation():
     # Register User B
     resp = requests.post(f"{BASE}/auth/register", json={
@@ -193,6 +203,7 @@ def test_tenant_isolation():
 # ============================================================
 # 7. Docker Runtime
 # ============================================================
+@pytest.mark.e2e
 def test_docker_runtime():
     result = subprocess.run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -206,6 +217,7 @@ def test_docker_runtime():
     missing = set(required) - running
     assert len(missing) == 0, f"Missing: {missing}"
 
+@pytest.mark.e2e
 def test_worker_heartbeat():
     result = subprocess.run(["docker", "logs", "financial-rag-assistant-worker-1"],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -215,14 +227,14 @@ def test_worker_heartbeat():
 
 
 if __name__ == "__main__":
-    test("2.1 Register User A", test_register)
-    test("2.2 /auth/me with tenant", test_me)
-    test("2.3 Login returns access_token", test_login)
-    test("3.1 Upload PDF -> task created", test_upload_pdf)
-    test("3.2 Task pending->running->success", test_task_processing)
-    test("4.1 Knowledge /knowledge endpoint", test_knowledge)
-    test("5.1 Chat copilot with question", test_chat)
-    test("6.1 Multi-tenant isolation", test_tenant_isolation)
-    test("7.1 Docker containers healthy", test_docker_runtime)
-    test("7.2 Worker heartbeat running", test_worker_heartbeat)
+    _e2e_test("2.1 Register User A", test_register)
+    _e2e_test("2.2 /auth/me with tenant", test_me)
+    _e2e_test("2.3 Login returns access_token", test_login)
+    _e2e_test("3.1 Upload PDF -> task created", test_upload_pdf)
+    _e2e_test("3.2 Task pending->running->success", test_task_processing)
+    _e2e_test("4.1 Knowledge /knowledge endpoint", test_knowledge)
+    _e2e_test("5.1 Chat copilot with question", test_chat)
+    _e2e_test("6.1 Multi-tenant isolation", test_tenant_isolation)
+    _e2e_test("7.1 Docker containers healthy", test_docker_runtime)
+    _e2e_test("7.2 Worker heartbeat running", test_worker_heartbeat)
     report()
