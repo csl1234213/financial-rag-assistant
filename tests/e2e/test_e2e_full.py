@@ -1,7 +1,12 @@
 """
 Sprint 9.3 Phase 1 — Full End-to-End Validation v4
 """
-import requests, io, json, time, subprocess, uuid
+import io
+import subprocess
+import time
+import uuid
+
+import requests
 
 BASE = "http://localhost:8000/api/v1"
 RESULTS = []
@@ -204,7 +209,7 @@ test("6.1 Multi-tenant isolation", test_tenant_isolation)
 # 7. Docker Runtime
 # ============================================================
 def test_docker_runtime():
-    result = subprocess.run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"], 
+    result = subprocess.run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     services = result.stdout.strip().split("\n")
     required = ["financial-frontend", "financial-backend", "financial-redis", "financial-chromadb"]
@@ -219,11 +224,11 @@ def test_docker_runtime():
 test("7.1 Docker containers healthy", test_docker_runtime)
 
 def test_worker_heartbeat():
-    result = subprocess.run(["docker", "logs", "financial-rag-assistant-worker-1"], 
+    result = subprocess.run(["docker", "logs", "financial-rag-assistant-worker-1"],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     combined = (result.stdout + result.stderr).lower()
     assert "worker runner started" in combined or "waiting for tasks" in combined or "taskworker started" in combined, \
-        f"No heartbeat in logs"
+        "No heartbeat in logs"
 
 test("7.2 Worker heartbeat running", test_worker_heartbeat)
 

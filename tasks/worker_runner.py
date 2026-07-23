@@ -1,6 +1,5 @@
 import logging
 import signal
-import sys
 import time
 
 from storage.database import init_db

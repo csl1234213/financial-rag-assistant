@@ -6,7 +6,6 @@ from sqlalchemy.orm import sessionmaker
 from api.app import app
 from models.document import Document
 from models.tenant import Tenant
-from models.user import User
 from storage.database import Base, get_db
 
 TEST_DATABASE_URL = "sqlite:///./test_knowledge_iso.db"

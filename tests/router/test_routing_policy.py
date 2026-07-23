@@ -9,8 +9,8 @@ import pytest
 from llm.router import RoutingPolicy
 from llm.router.base_policy import BaseRoutingPolicy
 from llm.router.routing_context import RoutingContext
-from llm.router.routing_result import RoutingResult
 from llm.router.routing_enums import TaskType
+from llm.router.routing_result import RoutingResult
 
 
 class _MockInnerPolicy(BaseRoutingPolicy):

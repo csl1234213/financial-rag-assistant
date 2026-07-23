@@ -1,9 +1,9 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from core.tenant_context import get_current_tenant, get_current_tenant_optional
+from core.tenant_context import get_current_tenant_optional
 from models.tenant import Tenant
 from storage.database import get_db
 from tasks.repository import TaskRepository

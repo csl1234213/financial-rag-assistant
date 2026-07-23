@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 
 import pytest
 
-from core.core_engine import run_rag, refresh_knowledge_base
+from core.core_engine import refresh_knowledge_base, run_rag
 
 
 @pytest.mark.e2e

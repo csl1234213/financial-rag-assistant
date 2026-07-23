@@ -10,10 +10,10 @@
 #   5. Workflow Compatibility Matrix
 # ============================================================
 
-import time
 import sys
+import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
@@ -23,38 +23,27 @@ import pytest
 from agent.execution.execution_context import ExecutionContext
 from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_result import ExecutionResult
-from agent.execution.strategies import (
-    RagStrategy,
-    DirectLLMStrategy,
-    ParallelStrategy,
-    MultiStepStrategy,
-    ToolCallingStrategy,
-)
 from agent.execution.strategy_enums import ExecutionStrategyType
-from agent.execution.strategy_registry import StrategyRegistry
 from agent.planning import (
-    TaskType,
     ComplexityLevel,
-    TaskResult,
     ComplexityResult,
+    TaskResult,
+    TaskType,
 )
-from agent.planning.task_models import TaskModel
 from agent.planning.complexity_models import ComplexityModel
+from agent.planning.task_models import TaskModel
 from agent.tools import (
     ToolBridge,
     ToolEngine,
-    ToolContext,
     ToolResult,
     ToolStatus,
-    ToolType,
 )
 from agent.tools.tool_exceptions import ToolNotFound, ToolNotSupported
 from agent.workflow.workflow_context import WorkflowContext
+from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
-from agent.workflow.workflow_enums import WorkflowType
 from llm.router import RoutingContext
-
 
 # ============================================================
 # Helpers
@@ -145,10 +134,10 @@ class TestToolMetadataParsingAccuracy:
         assert tool_params == expected_params
 
     def test_all_workflow_skeleton_metadata_parsed(self):
-        from agent.workflow.workflows.rag_workflow import RAGWorkflow
-        from agent.workflow.workflows.research_workflow import ResearchWorkflow
         from agent.workflow.workflows.comparison_workflow import ComparisonWorkflow
         from agent.workflow.workflows.direct_chat_workflow import DirectChatWorkflow
+        from agent.workflow.workflows.rag_workflow import RAGWorkflow
+        from agent.workflow.workflows.research_workflow import ResearchWorkflow
 
         workflow_ctx = WorkflowContext(
             task=TaskResult(task=TaskModel(task_type=TaskType.DOCUMENT_QA), reason="Test"),

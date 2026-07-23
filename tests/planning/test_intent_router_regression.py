@@ -8,7 +8,6 @@ import pytest
 
 from core.intent_analyzer import IntentAnalyzer
 
-
 # ============================================================
 # Intent Router Regression Matrix
 # ============================================================

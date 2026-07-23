@@ -8,37 +8,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+import pytest
+
+from agent.execution import ExecutionResult, ExecutionStrategyType
+from agent.planning import (
+    ComplexityLevel,
+    ComplexityResult,
+    TaskResult,
+    TaskType,
+)
+from agent.planning.complexity_models import ComplexityModel
+from agent.planning.task_models import TaskModel
 from agent.workflow import (
-    WorkflowType,
     WorkflowContext,
-    WorkflowStep,
-    WorkflowResult,
-    BaseWorkflow,
-    WorkflowNotFound,
+    WorkflowEngine,
     WorkflowFactory,
     WorkflowRegistry,
-    WorkflowEngine,
+    WorkflowResult,
+    WorkflowType,
 )
-from agent.workflow.workflows import (
-    DirectChatWorkflow,
-    RAGWorkflow,
-    ResearchWorkflow,
-    ComparisonWorkflow,
-)
-from agent.planning import (
-    TaskResult,
-    ComplexityResult,
-    TaskType,
-    ComplexityLevel,
-)
-from agent.planning.task_models import TaskModel
-from agent.planning.complexity_models import ComplexityModel
-from agent.execution import ExecutionResult, ExecutionStrategyType
 from llm.router import RoutingContext
-
 
 # ============================================================
 # Fixtures

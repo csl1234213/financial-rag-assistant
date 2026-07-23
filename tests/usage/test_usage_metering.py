@@ -4,8 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import os
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,14 +13,14 @@ from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
-from models.usage import UsageRecord
+from core.usage_events import ResourceType, UsageEvent
 from models.tenant import Tenant
+from models.usage import UsageRecord
 from models.user import User
-from core.usage_events import UsageEvent, ResourceType
 from services.usage_service import (
-    record_usage,
-    record_batch_usage,
     get_usage_summary,
+    record_batch_usage,
+    record_usage,
 )
 from storage.database import Base, get_db
 
@@ -422,6 +422,7 @@ class TestUsageIntegration:
 
     def test_chat_creates_usage(self, client, tenant, db_session, auth_headers):
         from unittest.mock import patch
+
         from api.services.chat_service import ChatService
 
         mock_response = {

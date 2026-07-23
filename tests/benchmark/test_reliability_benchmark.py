@@ -15,15 +15,15 @@
 #  10. Failure Benchmark       — 生产环境故障场景
 # ============================================================
 
-import time
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pytest
 
+import agent.reliability.mechanisms  # noqa: F401
 from agent.reliability import (
     CircuitBreakerPolicy,
     FallbackPolicy,
@@ -32,7 +32,6 @@ from agent.reliability import (
     RateLimiterPolicy,
     ReliabilityContext,
     ReliabilityEngine,
-    ReliabilityResult,
     ReliabilityType,
     RetryPolicy,
     TimeoutPolicy,
@@ -43,9 +42,6 @@ from agent.reliability.mechanisms.health_check_reliability import HealthCheckRel
 from agent.reliability.mechanisms.rate_limiter_reliability import RateLimiterReliability
 from agent.reliability.mechanisms.retry_reliability import RetryReliability
 from agent.reliability.mechanisms.timeout_reliability import TimeoutReliability
-
-import agent.reliability.mechanisms  # noqa: F401
-
 
 # ============================================================
 # 1. Retry Accuracy

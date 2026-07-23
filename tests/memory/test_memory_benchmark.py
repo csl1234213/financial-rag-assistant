@@ -2,6 +2,8 @@ import time
 
 import pytest
 
+from agent.execution.execution_result import ExecutionResult as StrategyResult
+from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.memory.memory_bridge import MemoryBridge
 from agent.memory.memory_engine import MemoryEngine
 from agent.memory.memory_enums import MemoryType
@@ -14,8 +16,6 @@ from agent.planning import (
 from agent.runtime_state import RuntimeState
 from agent.workflow.workflow_enums import WorkflowStatus, WorkflowType
 from agent.workflow.workflow_result import WorkflowResult
-from agent.execution.execution_result import ExecutionResult as StrategyResult
-from agent.execution.strategy_enums import ExecutionStrategyType
 
 
 class TestMemoryBenchmark:

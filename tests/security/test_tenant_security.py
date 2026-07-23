@@ -214,8 +214,9 @@ class TestLegacyMigrationDetection:
 
 class TestAuditMiddleware:
     def test_health_endpoint_has_request_id(self):
-        from api.app import app
         from fastapi.testclient import TestClient
+
+        from api.app import app
 
         with TestClient(app) as client:
             response = client.get("/api/v1/health")
@@ -224,8 +225,9 @@ class TestAuditMiddleware:
     def test_chat_endpoint_without_auth(self):
         from unittest.mock import MagicMock
 
-        from api.app import app
         from fastapi.testclient import TestClient
+
+        from api.app import app
 
         fake_plan = MagicMock()
         fake_plan.intent = "single_company"

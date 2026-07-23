@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import os
-import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -15,12 +14,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
-from models.task import Task as TaskModel, TaskStatus, TaskType
+from models.task import TaskStatus, TaskType
 from models.tenant import Tenant
 from models.user import User
 from storage.database import Base, get_db
-from tasks.repository import TaskRepository, get_task_repository
-from tasks.worker import TaskWorker, start_worker, stop_worker
+from tasks.repository import TaskRepository
 
 TEST_DATABASE_URL = "sqlite:///./test_task_persistence.db"
 

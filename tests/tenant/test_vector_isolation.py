@@ -13,7 +13,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import config.security as security_config
-
 from api.app import app
 from models.tenant import Tenant
 from models.user import User

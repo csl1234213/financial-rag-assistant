@@ -1,18 +1,16 @@
 import os
 
-from config import PDF_DIR
-from core.usage_events import UsageEvent, ResourceType
+import fitz
+
+from core.usage_events import ResourceType, UsageEvent
 from document_loader import chunk_text, clean_text, get_company, get_quarter
 from embedding import load_embedding_model
-from models.document import Document
 from models.task import TaskStatus
 from services.usage_service import record_usage
 from storage.chroma_store import ChromaEmbeddingStore
 from storage.database import SessionLocal
 from storage.vector_models import VectorDocument
 from tasks.repository import TaskRepository
-
-import fitz
 
 
 def process_document_task(task_public_id: str):

@@ -3,11 +3,10 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from config.worker import (
     HEARTBEAT_INTERVAL,
-    MAX_TASK_RUNTIME,
     WORKER_CONCURRENCY,
     WORKER_ID,
     WORKER_POLL_TIMEOUT,
@@ -17,7 +16,7 @@ from tasks.broker import get_broker
 from tasks.heartbeat import get_heartbeat
 from tasks.knowledge_tasks import process_document_task
 from tasks.models import TaskType as TaskTypeEnum
-from tasks.repository import TaskRepository, get_task_repository
+from tasks.repository import get_task_repository
 from tasks.retry import get_retry_count, should_retry
 
 logger = logging.getLogger(__name__)

@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from models.task import Task as TaskModel, TaskStatus, TaskType
+from models.task import Task as TaskModel
+from models.task import TaskStatus, TaskType
 from storage.database import SessionLocal
 
 STALE_TASK_TIMEOUT_MINUTES = 30
@@ -153,7 +154,6 @@ class TaskRepository:
 
 
 def get_task_repository() -> TaskRepository:
-    from storage.database import SessionLocal
 
     db = SessionLocal()
     return TaskRepository(db)

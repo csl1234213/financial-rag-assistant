@@ -8,10 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from llm.router import CapabilityRoutingPolicy, TaskType, RoutingPriority
-from llm.router.routing_context import RoutingContext
-from llm.router.routing_result import RoutingResult
-from llm.providers.provider_registry import ProviderRegistry
 from llm.providers.base_provider import BaseProvider
 from llm.providers.provider_config import ProviderConfig
 from llm.providers.provider_models import (
@@ -19,6 +15,10 @@ from llm.providers.provider_models import (
     ChatResponse,
     ProviderCapability,
 )
+from llm.providers.provider_registry import ProviderRegistry
+from llm.router import CapabilityRoutingPolicy, RoutingPriority, TaskType
+from llm.router.routing_context import RoutingContext
+from llm.router.routing_result import RoutingResult
 
 
 class _MockDeepSeekProvider(BaseProvider):

@@ -10,8 +10,8 @@
 #   5. Performance Benchmark (against latency targets)
 # ============================================================
 
-import time
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -25,11 +25,9 @@ from agent.metrics import (
     MetricEngine,
     MetricFactory,
     MetricRecord,
-    MetricResult,
     MetricScope,
     MetricType,
 )
-
 
 # ============================================================
 # 1. Counter Accuracy

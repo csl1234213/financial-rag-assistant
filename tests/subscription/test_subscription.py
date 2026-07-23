@@ -12,16 +12,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
+from core.usage_events import ResourceType, UsageEvent
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.tenant import Tenant
 from models.user import User
-from models.usage import UsageRecord
-from core.usage_events import UsageEvent, ResourceType
 from services.plan_service import (
-    can_upload,
     can_chat,
-    check_plan_limit,
+    can_upload,
     get_tenant_subscription,
     initialize_default_plans,
 )
@@ -480,6 +478,7 @@ class TestChatLimitEnforcement:
     def test_chat_within_limit(self, client, tenant, db_session, auth_headers):
         initialize_default_plans(db_session)
         from unittest.mock import patch
+
         from api.services.chat_service import ChatService
 
         mock_response = {

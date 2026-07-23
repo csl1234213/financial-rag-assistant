@@ -4,11 +4,10 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from core.usage_events import UsageEvent
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.usage import UsageRecord
-from core.usage_events import UsageEvent
-from storage.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 

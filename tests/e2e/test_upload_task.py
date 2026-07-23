@@ -1,4 +1,7 @@
-import requests, io, json, time
+import io
+import time
+
+import requests
 
 # Re-register since DB was recreated
 resp = requests.post("http://localhost:8000/api/v1/auth/register", json={

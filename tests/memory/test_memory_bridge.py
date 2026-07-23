@@ -194,13 +194,9 @@ class TestMemoryRuntimeIntegration:
 
     def test_agent_runtime_run_with_memory_engine(self):
         from agent.agent_runtime import AgentRuntime
-        from agent.execution_plan import ExecutionPlan, PlanStep, StepStatus, StepType
-        from agent.execution_result import ExecutionResult
+        from agent.execution_plan import ExecutionPlan, PlanStep, StepType
         from agent.planning import (
             ComplexityLevel,
-            ComplexityModel,
-            ComplexityResult,
-            PlanningContext,
             TaskModel,
             TaskResult,
             TaskType,

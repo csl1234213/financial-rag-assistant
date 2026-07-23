@@ -11,20 +11,18 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from agent.execution import (
-    ExecutionEngine,
     ExecutionContext,
-    ExecutionResult,
+    ExecutionEngine,
     ExecutionStrategyType,
-    StrategyRegistry,
 )
 from agent.planning import (
-    TaskType,
     ComplexityLevel,
-    TaskResult,
     ComplexityResult,
+    TaskResult,
+    TaskType,
 )
-from agent.planning.task_models import TaskModel
 from agent.planning.complexity_models import ComplexityModel
+from agent.planning.task_models import TaskModel
 from llm.router import RoutingContext
 
 
@@ -56,13 +54,6 @@ class TestExecutionEngine:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        from agent.execution.strategies import (
-            RagStrategy,
-            DirectLLMStrategy,
-            ParallelStrategy,
-            MultiStepStrategy,
-            ToolCallingStrategy,
-        )
         self.engine = ExecutionEngine()
         yield
 
@@ -174,11 +165,10 @@ class TestExecutionEngine:
     # =========================
 
     def test_priority_ordering(self):
-        from agent.execution import BaseExecutionStrategy
         from agent.execution.strategies import (
-            RagStrategy,
-            ParallelStrategy,
             MultiStepStrategy,
+            ParallelStrategy,
+            RagStrategy,
         )
         r = RagStrategy()
         p = ParallelStrategy()
@@ -191,13 +181,7 @@ class TestExecutionEngine:
     # =========================
 
     def test_planner_imports_still_work(self):
-        from agent.planning import (
-            PlanningContext,
-            TaskAnalyzer,
-            ComplexityAnalyzer,
-        )
         assert True
 
     def test_router_imports_still_work(self):
-        from llm.router import ModelRouter, RoutingPolicy
         assert True

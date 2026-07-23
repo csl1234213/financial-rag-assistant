@@ -13,7 +13,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
-from models.task import TaskStatus as TaskStatusModel, TaskType as TaskTypeModel
+from models.task import TaskStatus as TaskStatusModel
+from models.task import TaskType as TaskTypeModel
 from models.tenant import Tenant
 from models.user import User
 from storage.database import Base, get_db

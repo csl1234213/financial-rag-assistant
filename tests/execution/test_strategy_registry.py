@@ -8,11 +8,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pytest
 
-from agent.execution import StrategyRegistry, BaseExecutionStrategy
-from agent.execution import ExecutionContext, ExecutionResult, ExecutionStrategyType
-from agent.planning import TaskType, ComplexityLevel
+from agent.execution import (
+    BaseExecutionStrategy,
+    ExecutionContext,
+    ExecutionResult,
+    ExecutionStrategyType,
+    StrategyRegistry,
+)
 
 
 class _MockStrategy(BaseExecutionStrategy):
@@ -117,9 +120,10 @@ class TestStrategyRegistry:
     # =========================
 
     def test_auto_registration_on_import(self):
-        from agent.execution import StrategyRegistry
-        import agent.execution.strategies
         import importlib
+
+        import agent.execution.strategies
+        from agent.execution import StrategyRegistry
         importlib.reload(agent.execution.strategies)
         names = StrategyRegistry.list_strategies()
         assert "rag" in names

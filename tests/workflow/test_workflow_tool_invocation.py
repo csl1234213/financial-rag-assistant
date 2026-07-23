@@ -11,34 +11,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import pytest
 
 from agent.execution.execution_context import ExecutionContext
 from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_result import ExecutionResult
 from agent.execution.strategies import (
-    RagStrategy,
     DirectLLMStrategy,
-    ParallelStrategy,
     MultiStepStrategy,
+    ParallelStrategy,
+    RagStrategy,
     ToolCallingStrategy,
 )
 from agent.execution.strategy_enums import ExecutionStrategyType
 from agent.execution.strategy_registry import StrategyRegistry
 from agent.planning import (
-    TaskType,
     ComplexityLevel,
-    TaskResult,
     ComplexityResult,
+    TaskResult,
+    TaskType,
 )
-from agent.planning.task_models import TaskModel
 from agent.planning.complexity_models import ComplexityModel
-from agent.tools import ToolBridge, ToolEngine, ToolContext, ToolResult, ToolStatus, ToolType
-from agent.tools.tool_enums import ToolType as ToolTypeEnum
+from agent.planning.task_models import TaskModel
+from agent.tools import ToolBridge, ToolContext, ToolEngine, ToolResult, ToolStatus
 from agent.workflow.workflow_context import WorkflowContext
+from agent.workflow.workflow_enums import WorkflowType
 from agent.workflow.workflow_models import WorkflowStep
 from agent.workflow.workflow_result import WorkflowResult
-from agent.workflow.workflow_enums import WorkflowType
 from llm.router import RoutingContext
 
 StrategyRegistry.clear()
@@ -318,7 +316,7 @@ class TestWorkflowToolInvocation:
     # ============================================================
 
     def test_tool_parameters_passed_through(self):
-        from unittest.mock import patch, ANY
+        from unittest.mock import patch
 
         workflow = WorkflowResult(
             workflow=WorkflowType.RAG,

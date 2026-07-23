@@ -22,7 +22,6 @@ from agent.planning import (
     TaskAnalyzer,
 )
 
-
 # ============================================================
 # Benchmark Dataset: 40 prompts with expected complexity
 # ============================================================
@@ -217,31 +216,31 @@ class TestPlannerBenchmark:
         # ---- Score Stats ----
         scores = [r["score"] for r in self.results]
         avg_score = sum(scores) / len(scores)
-        print(f"\n  Score Stats:")
+        print("\n  Score Stats:")
         print(f"    Mean:   {avg_score:.4f}")
         print(f"    Min:    {min(scores):.4f}")
         print(f"    Max:    {max(scores):.4f}")
 
         # ---- Distribution ----
-        print(f"\n  Distribution:")
+        print("\n  Distribution:")
         for level, pct in self._distribution.items():
             bar = "#" * int(pct / 2)
             print(f"    {level:<8s} {pct:5.1f}%  {bar}")
 
         # ---- Latency ----
-        print(f"\n  Latency:")
+        print("\n  Latency:")
         print(f"    Average:  {self._avg_latency:.2f} ms")
         print(f"    P99:      {self._p99_latency:.2f} ms")
 
         # ---- Token Reasonableness ----
         tokens = [r["tokens"] for r in self.results]
-        print(f"\n  Token Estimate:")
+        print("\n  Token Estimate:")
         print(f"    Mean:     {sum(tokens) / len(tokens):.0f}")
         print(f"    Range:    {min(tokens)} - {max(tokens)}")
 
         # ---- Cost ----
         costs = [r["cost"] for r in self.results]
-        print(f"\n  Cost Estimate:")
+        print("\n  Cost Estimate:")
         print(f"    Mean:     ${sum(costs) / len(costs):.4f}")
         print(f"    Range:    ${min(costs):.4f} - ${max(costs):.4f}")
 
@@ -256,7 +255,7 @@ class TestPlannerBenchmark:
                 )
 
         # ---- Per-Level Accuracy ----
-        print(f"\n  Per-Level Accuracy:")
+        print("\n  Per-Level Accuracy:")
         for level in ComplexityLevel:
             subset = [r for r in self.results if r["expected"] == level]
             if subset:

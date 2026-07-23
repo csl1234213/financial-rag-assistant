@@ -14,14 +14,14 @@ from agent.tools.implementations import (
     SQLTool,
 )
 from agent.tools.tool_context import ToolContext
-from agent.tools.tool_enums import ToolPriority, ToolStatus, ToolType
+from agent.tools.tool_enums import ToolStatus, ToolType
 from agent.tools.tool_exceptions import (
     ToolError,
     ToolNotFound,
     ToolRegistrationError,
 )
 from agent.tools.tool_factory import ToolFactory
-from agent.tools.tool_models import ToolCapability, ToolMetadata
+from agent.tools.tool_models import ToolMetadata
 from agent.tools.tool_registry import ToolRegistry
 from agent.tools.tool_result import ToolResult
 

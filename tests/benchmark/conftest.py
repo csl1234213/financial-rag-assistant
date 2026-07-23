@@ -1,14 +1,15 @@
 import pytest
+
 from agent.execution import StrategyRegistry
 
 
 @pytest.fixture(autouse=True)
 def _ensure_strategies_registered():
     from agent.execution.strategies import (
-        RagStrategy,
         DirectLLMStrategy,
-        ParallelStrategy,
         MultiStepStrategy,
+        ParallelStrategy,
+        RagStrategy,
         ToolCallingStrategy,
     )
     StrategyRegistry.register("rag", RagStrategy)

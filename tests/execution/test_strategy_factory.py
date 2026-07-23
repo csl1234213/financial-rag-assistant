@@ -11,12 +11,12 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from agent.execution import (
-    StrategyFactory,
-    StrategyRegistry,
     BaseExecutionStrategy,
     ExecutionContext,
     ExecutionResult,
     ExecutionStrategyType,
+    StrategyFactory,
+    StrategyRegistry,
 )
 
 

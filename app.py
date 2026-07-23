@@ -1,7 +1,6 @@
 from core.core_engine import run_rag
 
 
-
 def display_citations(citations):
 
     print()

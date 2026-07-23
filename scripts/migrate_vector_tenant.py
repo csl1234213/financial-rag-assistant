@@ -4,9 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import chromadb
+import chromadb  # noqa: E402
 
-from config.security import DEFAULT_MIGRATION_TENANT
+from config.security import DEFAULT_MIGRATION_TENANT  # noqa: E402
 
 
 def scan_collections(client: chromadb.PersistentClient):
@@ -91,7 +91,7 @@ def main():
 
     stats = scan_collections(client)
 
-    print(f"\n  Before Migration:")
+    print("\n  Before Migration:")
     print(f"  - Total chunks:      {stats['total_chunks']}")
     print(f"  - Missing tenant_id: {stats['missing_tenant_id']}")
     print()
@@ -109,7 +109,7 @@ def main():
     collections = client.list_collections()
     total_migrated = 0
 
-    print(f"\n  After Migration:")
+    print("\n  After Migration:")
     for c in collections:
         if c.count() == 0:
             continue

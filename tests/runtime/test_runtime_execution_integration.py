@@ -11,44 +11,34 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from agent.agent_runtime import AgentRuntime
-from agent.execution import ExecutionContext, ExecutionResult, ExecutionStrategyType
-from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
+from agent.execution import ExecutionStrategyType
 from agent.execution.execution_dispatcher import ExecutionDispatcher
+from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
 from agent.execution.execution_handler import (
-    BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
 from agent.execution.execution_handler_registry import ExecutionHandlerRegistry
 from agent.execution.handlers import (  # noqa: F401 — auto-registration
-    RagHandler,
     DirectLLMHandler,
-    ParallelHandler,
     MultiStepHandler,
+    ParallelHandler,
+    RagHandler,
     ToolCallingHandler,
 )
-from agent.execution.strategies import (
-    RagStrategy,
-    DirectLLMStrategy,
-    ParallelStrategy,
-    MultiStepStrategy,
-    ToolCallingStrategy,
-)
 from agent.execution_engine import ExecutionEngine
+from agent.planning import (
+    ComplexityLevel,
+    ComplexityResult,
+    PlanningContext,
+    TaskResult,
+    TaskType,
+)
+from agent.planning.complexity_models import ComplexityModel
+from agent.planning.task_models import TaskModel
 from agent.query_planner import QueryPlanner
 from agent.reasoning_engine import ReasoningEngine
 from agent.runtime_result import RuntimeResult
-from agent.planning import (
-    PlanningContext,
-    TaskType,
-    ComplexityLevel,
-    TaskResult,
-    ComplexityResult,
-)
-from agent.planning.task_models import TaskModel
-from agent.planning.complexity_models import ComplexityModel
-from llm.router import RoutingContext, ModelRouter, RoutingPolicy, CapabilityRoutingPolicy
-from llm.providers.provider_registry import ProviderRegistry
 from llm.providers.base_provider import BaseProvider
 from llm.providers.provider_config import ProviderConfig
 from llm.providers.provider_models import (
@@ -56,6 +46,8 @@ from llm.providers.provider_models import (
     ChatResponse,
     ProviderCapability,
 )
+from llm.providers.provider_registry import ProviderRegistry
+from llm.router import CapabilityRoutingPolicy, ModelRouter, RoutingContext, RoutingPolicy
 
 
 class _MockProvider(BaseProvider):
@@ -213,27 +205,12 @@ class TestRuntimeExecutionIntegration:
     # =========================
 
     def test_planner_imports_still_work(self):
-        from agent.planning import (
-            PlanningContext,
-            TaskAnalyzer,
-            ComplexityAnalyzer,
-        )
         assert True
 
     def test_router_imports_still_work(self):
-        from llm.router import ModelRouter, RoutingPolicy, CapabilityRoutingPolicy
         assert True
 
     def test_execution_imports_still_work(self):
-        from agent.execution import (
-            ExecutionStrategyType,
-            ExecutionContext,
-            ExecutionResult,
-            ExecutionEngine,
-            StrategyRegistry,
-            StrategyFactory,
-            BaseExecutionStrategy,
-        )
         assert True
 
     # =========================
@@ -269,12 +246,6 @@ class TestRuntimeExecutionIntegration:
 
     def test_dispatcher_dispatch_rag(self):
         from agent.execution.execution_context import ExecutionContext
-        from agent.planning import (
-            TaskType,
-            ComplexityLevel,
-            TaskResult,
-            ComplexityResult,
-        )
 
         task_result = TaskResult(
             task=TaskModel(task_type=TaskType.DOCUMENT_QA),
@@ -284,7 +255,6 @@ class TestRuntimeExecutionIntegration:
             complexity=ComplexityModel(level=ComplexityLevel.LOW),
             reason="test",
         )
-        from llm.router import RoutingContext
         exec_ctx = ExecutionContext(
             task=task_result,
             complexity=complexity_result,
@@ -307,12 +277,6 @@ class TestRuntimeExecutionIntegration:
 
     def test_dispatcher_dispatch_direct_llm(self):
         from agent.execution.execution_context import ExecutionContext
-        from agent.planning import (
-            TaskType,
-            ComplexityLevel,
-            TaskResult,
-            ComplexityResult,
-        )
 
         task_result = TaskResult(
             task=TaskModel(task_type=TaskType.CHAT),
@@ -322,7 +286,6 @@ class TestRuntimeExecutionIntegration:
             complexity=ComplexityModel(level=ComplexityLevel.LOW),
             reason="test",
         )
-        from llm.router import RoutingContext
         exec_ctx = ExecutionContext(
             task=task_result,
             complexity=complexity_result,
@@ -361,12 +324,6 @@ class TestRuntimeExecutionIntegration:
 
     def test_dispatcher_no_handler_no_fallback(self):
         from agent.execution.execution_context import ExecutionContext
-        from agent.planning import (
-            TaskType,
-            ComplexityLevel,
-            TaskResult,
-            ComplexityResult,
-        )
 
         task_result = TaskResult(
             task=TaskModel(task_type=TaskType.COMPARISON),
@@ -376,7 +333,6 @@ class TestRuntimeExecutionIntegration:
             complexity=ComplexityModel(level=ComplexityLevel.HIGH),
             reason="test",
         )
-        from llm.router import RoutingContext
         exec_ctx = ExecutionContext(
             task=task_result,
             complexity=complexity_result,
