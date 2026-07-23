@@ -1,28 +1,98 @@
+# =========================
+# Environment
+# =========================
+
 .env
+frontend/.env
+
+
+# =========================
+# IDE
+# =========================
 
 .idea/
+.vscode/
 
 cache/
 
+
+# =========================
+# Python
+# =========================
+
 __pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+
+
+# =========================
+# Virtual Environment
+# =========================
 
 venv/
-
 .venv/
 
-*.pyc
 
-# Test output
+# =========================
+# Logs / Test Output
+# =========================
+
 test_*.txt
 *.log
 
-# ChromaDB
+
+# =========================
+# Database
+# =========================
+
+*.sqlite3
+*.db
+
+
+# =========================
+# ChromaDB Vector Database
+# =========================
+
 chroma_db/
 chroma_db_test_*/
 
-# Regression outputs
-regression_*.txt
 
+# =========================
+# Runtime Upload Data
+# =========================
+
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+uploads/
+
+
+# =========================
+# Frontend
+# =========================
+
+node_modules/
+dist/
+
+
+# =========================
 # Coverage
+# =========================
+
 .coverage
 htmlcov/
+
+
+# =========================
+# Regression Outputs
+# =========================
+
+regression_*.txt
+
+
+# =========================
+# Private Interview Notes
+# =========================
+
+/docs/interview/
