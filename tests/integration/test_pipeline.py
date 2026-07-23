@@ -8,6 +8,63 @@ import io
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from api.app import app
+from models.tenant import Tenant
+from storage.database import Base, get_db
+
+TEST_DATABASE_URL = "sqlite:///./test_pipeline_integration.db"
+
+engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    Base.metadata.create_all(bind=engine)
+
+    db = TestingSessionLocal()
+    try:
+        existing = db.query(Tenant).filter(Tenant.slug == "default").first()
+        if existing is None:
+            db.add(Tenant(name="Default Workspace", slug="default"))
+            db.commit()
+    finally:
+        db.close()
+
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def client():
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_headers(client):
+    resp = client.post("/api/v1/auth/register", json={
+        "email": "pipeline-test@example.com",
+        "password": "secure123",
+    })
+    assert resp.status_code == 201
+    token = resp.json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
 
 MINIMAL_PDF = (
     b"%PDF-1.4\n"
@@ -76,14 +133,14 @@ class TestPipeline:
         assert len(chat_data["citations"]) >= 1
         assert chat_data["citations"][0]["source"] == "pipeline_test.pdf"
 
-    def test_pipeline_knowledge_after_upload(self, client):
+    def test_pipeline_knowledge_after_upload(self, client, auth_headers):
         with patch("api.routers.refresh.refresh_knowledge_base"):
             client.post(
                 "/api/v1/upload",
                 files={"file": ("knowledge_test.pdf", io.BytesIO(MINIMAL_PDF), "application/pdf")},
             )
 
-        knowledge_response = client.get("/api/v1/knowledge")
+        knowledge_response = client.get("/api/v1/knowledge", headers=auth_headers)
         assert knowledge_response.status_code == 200
         data = knowledge_response.json()
         assert isinstance(data["documents"], list)
