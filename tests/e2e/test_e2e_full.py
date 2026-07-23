@@ -48,7 +48,8 @@ def test_health():
     assert data["status"] == "ok", f"Expected 'ok', got: {data['status']}"
     assert data["service"] == "Financial Research Copilot"
 
-test("1.1 Health API", test_health)
+if __name__ == "__main__":
+    test("1.1 Health API", test_health)
 
 # ============================================================
 # 2. Authentication Flow
@@ -67,8 +68,6 @@ def test_register():
     assert data["email"] == EMAIL_A
     tokens["user_a"] = data["token"]
 
-test("2.1 Register User A", test_register)
-
 def test_me():
     resp = requests.get(f"{BASE}/auth/me", headers={"Authorization": f"Bearer {tokens['user_a']}"})
     assert resp.status_code == 200, f"Me: {resp.status_code} {resp.text}"
@@ -76,8 +75,6 @@ def test_me():
     assert data["email"] == EMAIL_A
     assert "tenant" in data, "No tenant"
     assert "id" in data["tenant"], "No tenant id"
-
-test("2.2 /auth/me with tenant", test_me)
 
 def test_login():
     resp = requests.post(f"{BASE}/auth/login", json={
@@ -90,8 +87,6 @@ def test_login():
     assert token, f"No token: {list(data.keys())}"
     assert data.get("token_type") == "bearer"
     tokens["user_a"] = token
-
-test("2.3 Login returns access_token", test_login)
 
 # ============================================================
 # 3. Upload & Task Processing
@@ -109,8 +104,6 @@ def test_upload_pdf():
     assert data["status"] == "pending"
     task_ids["task_a"] = data["task_id"]
 
-test("3.1 Upload PDF -> task created", test_upload_pdf)
-
 def test_task_processing():
     task_id = task_ids["task_a"]
     headers = {"Authorization": f"Bearer {tokens['user_a']}"}
@@ -127,8 +120,6 @@ def test_task_processing():
             raise AssertionError(f"Task failed: {data.get('error')}")
     raise AssertionError(f"Timed out: {data['status']}")
 
-test("3.2 Task pending->running->success", test_task_processing)
-
 # ============================================================
 # 4. Knowledge Workspace
 # ============================================================
@@ -139,8 +130,6 @@ def test_knowledge():
     data = resp.json()
     assert "documents" in data, "No documents field"
     assert data["document_count"] >= 1, f"Expected at least 1 doc, got {data['document_count']}"
-
-test("4.1 Knowledge /knowledge endpoint", test_knowledge)
 
 # ============================================================
 # 5. Chat Copilot
@@ -155,8 +144,6 @@ def test_chat():
     assert "report" in data, f"No 'report' field: {list(data.keys())}"
     assert "citations" in data, "No 'citations' field"
     assert "execution_time" in data, "No 'execution_time' field"
-
-test("5.1 Chat copilot with question", test_chat)
 
 # ============================================================
 # 6. Multi-Tenant Isolation
@@ -203,8 +190,6 @@ def test_tenant_isolation():
     doc_names_b = [d for d in docs_b["documents"]]
     assert "tesla" not in [d.lower() for d in doc_names_b], f"User B leaked Tesla: {doc_names_b}"
 
-test("6.1 Multi-tenant isolation", test_tenant_isolation)
-
 # ============================================================
 # 7. Docker Runtime
 # ============================================================
@@ -221,8 +206,6 @@ def test_docker_runtime():
     missing = set(required) - running
     assert len(missing) == 0, f"Missing: {missing}"
 
-test("7.1 Docker containers healthy", test_docker_runtime)
-
 def test_worker_heartbeat():
     result = subprocess.run(["docker", "logs", "financial-rag-assistant-worker-1"],
                           capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -230,7 +213,16 @@ def test_worker_heartbeat():
     assert "worker runner started" in combined or "waiting for tasks" in combined or "taskworker started" in combined, \
         "No heartbeat in logs"
 
-test("7.2 Worker heartbeat running", test_worker_heartbeat)
 
-# ============================================================
-report()
+if __name__ == "__main__":
+    test("2.1 Register User A", test_register)
+    test("2.2 /auth/me with tenant", test_me)
+    test("2.3 Login returns access_token", test_login)
+    test("3.1 Upload PDF -> task created", test_upload_pdf)
+    test("3.2 Task pending->running->success", test_task_processing)
+    test("4.1 Knowledge /knowledge endpoint", test_knowledge)
+    test("5.1 Chat copilot with question", test_chat)
+    test("6.1 Multi-tenant isolation", test_tenant_isolation)
+    test("7.1 Docker containers healthy", test_docker_runtime)
+    test("7.2 Worker heartbeat running", test_worker_heartbeat)
+    report()
