@@ -45,6 +45,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: financial-redis
+    command: redis-server --appendonly yes --save 60 1 --save 300 10
     ports:
       - "6379:6379"
     volumes:
@@ -159,6 +160,7 @@ services:
     command: python -m workers.agent_worker
     volumes:
       - agent_memory:/app/storage/memory
+      - chroma_local:/app/chroma_db
       - logs_data:/app/logs
       - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
     env_file:
@@ -170,10 +172,16 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://financial:financial_secret@postgres:5432/financial_rag}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - AGENT_MEMORY_DIR=/app/storage/memory
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
+      - WORKER_POLL_TIMEOUT=${WORKER_POLL_TIMEOUT:-1.0}
+      - MAX_TASK_RUNTIME=${MAX_TASK_RUNTIME:-3600}
+      - WORKER_ID=${WORKER_ID:-agent-worker-1}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
     networks:
       - financial_network
