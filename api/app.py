@@ -2,17 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.__version__ import __version__
+from api.routers.auth import router as auth_router
 from api.routers.chat import router as chat_router
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
 from api.routers.refresh import router as refresh_router
-from api.routers.upload import router as upload_router
-from api.routers.auth import router as auth_router
-from api.routers.tasks import router as tasks_router
-from api.routers.usage import router as usage_router
 from api.routers.subscription import router as subscription_router
+from api.routers.tasks import router as tasks_router
 from api.routers.tenant import router as tenant_router
-
+from api.routers.upload import router as upload_router
+from api.routers.usage import router as usage_router
 
 app = FastAPI(
     title="Financial Research Copilot API",
