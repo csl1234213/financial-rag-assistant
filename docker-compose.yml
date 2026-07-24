@@ -11,9 +11,53 @@
 #   frontend   (port 3000)  — React/Vite + Nginx
 #   backend    (port 8000)  — FastAPI + Agent Runtime
 #   chromadb   (port 8001)  — Vector Database
+#   postgres   (port 5432)  — Relational Database (auth, usage, subscriptions)
+#   redis      (port 6379)  — Cache & Task Queue
 # ============================================================
 
 services:
+  # ==========================================================
+  # PostgreSQL — Relational Database
+  # ==========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: financial-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-financial}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-financial_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-financial_rag}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-financial} -d ${POSTGRES_DB:-financial_rag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================
+  # Redis — Cache & Task Queue
+  # ==========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: financial-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # ==========================================================
   # ChromaDB — Vector Database
   # ==========================================================
@@ -50,6 +94,7 @@ services:
     volumes:
       - uploads_data:/app/storage/uploads
       - chroma_local:/app/chroma_db
+      - agent_memory:/app/storage/memory
       - logs_data:/app/logs
       - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
     env_file:
@@ -58,8 +103,15 @@ services:
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://financial:financial_secret@postgres:5432/financial_rag}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - AGENT_MEMORY_DIR=/app/storage/memory
     depends_on:
       chromadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - financial_network
@@ -105,6 +157,12 @@ volumes:
     name: financial_uploads
   logs_data:
     name: financial_logs
+  postgres_data:
+    name: financial_postgres_data
+  redis_data:
+    name: financial_redis_data
+  agent_memory:
+    name: financial_agent_memory
 
 networks:
   financial_network:
