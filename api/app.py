@@ -8,6 +8,7 @@ from api.routers.billing import router as billing_router
 from api.routers.chat import router as chat_router
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
+from api.routers.monitoring import router as monitoring_router
 from api.routers.refresh import router as refresh_router
 from api.routers.subscription import router as subscription_router
 from api.routers.tasks import router as tasks_router
@@ -40,6 +41,7 @@ app.include_router(subscription_router, prefix="/api/v1")
 app.include_router(tenant_router, prefix="/api/v1")
 app.include_router(agent_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
+app.include_router(monitoring_router, prefix="/api/v1")
 
 
 

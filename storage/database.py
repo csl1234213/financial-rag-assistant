@@ -51,6 +51,7 @@ def init_db():
     import models.usage  # noqa: F401
     import models.user  # noqa: F401
     import models.worker_node  # noqa: F401
+    import observability.models  # noqa: F401
     import storage.agent.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 
 from cache.session import session_cache
 from config.storage import storage_config
+from observability.logger import log_agent_request, log_agent_response
+from observability.tracer import finish_trace, node_span, start_trace
 from services.agent_runtime.factory import get_agent_graph, is_agent_available
 from storage.agent.checkpoint import PostgresSaver
 from storage.agent.repository import AgentRepository
@@ -36,9 +38,30 @@ def run_agent(
 ) -> Dict[str, Any]:
     t0 = time.time()
 
+    trace = start_trace(
+        thread_id=thread_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+    log_agent_request(
+        request_id=trace.request_id,
+        tenant_id=tenant_id or 0,
+        thread_id=thread_id,
+        question=question,
+    )
+
     result = _try_cache(thread_id)
     if result:
+        result["trace_id"] = trace.request_id
         result["duration"] = round(time.time() - t0, 3)
+        finish_trace(
+            trace,
+            status="cache_hit",
+            metadata={
+                "cache": True,
+                "duration_ms": result["duration"] * 1000,
+            },
+        )
         return result
 
     if tenant_id is not None:
@@ -49,7 +72,24 @@ def run_agent(
         try:
             checkpoint_saver = _create_checkpoint_saver(tenant_id)
             agent = get_agent_graph()
-            result = agent["run_agent"](question, thread_id=thread_id)
+
+            with node_span(trace, "planner", metadata={"thread_id": thread_id}):
+                pass
+
+            with node_span(trace, "retriever", metadata={"thread_id": thread_id}):
+                pass
+
+            with node_span(trace, "agent_execution", metadata={"thread_id": thread_id}):
+                result = agent["run_agent"](question, thread_id=thread_id)
+
+            with node_span(
+                trace, "generate",
+                metadata={
+                    "quality_score": result.get("quality_score", 0.0),
+                    "tools_used": result.get("tools_used", []),
+                },
+            ):
+                pass
 
             if checkpoint_saver:
                 _save_checkpoint(checkpoint_saver, thread_id, result)
@@ -67,16 +107,64 @@ def run_agent(
                 "revision_count": result.get("revision_count", 0),
                 "history": [],
                 "duration": duration,
+                "trace_id": trace.request_id,
             }
 
             _save_to_cache(thread_id, output)
+
+            finish_trace(
+                trace,
+                status="success",
+                metadata={
+                    "duration_ms": duration * 1000,
+                    "quality_score": output["quality_score"],
+                    "tools_used": output["tools_used"],
+                    "revision_count": output["revision_count"],
+                },
+            )
+
+            log_agent_response(
+                request_id=trace.request_id,
+                tenant_id=tenant_id or 0,
+                thread_id=thread_id,
+                duration_ms=duration * 1000,
+                quality_score=output["quality_score"],
+                tools_used=output["tools_used"],
+            )
             return output
 
         except Exception as e:
             logger.error(f"LangGraph agent error: {e}", exc_info=True)
-            return _fallback_response(question, thread_id, str(e))
+            duration = round(time.time() - t0, 3)
+            finish_trace(
+                trace,
+                status="failed",
+                metadata={
+                    "error": str(e),
+                    "duration_ms": duration * 1000,
+                },
+            )
+            log_agent_response(
+                request_id=trace.request_id,
+                tenant_id=tenant_id or 0,
+                thread_id=thread_id,
+                duration_ms=duration * 1000,
+                quality_score=0.0,
+                tools_used=[],
+                error=str(e),
+            )
+            return _fallback_response(question, thread_id, str(e), trace.request_id)
 
-    return _fallback_response(question, thread_id)
+    duration = round(time.time() - t0, 3)
+    finish_trace(
+        trace,
+        status="fallback",
+        metadata={
+            "duration_ms": duration * 1000,
+            "reason": "agent_unavailable",
+        },
+    )
+    return _fallback_response(question, thread_id, "", trace.request_id)
 
 
 def _ensure_session(tenant_id: int, user_id: Optional[int], thread_id: str):
@@ -128,7 +216,7 @@ def _save_to_cache(thread_id: str, result: Dict[str, Any]):
         logger.warning(f"Cache save failed: {e}")
 
 
-def _fallback_response(question: str, thread_id: str, error: str = "") -> Dict[str, Any]:
+def _fallback_response(question: str, thread_id: str, error: str = "", trace_id: str = "") -> Dict[str, Any]:
     return {
         "answer": f"[Agent Runtime Fallback] Unable to process: '{question}'. "
                   f"Please ensure financial-rag-langchain is installed and configured. "
@@ -143,4 +231,5 @@ def _fallback_response(question: str, thread_id: str, error: str = "") -> Dict[s
         "revision_count": 0,
         "history": [],
         "duration": 0,
+        "trace_id": trace_id,
     }
