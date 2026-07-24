@@ -87,8 +87,12 @@ def agent_task_handler(task_public_id: str):
                     "tools_used": result.get("tools_used", []),
                     "quality_score": result.get("quality_score", 0.0),
                     "duration": duration,
+                    "latency_ms": int(duration * 1000),
+                    "retrieval_count": len(result.get("sources", [])),
+                    "token_usage": result.get("token_usage", {}),
                     "agent_type": "langgraph_async",
                     "task_id": task_public_id,
+                    "error": None,
                 },
                 db=db_usage,
             )

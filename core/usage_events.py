@@ -5,6 +5,7 @@ class UsageEvent:
     VECTOR_INSERT = "vector_insert"
     CHAT_REQUEST = "chat_request"
     LLM_TOKEN = "llm_token"
+    AGENT_ASYNC_TASK = "agent_async_task"
 
 
 class ResourceType:
