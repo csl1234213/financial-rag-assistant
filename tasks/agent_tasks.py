@@ -2,6 +2,9 @@ import logging
 import time
 from datetime import datetime, timezone
 
+from billing.calculator import calculate_cost
+from billing.models import BillingRecord
+from billing.plans import TOKEN_PRICE_PER_1K_INPUT, TOKEN_PRICE_PER_1K_OUTPUT, TOOL_CALL_PRICE
 from core.usage_events import ResourceType, UsageEvent
 from models.task import TaskStatus
 from services.agent_runtime.runtime import run_agent
@@ -98,6 +101,33 @@ def agent_task_handler(task_public_id: str):
             )
         finally:
             db_usage.close()
+
+        db_billing = SessionLocal()
+        try:
+            token_usage = result.get("token_usage", {})
+            tools_used = result.get("tools_used", [])
+            cost = calculate_cost(
+                token_usage=token_usage,
+                duration_seconds=duration,
+                tool_calls=len(tools_used),
+            )
+            billing = BillingRecord(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                resource_type=ResourceType.CHAT,
+                quantity=1,
+                unit_price=cost["total_cost"],
+                amount=cost["total_cost"],
+                currency=cost["currency"],
+            )
+            db_billing.add(billing)
+            db_billing.commit()
+            logger.info(
+                f"Billing record created for task {task_public_id}: "
+                f"cost=${cost['total_cost']}, tokens={cost['total_tokens']}"
+            )
+        finally:
+            db_billing.close()
 
         logger.info(
             f"Agent task {task_public_id} completed: "

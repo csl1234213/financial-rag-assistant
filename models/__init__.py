@@ -7,7 +7,10 @@ from .usage import UsageRecord
 from .user import User
 from .worker_node import WorkerNode
 
+from billing.models import BillingRecord
+
 __all__ = [
+    "BillingRecord",
     "Document",
     "Plan",
     "Task",

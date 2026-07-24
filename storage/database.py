@@ -42,6 +42,7 @@ def _ensure_default_plans(db: Session):
 
 
 def init_db():
+    import billing.models  # noqa: F401
     import models.document  # noqa: F401
     import models.plan  # noqa: F401
     import models.subscription  # noqa: F401

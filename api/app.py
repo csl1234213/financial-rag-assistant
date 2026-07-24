@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent.__version__ import __version__
 from api.routers.agent import router as agent_router
 from api.routers.auth import router as auth_router
+from api.routers.billing import router as billing_router
 from api.routers.chat import router as chat_router
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
@@ -38,6 +39,7 @@ app.include_router(usage_router, prefix="/api/v1")
 app.include_router(subscription_router, prefix="/api/v1")
 app.include_router(tenant_router, prefix="/api/v1")
 app.include_router(agent_router, prefix="/api/v1")
+app.include_router(billing_router, prefix="/api/v1")
 
 
 
