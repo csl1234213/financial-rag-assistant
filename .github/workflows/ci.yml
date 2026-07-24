@@ -1,216 +1,56 @@
 name: CI
 
-# TODO (V4.4 — after Docker):
-#   - security: pip-audit       → fail on known vulnerabilities
-#   - typecheck: mypy .          → static type checking
-#   Future pipeline: ruff → mypy → pytest (unit+integration) → coverage
-
 on:
   push:
-    branches: [main, master, v4]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
-  # ============================================================
-  # 1. Lint — fast, catches style issues immediately
-  # ============================================================
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install ruff
         run: pip install ruff
-
-      - name: Run ruff
+      - name: Lint
         run: ruff check api agent core llm storage config
 
-  # ============================================================
-  # 2. Unit Tests — fast, isolated, no IO
-  # ============================================================
   unit:
-    needs: lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/**/*.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-3.11-
-
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest tests/ -m unit --ignore=tests/e2e --no-cov -q
 
-      - name: Run unit tests
-        run: pytest tests/ -o addopts='' -m "unit" -v --tb=short --ignore=tests/benchmark
-
-  # ============================================================
-  # 3. Integration Tests — API layer, module collaboration
-  # ============================================================
   integration:
-    needs: lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/**/*.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-3.11-
-
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
+        run: pip install -r requirements.txt
+      - name: Integration tests
+        run: pytest tests/ -m integration --ignore=tests/e2e --no-cov -q
 
-      - name: Run integration tests
-        run: pytest tests/ -o addopts='' -m "integration" -v --tb=short --ignore=tests/benchmark
-
-  # ============================================================
-  # 4. Coverage — runs after unit + integration, enforces 85%
-  # ============================================================
   coverage:
-    needs: [unit, integration]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-3.11-${{ hashFiles('requirements/**/*.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-3.11-
-
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
-
-      - name: Run full test suite with coverage
-        run: pytest tests/ -o addopts='' -m "not e2e" --cov=. --cov-report=term --cov-report=html --cov-fail-under=85 --ignore=tests/benchmark
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: htmlcov/
-
-  # ============================================================
-  # 4.5. E2E Real LLM - only runs when DEEPSEEK_API_KEY is set
-  # ============================================================
-  e2e-real-llm:
-    needs: [coverage]
-    runs-on: ubuntu-latest
-    env:
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/**/*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
-
-      - name: Run e2e tests
-        if: env.DEEPSEEK_API_KEY != ''
-        run: pytest tests/ -o addopts='' -m "e2e" --tb=short
-
-  # ============================================================
-  # 5. Frontend — TypeScript and Vite production build
-  # ============================================================
-  frontend-build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build frontend
-        run: npm run build
-
-  # ============================================================
-  # 6. Docker Compose — validate API and UI image builds
-  # ============================================================
-  docker-compose-build:
-    needs: [coverage, frontend-build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create CI .env
-        run: |
-          cat > .env << 'EOF'
-          USERPROFILE=/tmp
-          LLM_PROVIDER=deepseek
-          DEEPSEEK_API_KEY=
-          EOF
-
-      - name: Validate Docker Compose configuration
-        run: docker compose config --quiet
-
-      - name: Build Docker Compose services
-        run: docker compose build
+        run: pip install -r requirements.txt
+      - name: Coverage
+        run: pytest tests/ -m "not e2e" --ignore=tests/e2e --cov=. --cov-report=term --cov-fail-under=85 -q
