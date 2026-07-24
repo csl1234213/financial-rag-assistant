@@ -23,6 +23,7 @@ class TaskStatus(str, Enum):
 class TaskType(str, Enum):
     PROCESS_DOCUMENT = "process_document"
     REFRESH_KNOWLEDGE = "refresh_knowledge"
+    AGENT_TASK = "agent_task"
 
 
 class Task(Base):

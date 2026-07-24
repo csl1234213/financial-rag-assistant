@@ -1,3 +1,4 @@
+from tasks.agent_tasks import agent_task_handler
 from tasks.broker import TaskBroker, get_broker
 from tasks.heartbeat import WorkerHeartbeat, get_heartbeat
 from tasks.models import TaskStatus as TaskStatusEnum

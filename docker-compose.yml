@@ -148,6 +148,37 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # ==========================================================
+  # Agent Worker — Async Agent Task Execution
+  # ==========================================================
+  agent-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: financial-agent-worker
+    command: python -m workers.agent_worker
+    volumes:
+      - agent_memory:/app/storage/memory
+      - logs_data:/app/logs
+      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
+    env_file:
+      - .env
+    environment:
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://financial:financial_secret@postgres:5432/financial_rag}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - AGENT_MEMORY_DIR=/app/storage/memory
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - financial_network
+    restart: unless-stopped
+
 volumes:
   chroma_data:
     name: financial_chroma_data

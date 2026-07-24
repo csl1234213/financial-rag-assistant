@@ -14,6 +14,7 @@ from config.worker import (
 from models.task import TaskStatus
 from tasks.broker import get_broker
 from tasks.heartbeat import get_heartbeat
+from tasks.agent_tasks import agent_task_handler
 from tasks.knowledge_tasks import process_document_task
 from tasks.models import TaskType as TaskTypeEnum
 from tasks.repository import get_task_repository
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _HANDLERS = {
     TaskTypeEnum.PROCESS_DOCUMENT: process_document_task,
+    TaskTypeEnum.AGENT_TASK: agent_task_handler,
 }
 
 STALE_RECOVERY_INTERVAL_SECONDS = 60
