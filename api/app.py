@@ -15,6 +15,12 @@ from api.routers.tasks import router as tasks_router
 from api.routers.tenant import router as tenant_router
 from api.routers.upload import router as upload_router
 from api.routers.usage import router as usage_router
+from middleware.security import (
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    RequestTimingMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 app = FastAPI(
     title="Financial Research Copilot API",
@@ -27,6 +33,15 @@ app.add_middleware(
     allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestTimingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_window=100,
+    window_seconds=60,
 )
 
 app.include_router(health_router, prefix="/api/v1")
@@ -44,7 +59,25 @@ app.include_router(billing_router, prefix="/api/v1")
 app.include_router(monitoring_router, prefix="/api/v1")
 
 
-
 @app.get("/")
 def root():
     return {"service": "Financial Research Copilot", "version": __version__}
+
+
+@app.get("/health")
+def health_root():
+    from api.routers.health import _check_database, _check_redis
+
+    db_status = _check_database()
+    redis_status = _check_redis()
+
+    overall = "ok" if db_status == "ok" else "degraded"
+
+    return {
+        "status": overall,
+        "service": "Financial Research Copilot",
+        "version": __version__,
+        "api": "ok",
+        "database": db_status,
+        "redis": redis_status,
+    }

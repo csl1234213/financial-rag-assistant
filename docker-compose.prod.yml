@@ -1,0 +1,226 @@
+# ============================================================
+# Financial RAG Assistant — Production Docker Compose
+# ============================================================
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml down
+# ============================================================
+# Architecture:
+#   nginx      (port 80/443)  — Reverse Proxy
+#   api        (port 8000)    — FastAPI Backend
+#   worker     (internal)     — Agent Worker
+#   postgres   (port 5432)    — Relational Database
+#   redis      (port 6379)    — Cache & Task Queue
+#   chromadb   (port 8001)    — Vector Database
+# ============================================================
+
+name: financial-rag-prod
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: financial-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: financial-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/storage/uploads
+      - chroma_data:/app/chroma_db
+      - agent_memory:/app/storage/memory
+      - logs_data:/app/logs
+      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
+    env_file:
+      - .env.production
+    environment:
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:-financial_secret}@postgres:5432/${POSTGRES_DB:-financial_rag}
+      - REDIS_URL=redis://redis:6379/0
+      - AGENT_MEMORY_DIR=/app/storage/memory
+      - APP_ENV=production
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: financial-worker
+    command: python -m workers.agent_worker
+    volumes:
+      - agent_memory:/app/storage/memory
+      - chroma_data:/app/chroma_db
+      - logs_data:/app/logs
+      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
+    env_file:
+      - .env.production
+    environment:
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:-financial_secret}@postgres:5432/${POSTGRES_DB:-financial_rag}
+      - REDIS_URL=redis://redis:6379/0
+      - AGENT_MEMORY_DIR=/app/storage/memory
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
+      - WORKER_POLL_TIMEOUT=${WORKER_POLL_TIMEOUT:-1.0}
+      - MAX_TASK_RUNTIME=${MAX_TASK_RUNTIME:-3600}
+      - WORKER_ID=${WORKER_ID:-agent-worker-1}
+      - APP_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    networks:
+      - financial_network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: financial-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-financial}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-financial_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-financial_rag}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-financial} -d ${POSTGRES_DB:-financial_rag}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  redis:
+    image: redis:7-alpine
+    container_name: financial-redis
+    command: redis-server --appendonly yes --save 60 1 --save 300 10 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: financial-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_volume:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - financial_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+
+volumes:
+  chroma_volume:
+    name: financial_chroma_prod
+  chroma_data:
+    name: financial_chroma_data
+  uploads_data:
+    name: financial_uploads
+  logs_data:
+    name: financial_logs
+  postgres_data:
+    name: financial_postgres_data
+  redis_data:
+    name: financial_redis_data
+  agent_memory:
+    name: financial_agent_memory
+
+networks:
+  financial_network:
+    driver: bridge
+    name: financial_network
