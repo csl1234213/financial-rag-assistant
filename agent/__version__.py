@@ -21,4 +21,9 @@
 #   - Regression:            4/4 passed
 # ============================================================
 
-__version__ = "7.3.3"
+import os
+
+__version__ = os.getenv(
+    "APP_VERSION",
+    "8.1.0"
+)

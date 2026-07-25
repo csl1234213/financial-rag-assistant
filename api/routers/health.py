@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from agent.__version__ import __version__
 from core.knowledge_manager import get_document_count
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Health"])
@@ -16,14 +17,13 @@ def _check_database() -> str:
 
         db = SessionLocal()
         try:
-            db.execute(1)
+            db.execute(text("SELECT 1"))
             return "ok"
         finally:
             db.close()
     except Exception as e:
         logger.warning(f"Database health check failed: {e}")
         return "unavailable"
-
 
 def _check_redis() -> str:
     try:
