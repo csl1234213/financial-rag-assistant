@@ -92,6 +92,7 @@ class TestPlannerBenchmark:
     # Run all benchmarks
     # ============================================================
 
+    @pytest.mark.perf
     def test_benchmark_all(self):
         self._run_all()
         self._assert_accuracy()
@@ -370,6 +371,7 @@ class TestPlannerDetailBenchmarks:
     # Latency Stability
     # ============================================================
 
+    @pytest.mark.perf
     def test_latency_stability(self):
         latencies = []
         for _ in range(20):

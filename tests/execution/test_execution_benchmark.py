@@ -275,6 +275,7 @@ class TestExecutionBenchmark:
     # Full Benchmark Run
     # ============================================================
 
+    @pytest.mark.perf
     def test_full_benchmark(self):
         results: BenchmarkResult = BenchmarkResult()
         dispatch_times: List[float] = []
@@ -429,6 +430,7 @@ class TestExecutionBenchmark:
         for handler_name, is_used in used.items():
             assert is_used, f"Handler {handler_name} was never used"
 
+    @pytest.mark.perf
     def test_dispatch_latency(self):
         latencies: List[float] = []
         for case in BENCHMARK_CASES[:10]:

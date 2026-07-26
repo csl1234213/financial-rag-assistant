@@ -1,4 +1,9 @@
-from typing import Any, Dict, List
+import math
+from typing import Any, Dict, List, Sequence
+
+
+def _normalise(value: str) -> str:
+    return value.strip().lower().rstrip("/")
 
 
 def retrieval_score(sources: List[Dict[str, Any]], expected_sources: List[str]) -> float:
@@ -14,7 +19,7 @@ def retrieval_score(sources: List[Dict[str, Any]], expected_sources: List[str]) 
         if url:
             source_urls.add(url.lower().rstrip("/"))
 
-    expected_urls = set(u.lower().rstrip("/") for u in expected_sources)
+    expected_urls = set(_normalise(u) for u in expected_sources)
 
     if not expected_urls:
         return 100.0 if source_urls else 0.0
@@ -30,6 +35,73 @@ def retrieval_score(sources: List[Dict[str, Any]], expected_sources: List[str]) 
         f1 = 0.0
 
     return round(f1 * 100, 1)
+
+
+def ranked_retrieval_metrics(
+    retrieved_ids: Sequence[str],
+    expected_ids: Sequence[str],
+    k: int | None = None,
+) -> Dict[str, float]:
+    """Calculate deterministic Recall@k, Precision@k, MRR, and nDCG.
+
+    The metric operates on stable chunk/document identifiers from a golden
+    dataset. It intentionally does not pretend to judge semantic quality.
+    """
+    expected = {_normalise(item) for item in expected_ids if item.strip()}
+    if not expected:
+        return {
+            "precision_at_k": 100.0,
+            "recall_at_k": 100.0,
+            "mrr": 100.0,
+            "ndcg": 100.0,
+        }
+
+    cutoff = k or len(retrieved_ids)
+    ranked = [_normalise(item) for item in retrieved_ids[:cutoff] if item.strip()]
+    matched = [item for item in ranked if item in expected]
+    precision = len(matched) / len(ranked) if ranked else 0.0
+    recall = len(set(matched)) / len(expected)
+
+    reciprocal_rank = 0.0
+    dcg = 0.0
+    for rank, item in enumerate(ranked, start=1):
+        if item in expected:
+            if reciprocal_rank == 0.0:
+                reciprocal_rank = 1.0 / rank
+            dcg += 1.0 / math.log2(rank + 1)
+
+    ideal_hits = min(len(expected), cutoff)
+    ideal_dcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+    ndcg = dcg / ideal_dcg if ideal_dcg else 0.0
+
+    return {
+        "precision_at_k": round(precision * 100, 1),
+        "recall_at_k": round(recall * 100, 1),
+        "mrr": round(reciprocal_rank * 100, 1),
+        "ndcg": round(ndcg * 100, 1),
+    }
+
+
+def categorical_match_score(actual: str | None, expected: str | None) -> float:
+    """Score an Agent contract field only when a golden expectation exists."""
+    if not expected:
+        return 100.0
+    if not actual:
+        return 0.0
+    return 100.0 if _normalise(actual) == _normalise(expected) else 0.0
+
+
+def claim_coverage_score(answer: str, reference_claims: Sequence[str]) -> float:
+    """Lexical claim coverage for a labelled golden dataset.
+
+    This is deliberately reported separately from factual faithfulness. It is
+    a deterministic regression signal, not an LLM-as-a-judge substitute.
+    """
+    if not reference_claims:
+        return 100.0
+    answer_lower = answer.lower()
+    covered = sum(1 for claim in reference_claims if claim.lower() in answer_lower)
+    return round(covered / len(reference_claims) * 100, 1)
 
 
 def tool_selection_score(tools_used: List[str], expected_tools: List[str]) -> float:
@@ -61,8 +133,6 @@ def answer_quality_score(
         return 0.0
 
     answer_lower = answer.lower()
-    question_lower = question.lower()
-
     scores = []
 
     if len(answer) >= 20:

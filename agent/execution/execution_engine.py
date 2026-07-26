@@ -44,13 +44,16 @@ class ExecutionEngine:
     - Tool calling
 
     Different from:
-    agent.execution_engine.ExecutionEngine (Step Execution Engine)
+    agent.execution.step_execution_engine.StepExecutionEngine
     which dispatches individual steps to registered handlers.
 
     This engine delegates actual step execution to the Step Execution Engine.
     """
 
     def __init__(self) -> None:
+        from .strategies import register_builtin_strategies
+
+        register_builtin_strategies()
         self._fallback_strategy_name: Optional[str] = None
 
     # ============================================================
@@ -183,3 +186,10 @@ class ExecutionEngine:
             use_tools=False,
             confidence=0.5,
         )
+
+
+# Backward-compatible name for callers that imported this module before the
+# strategy and step engines were given explicit architectural names.
+StrategyExecutionEngine = ExecutionEngine
+
+__all__ = ["ExecutionEngine", "StrategyExecutionEngine"]

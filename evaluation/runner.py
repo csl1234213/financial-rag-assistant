@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from evaluation.dataset import load_golden_dataset
 from evaluation.evaluator import evaluate_agent_response, evaluate_batch
 from services.agent_runtime.runtime import run_agent
 
@@ -19,14 +20,14 @@ def load_dataset(dataset_name: str = "financial_qa.json") -> List[Dict[str, Any]
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    with open(dataset_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if not isinstance(data, list):
-        raise ValueError(f"Dataset must be a list, got {type(data)}")
-
-    logger.info(f"Loaded {len(data)} questions from {dataset_name}")
-    return data
+    dataset = load_golden_dataset(dataset_path)
+    logger.info(
+        "Loaded %d questions from %s (schema=%s)",
+        len(dataset.cases),
+        dataset_name,
+        dataset.schema_version,
+    )
+    return dataset.cases
 
 
 def run_single_evaluation(
@@ -37,6 +38,11 @@ def run_single_evaluation(
     thread_id: str = "eval",
     tenant_id: Optional[int] = None,
     user_id: Optional[int] = None,
+    expected_intent: Optional[str] = None,
+    expected_workflow: Optional[str] = None,
+    expected_strategy: Optional[str] = None,
+    expected_retrieval_ids: Optional[List[str]] = None,
+    reference_claims: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     t0 = time.time()
     result = run_agent(
@@ -46,6 +52,17 @@ def run_single_evaluation(
         user_id=user_id,
     )
     duration = round(time.time() - t0, 3)
+    intent_data = result.get("intent")
+    workflow_data = result.get("workflow")
+    execution_data = result.get("execution")
+    intent = intent_data.get("intent") if isinstance(intent_data, dict) else intent_data
+    workflow_type = workflow_data.get("type") if isinstance(workflow_data, dict) else workflow_data
+    strategy = execution_data.get("strategy") if isinstance(execution_data, dict) else execution_data
+    retrieved_ids = [
+        source.get("chunk_id", "")
+        for source in result.get("sources", [])
+        if isinstance(source, dict)
+    ]
 
     evaluation = evaluate_agent_response(
         answer=result.get("answer", ""),
@@ -56,6 +73,15 @@ def run_single_evaluation(
         expected_tools=expected_tools,
         expected_sources=expected_sources,
         criteria=criteria,
+        intent=intent,
+        workflow_type=workflow_type,
+        strategy=strategy,
+        retrieved_ids=retrieved_ids,
+        expected_intent=expected_intent,
+        expected_workflow=expected_workflow,
+        expected_strategy=expected_strategy,
+        expected_retrieval_ids=expected_retrieval_ids,
+        reference_claims=reference_claims,
     )
 
     return {
@@ -103,6 +129,11 @@ def run_dataset_evaluation(
                 thread_id=f"eval_{qid}",
                 tenant_id=tenant_id,
                 user_id=user_id,
+                expected_intent=item.get("expected_intent"),
+                expected_workflow=item.get("expected_workflow"),
+                expected_strategy=item.get("expected_strategy"),
+                expected_retrieval_ids=item.get("expected_retrieval_ids", []),
+                reference_claims=item.get("reference_claims", []),
             )
             single_result["id"] = qid
             results.append(single_result)

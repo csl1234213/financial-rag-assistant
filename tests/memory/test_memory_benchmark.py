@@ -58,6 +58,7 @@ class TestMemoryBenchmark:
             runtime_state=runtime_state,
         )
 
+    @pytest.mark.perf
     def test_memory_store_latency(self, engine, memory_context):
         iterations = 50
         latencies = []
@@ -79,6 +80,7 @@ class TestMemoryBenchmark:
             f"Memory Store max latency {max_latency:.2f}ms exceeds 100ms threshold"
         )
 
+    @pytest.mark.perf
     def test_memory_retrieve_latency(self, engine, memory_context):
         iterations = 50
         latencies = []
@@ -100,6 +102,7 @@ class TestMemoryBenchmark:
             f"Memory Retrieve max latency {max_latency:.2f}ms exceeds 100ms threshold"
         )
 
+    @pytest.mark.perf
     def test_memory_bridge_latency(self, memory_context):
         task_result = TaskResult(
             task=TaskModel(
