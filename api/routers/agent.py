@@ -2,9 +2,10 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from api.schemas.thread import MAX_THREAD_ID_LENGTH, validate_thread_id
 from auth.dependencies import get_current_user
 from core.usage_events import ResourceType, UsageEvent
 from models.task import TaskType as TaskTypeModel
@@ -20,7 +21,13 @@ router = APIRouter(prefix="/agent", tags=["Agent Chat"])
 
 class AgentChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
-    thread_id: Optional[str] = "default"
+    thread_id: Optional[str] = Field(
+        default="default",
+        min_length=1,
+        max_length=MAX_THREAD_ID_LENGTH,
+    )
+
+    _validate_thread_id = field_validator("thread_id")(validate_thread_id)
 
 
 @router.post("/chat")

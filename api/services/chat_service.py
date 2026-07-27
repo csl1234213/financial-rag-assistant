@@ -2,7 +2,7 @@ import time
 from typing import Optional
 
 from api.schemas.response import ChatResponse
-from core.core_engine import run_rag
+from services.agent_runtime.runtime import run_agent
 
 
 class ChatService:
@@ -19,58 +19,40 @@ class ChatService:
         self,
         question: str,
         company: Optional[str] = None,
+        *,
+        tenant_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        thread_id: Optional[str] = None,
     ) -> ChatResponse:
         t0 = time.time()
 
-        (
-            report,
-            citations,
-            context,
-            research_mode,
-            intent_result,
-            evidence,
-            plan,
-            routing,
-            planning,
-            execution,
-            workflow,
-        ) = run_rag(
+        result = run_agent(
             question,
             company=company,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            thread_id=thread_id or "default",
         )
+        intent_result = result.get("intent") or {}
+        plan_dict = result.get("plan") or {}
 
         reasoning = {
             "intent": intent_result.get("intent", ""),
             "companies": intent_result.get("companies", []),
-            "research_mode": research_mode,
-            "evidence_count": len(evidence),
-        }
-
-        plan_dict = {
-            "intent": plan.intent,
-            "task_count": len(plan.tasks),
-            "tasks": [
-                {
-                    "step_id": t.step_id,
-                    "step_type": t.step_type.value,
-                    "description": t.description,
-                    "company": t.company,
-                    "status": t.status.value,
-                }
-                for t in plan.tasks
-            ],
+            "research_mode": result.get("research_mode", "default"),
+            "evidence_count": result.get("evidence_count", 0),
         }
 
         execution_time = round(time.time() - t0, 3)
 
         return ChatResponse(
-            report=report,
-            citations=citations,
+            report=result.get("answer", ""),
+            citations=result.get("citations", []),
             reasoning=reasoning,
             plan=plan_dict,
             execution_time=execution_time,
-            routing=routing,
-            planning=planning,
-            execution=execution,
-            workflow=workflow,
+            routing=result.get("routing"),
+            planning=result.get("planning"),
+            execution=result.get("execution"),
+            workflow=result.get("workflow"),
         )

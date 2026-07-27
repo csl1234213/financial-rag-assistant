@@ -226,31 +226,24 @@ class TestAuditMiddleware:
             assert response.status_code == 200
 
     def test_chat_endpoint_without_auth(self):
-        from unittest.mock import MagicMock
-
         from fastapi.testclient import TestClient
 
         from api.app import app
 
-        fake_plan = MagicMock()
-        fake_plan.intent = "single_company"
-        fake_plan.tasks = []
-
         with TestClient(app) as client:
-            with patch("api.services.chat_service.run_rag") as mock_run:
-                mock_run.return_value = (
-                    "Test response",
-                    [{"rank": 1, "source": "test.pdf", "chunk_id": "t_0", "similarity": 0.9, "preview": "ok"}],
-                    "",
-                    "default",
-                    {"intent": "SINGLE_COMPANY", "companies": ["Test"]},
-                    [],
-                    fake_plan,
-                    {"provider": "openai", "model": "gpt-4o"},
-                    {"task_type": "document_qa", "complexity": "low"},
-                    {"strategy": "rag"},
-                    {"type": "rag", "status": "DONE", "completed_steps": 3},
-                )
+            with patch("api.services.chat_service.run_agent") as mock_run:
+                mock_run.return_value = {
+                    "answer": "Test response",
+                    "citations": [{"rank": 1, "source": "test.pdf", "chunk_id": "t_0", "similarity": 0.9, "preview": "ok"}],
+                    "research_mode": "default",
+                    "evidence_count": 1,
+                    "intent": {"intent": "SINGLE_COMPANY", "companies": ["Test"]},
+                    "plan": {"intent": "single_company", "task_count": 0, "tasks": []},
+                    "routing": {"provider": "openai", "model": "gpt-4o"},
+                    "planning": {"task_type": "document_qa", "complexity": "low"},
+                    "execution": {"strategy": "rag"},
+                    "workflow": {"type": "rag", "status": "DONE", "completed_steps": 3},
+                }
                 response = client.post(
                     "/api/v1/chat",
                     json={"question": "test"},

@@ -30,6 +30,9 @@ def chat(
     response = chat_service.chat(
         question=request.question,
         company=request.company,
+        tenant_id=current_user.tenant_id if current_user is not None else None,
+        user_id=current_user.id if current_user is not None else None,
+        thread_id=request.thread_id,
     )
 
     if current_user is not None:

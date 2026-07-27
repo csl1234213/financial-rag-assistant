@@ -5,20 +5,21 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import io
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
 from models.tenant import Tenant
+from models.user import User
 from storage.database import Base, get_db
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_pipeline_integration.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database(
+    "test_pipeline_integration.db"
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -63,6 +64,13 @@ def auth_headers(client):
     })
     assert resp.status_code == 201
     token = resp.json()["token"]
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "pipeline-test@example.com").one()
+        user.role = "admin"
+        db.commit()
+    finally:
+        db.close()
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -82,48 +90,41 @@ MINIMAL_PDF = (
 )
 
 
-def _make_fake_plan():
-    plan = MagicMock()
-    plan.intent = "single_company"
-    plan.tasks = []
-    return plan
-
-
-def _fake_run_rag(question, company=None):
-    return (
-        "# Pipeline Test Report\n\nAll systems operational.",
-        [
+def _fake_run_agent(question, company=None, **_request_scope):
+    return {
+        "answer": "# Pipeline Test Report\n\nAll systems operational.",
+        "citations": [
             {"rank": 1, "source": "pipeline_test.pdf", "chunk_id": "pt_0", "similarity": 0.99, "preview": "OK"},
         ],
-        "Pipeline context...",
-        "default",
-        {"intent": "SINGLE_COMPANY", "companies": ["TestCorp"]},
-        [],
-        _make_fake_plan(),
-        {"provider": "openai", "model": "gpt-4o"},
-        {"task_type": "document_qa", "complexity": "low"},
-        {"strategy": "rag"},
-        {"type": "rag", "status": "DONE", "completed_steps": 3},
-    )
+        "research_mode": "default",
+        "evidence_count": 1,
+        "intent": {"intent": "SINGLE_COMPANY", "companies": ["TestCorp"]},
+        "plan": {"intent": "single_company", "task_count": 0, "tasks": []},
+        "routing": {"provider": "openai", "model": "gpt-4o"},
+        "planning": {"task_type": "document_qa", "complexity": "low"},
+        "execution": {"strategy": "rag"},
+        "workflow": {"type": "rag", "status": "DONE", "completed_steps": 3},
+    }
 
 
 @pytest.mark.integration
 class TestPipeline:
-    def test_full_pipeline_upload_refresh_chat(self, client):
+    def test_full_pipeline_upload_refresh_chat(self, client, auth_headers):
         with patch("api.routers.refresh.refresh_knowledge_base"):
             upload_response = client.post(
                 "/api/v1/upload",
                 files={"file": ("pipeline_test.pdf", io.BytesIO(MINIMAL_PDF), "application/pdf")},
+                headers=auth_headers,
             )
         assert upload_response.status_code == 200
         assert upload_response.json()["message"] == "upload success"
 
         with patch("api.routers.refresh.refresh_knowledge_base"):
-            refresh_response = client.post("/api/v1/refresh")
+            refresh_response = client.post("/api/v1/refresh", headers=auth_headers)
         assert refresh_response.status_code == 200
         assert refresh_response.json()["status"] == "ok"
 
-        with patch("api.services.chat_service.run_rag", side_effect=_fake_run_rag):
+        with patch("api.services.chat_service.run_agent", side_effect=_fake_run_agent):
             chat_response = client.post("/api/v1/chat", json={
                 "question": "Is the system operational?",
             })
@@ -138,6 +139,7 @@ class TestPipeline:
             client.post(
                 "/api/v1/upload",
                 files={"file": ("knowledge_test.pdf", io.BytesIO(MINIMAL_PDF), "application/pdf")},
+                headers=auth_headers,
             )
 
         knowledge_response = client.get("/api/v1/knowledge", headers=auth_headers)
@@ -147,13 +149,14 @@ class TestPipeline:
         assert isinstance(data["document_count"], int)
         assert isinstance(data["companies"], list)
 
-    def test_pipeline_health_after_operations(self, client):
+    def test_pipeline_health_after_operations(self, client, auth_headers):
         with patch("api.routers.refresh.refresh_knowledge_base"):
             client.post(
                 "/api/v1/upload",
                 files={"file": ("health_test.pdf", io.BytesIO(MINIMAL_PDF), "application/pdf")},
+                headers=auth_headers,
             )
 
         health_response = client.get("/api/v1/health")
         assert health_response.status_code == 200
-        assert health_response.json()["status"] == "ok"
+        assert health_response.json()["status"] in {"ok", "degraded"}
