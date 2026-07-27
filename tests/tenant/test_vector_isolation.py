@@ -1,15 +1,12 @@
+import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-import shutil
-import uuid
-
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import config.security as security_config
@@ -19,10 +16,9 @@ from models.user import User
 from storage.chroma_store import ChromaEmbeddingStore
 from storage.database import Base, get_db
 from storage.vector_models import VectorDocument
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_vector_iso.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_vector_iso.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -79,11 +75,11 @@ def _reset_security_config():
 
 
 @pytest.fixture
-def store():
-    db_dir = f"./chroma_db_test_{uuid.uuid4().hex[:8]}"
-    s = ChromaEmbeddingStore(persist_directory=db_dir)
-    yield s
-    shutil.rmtree(db_dir, ignore_errors=True)
+def store(tmp_path):
+    chroma_path = tmp_path / "chroma"
+    with ChromaEmbeddingStore(persist_directory=chroma_path) as test_store:
+        yield test_store
+    shutil.rmtree(chroma_path)
 
 
 REGISTER_URL = "/api/v1/auth/register"

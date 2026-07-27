@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import shutil
-import uuid
 from unittest.mock import patch
 
 import pytest
@@ -25,11 +24,11 @@ from storage.vector_models import VectorDocument
 
 
 @pytest.fixture
-def store():
-    db_dir = f"./chroma_db_test_{uuid.uuid4().hex[:8]}"
-    s = ChromaEmbeddingStore(persist_directory=db_dir)
-    yield s
-    shutil.rmtree(db_dir, ignore_errors=True)
+def store(tmp_path):
+    chroma_path = tmp_path / "chroma"
+    with ChromaEmbeddingStore(persist_directory=chroma_path) as test_store:
+        yield test_store
+    shutil.rmtree(chroma_path)
 
 
 class TestMissingTenantVectorSearch:

@@ -31,7 +31,14 @@ class MockEmbeddingStore(EmbeddingStore):
                 self._collections[col] = []
             self._collections[col].append(doc)
 
-    def similarity_search(self, query_embedding, top_k=5):
+    def similarity_search(self, query_embedding, top_k=5, tenant_id=None):
+        documents = self._documents
+        if tenant_id is not None:
+            documents = [
+                document
+                for document in documents
+                if document.metadata.get("tenant_id") == tenant_id
+            ]
         return [
             SearchResult(
                 document_id=doc.document_id,
@@ -40,12 +47,19 @@ class MockEmbeddingStore(EmbeddingStore):
                 content=doc.content,
                 metadata=doc.metadata,
             )
-            for i, doc in enumerate(self._documents[:top_k])
+            for i, doc in enumerate(documents[:top_k])
         ]
 
     def delete_document(self, document_id: str) -> None:
         self._documents = [
             d for d in self._documents if d.document_id != document_id
+        ]
+
+    def delete_by_tenant(self, tenant_id: int) -> None:
+        self._documents = [
+            document
+            for document in self._documents
+            if document.metadata.get("tenant_id") != tenant_id
         ]
 
     def count(self):
@@ -143,6 +157,26 @@ class TestEmbeddingStoreInterface:
         assert store.count() == 1
         store.delete_document("doc_1")
         assert store.count() == 0
+
+    def test_delete_by_tenant(self):
+        store = MockEmbeddingStore()
+        store.add_documents(
+            [
+                VectorDocument(
+                    document_id=f"doc_{tenant_id}",
+                    chunk_id=f"doc_{tenant_id}_0",
+                    company="Test",
+                    content=f"Tenant {tenant_id}",
+                    embedding=[0.1, 0.2, 0.3],
+                    metadata={"tenant_id": tenant_id},
+                )
+                for tenant_id in (1, 2)
+            ]
+        )
+
+        store.delete_by_tenant(1)
+
+        assert [document.document_id for document in store._documents] == ["doc_2"]
 
     def test_similarity_search_top_k(self):
         store = MockEmbeddingStore()
