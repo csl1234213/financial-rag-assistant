@@ -13,6 +13,7 @@ from agent.tools.implementations import (
     RetrievalTool,
     SQLTool,
 )
+from agent.tools.retrieval_contract import trusted_retrieval_adapter
 from agent.tools.tool_context import ToolContext
 from agent.tools.tool_enums import ToolStatus, ToolType
 from agent.tools.tool_exceptions import (
@@ -195,16 +196,16 @@ class TestToolFactory:
         assert ToolFactory.get_default() is None
 
 
-class TestSkeletonTools:
+class TestToolImplementations:
 
     def test_retrieval_tool_metadata(self):
         tool = RetrievalTool()
         meta = tool.metadata
         assert meta.name == "retrieval"
         assert meta.tool_type == ToolType.RETRIEVAL
-        assert meta.version == "1.0.0"
+        assert meta.version == "2.0.0"
         assert meta.capability.supports_parallel is True
-        assert meta.capability.supports_async is True
+        assert meta.capability.supports_async is False
 
     def test_python_tool_metadata(self):
         tool = PythonTool()
@@ -212,51 +213,68 @@ class TestSkeletonTools:
         assert meta.name == "python"
         assert meta.tool_type == ToolType.PYTHON
         assert meta.capability.supports_parallel is False
-        assert meta.capability.supports_async is False
+        assert meta.metadata["availability"] == "disabled"
 
     def test_sql_tool_metadata(self):
         tool = SQLTool()
         meta = tool.metadata
         assert meta.name == "sql"
         assert meta.tool_type == ToolType.SQL
-        assert meta.capability.supports_retry is True
+        assert meta.metadata["availability"] == "disabled"
 
     def test_http_tool_metadata(self):
         tool = HttpTool()
         meta = tool.metadata
         assert meta.name == "http"
         assert meta.tool_type == ToolType.HTTP
-        assert meta.capability.supports_stream is True
+        assert meta.metadata["availability"] == "disabled"
 
     def test_retrieval_tool_supports(self):
         tool = RetrievalTool()
         assert tool.supports(ToolContext()) is True
 
-    def test_retrieval_tool_execute_returns_tool_result(self):
+    def test_retrieval_tool_requires_a_real_contract(self):
         tool = RetrievalTool()
         result = tool.execute(ToolContext())
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.FAILED
         assert result.metadata["tool"] == "RetrievalTool"
-        assert result.metadata["phase"] == "skeleton"
+        assert result.metadata["failure_code"] == "invalid_request"
+
+    def test_retrieval_tool_uses_explicit_trusted_adapter(self):
+        adapter = trusted_retrieval_adapter(
+            lambda request: [{"content": request.query, "source": "report.pdf", "score": 0.8}],
+            name="test_adapter",
+        )
+        result = RetrievalTool().execute(
+            ToolContext(
+                tenant_id=8,
+                parameters={"query": "Revenue growth", "retrieval_adapter": adapter},
+            )
+        )
+        assert result.status == ToolStatus.SUCCESS
+        assert result.output["evidence"][0]["source_filename"] == "report.pdf"
 
     def test_python_tool_execute(self):
         tool = PythonTool()
         result = tool.execute(ToolContext())
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
+        assert result.metadata["availability"] == "disabled"
 
     def test_sql_tool_execute(self):
         tool = SQLTool()
         result = tool.execute(ToolContext())
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
+        assert result.metadata["availability"] == "disabled"
 
     def test_http_tool_execute(self):
         tool = HttpTool()
         result = tool.execute(ToolContext())
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
+        assert result.metadata["availability"] == "disabled"
 
     def test_all_tools_are_base_tool_subclass(self):
         for tool_cls in [RetrievalTool, PythonTool, SQLTool, HttpTool]:

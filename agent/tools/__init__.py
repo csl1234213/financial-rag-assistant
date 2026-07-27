@@ -10,11 +10,27 @@
 # ============================================================
 
 from .base_tool import BaseTool
+from .mcp_adapter import ToolEngineMCPAdapter
+from .retrieval_contract import (
+    RetrievalAdapter,
+    RetrievalContractError,
+    RetrievalEvidence,
+    RetrievalRequest,
+    TrustedRetrievalAdapter,
+    trusted_retrieval_adapter,
+)
+from .tool_authorization import ToolAuthorizationDecision, ToolAuthorizationHook
 from .tool_bridge import ToolBridge
 from .tool_context import ToolContext
 from .tool_engine import ToolEngine
 from .tool_enums import ToolPriority, ToolStatus, ToolType
-from .tool_exceptions import ToolError, ToolNotFound, ToolNotSupported, ToolRegistrationError
+from .tool_exceptions import (
+    ToolAuthorizationDenied,
+    ToolError,
+    ToolNotFound,
+    ToolNotSupported,
+    ToolRegistrationError,
+)
 from .tool_factory import ToolFactory
 from .tool_models import ToolCapability, ToolMetadata
 from .tool_registry import ToolRegistry
@@ -23,9 +39,18 @@ from .tool_result import ToolResult
 __all__ = [
     "BaseTool",
     "ToolBridge",
+    "ToolAuthorizationDecision",
+    "ToolAuthorizationDenied",
+    "ToolAuthorizationHook",
     "ToolCapability",
     "ToolContext",
     "ToolEngine",
+    "ToolEngineMCPAdapter",
+    "RetrievalAdapter",
+    "RetrievalContractError",
+    "RetrievalEvidence",
+    "RetrievalRequest",
+    "TrustedRetrievalAdapter",
     "ToolError",
     "ToolFactory",
     "ToolMetadata",
@@ -37,4 +62,5 @@ __all__ = [
     "ToolResult",
     "ToolStatus",
     "ToolType",
+    "trusted_retrieval_adapter",
 ]

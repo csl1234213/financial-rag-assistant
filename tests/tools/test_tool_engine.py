@@ -13,6 +13,7 @@ from agent.tools.implementations import (
     RetrievalTool,
     SQLTool,
 )
+from agent.tools.retrieval_contract import trusted_retrieval_adapter
 from agent.tools.tool_context import ToolContext
 from agent.tools.tool_engine import ToolEngine
 from agent.tools.tool_enums import ToolStatus, ToolType
@@ -36,6 +37,25 @@ class TestToolEngine:
         ToolRegistry.clear()
         ToolFactory._default_tool = None
 
+    @staticmethod
+    def _retrieval_context() -> ToolContext:
+        adapter = trusted_retrieval_adapter(
+            lambda request: [
+                {
+                    "content": f"Evidence for {request.query}",
+                    "source": "financial-report.pdf",
+                    "score": 0.91,
+                    "document_id": "doc-1",
+                    "chunk_id": "chunk-1",
+                }
+            ],
+            name="test_retriever",
+        )
+        return ToolContext(
+            tenant_id=7,
+            parameters={"query": "Tesla revenue", "retrieval_adapter": adapter},
+        )
+
     # ============================================================
     # Engine creation
     # ============================================================
@@ -50,42 +70,44 @@ class TestToolEngine:
 
     def test_engine_executes_retrieval_tool_by_string(self):
         engine = ToolEngine()
-        result = engine.execute(ToolContext(), "retrieval")
+        result = engine.execute(self._retrieval_context(), "retrieval")
         assert isinstance(result, ToolResult)
         assert result.status == ToolStatus.SUCCESS
         assert result.metadata["tool"] == "RetrievalTool"
+        assert result.output["citations"][0]["source_filename"] == "financial-report.pdf"
 
     def test_engine_executes_sql_tool_by_enum(self):
         engine = ToolEngine()
         result = engine.execute(ToolContext(), ToolType.SQL)
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
         assert result.metadata["tool"] == "SQLTool"
 
     def test_engine_executes_python_tool(self):
         engine = ToolEngine()
         result = engine.execute(ToolContext(), "python")
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
         assert result.metadata["tool"] == "PythonTool"
 
     def test_engine_executes_http_tool(self):
         engine = ToolEngine()
         result = engine.execute(ToolContext(), "http")
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
         assert result.metadata["tool"] == "HttpTool"
 
     def test_engine_executes_all_tools(self):
         engine = ToolEngine()
-        for name, expected_tool in [
-            ("retrieval", "RetrievalTool"),
-            ("python", "PythonTool"),
-            ("sql", "SQLTool"),
-            ("http", "HttpTool"),
+        for name, expected_tool, context, expected_status in [
+            ("retrieval", "RetrievalTool", self._retrieval_context(), ToolStatus.SUCCESS),
+            ("python", "PythonTool", ToolContext(), ToolStatus.SKIPPED),
+            ("sql", "SQLTool", ToolContext(), ToolStatus.SKIPPED),
+            ("http", "HttpTool", ToolContext(), ToolStatus.SKIPPED),
         ]:
-            result = engine.execute(ToolContext(), name)
+            result = engine.execute(context, name)
             assert result.metadata["tool"] == expected_tool
+            assert result.status == expected_status
 
     # ============================================================
     # Registry is called
@@ -100,7 +122,7 @@ class TestToolEngine:
         engine = ToolEngine()
         assert ToolRegistry.has_tool("sql") is True
         result = engine.execute(ToolContext(), "sql")
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
 
     # ============================================================
     # supports() check
@@ -133,7 +155,7 @@ class TestToolEngine:
 
     def test_engine_passes_when_supports_true(self):
         engine = ToolEngine()
-        result = engine.execute(ToolContext(), "retrieval")
+        result = engine.execute(self._retrieval_context(), "retrieval")
         assert result.status == ToolStatus.SUCCESS
 
     # ============================================================
@@ -150,7 +172,7 @@ class TestToolEngine:
                 self.before_called = True
 
         engine = HookedEngine()
-        result = engine.execute(ToolContext(), "retrieval")
+        result = engine.execute(self._retrieval_context(), "retrieval")
         assert engine.before_called is True
         assert result.status == ToolStatus.SUCCESS
 
@@ -169,7 +191,7 @@ class TestToolEngine:
         result = engine.execute(ToolContext(), "sql")
         assert engine.after_called is True
         assert engine.after_result is result
-        assert engine.after_result.status == ToolStatus.SUCCESS
+        assert engine.after_result.status == ToolStatus.SKIPPED
 
     def test_both_hooks_called_in_order(self):
         call_order = []
@@ -191,17 +213,22 @@ class TestToolEngine:
 
     def test_engine_returns_tool_result(self):
         engine = ToolEngine()
-        result = engine.execute(ToolContext(), "retrieval")
+        result = engine.execute(self._retrieval_context(), "retrieval")
         assert isinstance(result, ToolResult)
         assert result.status == ToolStatus.SUCCESS
-        assert result.metadata["phase"] == "skeleton"
+        assert result.metadata["status"] == "completed"
+
+    def test_engine_reports_missing_retrieval_contract_without_fake_success(self):
+        result = ToolEngine().execute(ToolContext(), "retrieval")
+        assert result.status == ToolStatus.FAILED
+        assert result.metadata["failure_code"] == "invalid_request"
 
     def test_engine_with_context_parameters(self):
         engine = ToolEngine()
         ctx = ToolContext(parameters={"query": "SELECT * FROM users", "limit": 10})
         result = engine.execute(ctx, "sql")
         assert isinstance(result, ToolResult)
-        assert result.status == ToolStatus.SUCCESS
+        assert result.status == ToolStatus.SKIPPED
 
     # ============================================================
     # Runtime coupling

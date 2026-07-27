@@ -2,7 +2,8 @@
 # PythonTool — Python 代码执行工具
 # ============================================================
 # 在沙箱中执行 Python 代码片段。
-# 当前为骨架实现，execute() 返回固定 ToolResult。
+# Python execution is intentionally disabled.  This tool never evaluates
+# request-provided code and is not a sandbox implementation.
 # ============================================================
 
 from agent.tools.base_tool import BaseTool
@@ -18,14 +19,10 @@ class PythonTool(BaseTool):
         return ToolMetadata(
             name="python",
             tool_type=ToolType.PYTHON,
-            description="Execute Python code in a sandboxed environment",
+            description="Disabled: arbitrary Python execution is not available",
             version="1.0.0",
-            capability=ToolCapability(
-                supports_parallel=False,
-                supports_stream=True,
-                supports_retry=False,
-                supports_async=False,
-            ),
+            capability=ToolCapability(),
+            metadata={"availability": "disabled"},
         )
 
     def supports(self, context: ToolContext) -> bool:
@@ -33,9 +30,9 @@ class PythonTool(BaseTool):
 
     def execute(self, context: ToolContext) -> ToolResult:
         return ToolResult(
-            status=ToolStatus.SUCCESS,
+            status=ToolStatus.SKIPPED,
             output=None,
             latency_ms=0.0,
-            error=None,
-            metadata={"tool": "PythonTool", "phase": "skeleton"},
+            error="Python execution is disabled; no sandbox is configured",
+            metadata={"tool": "PythonTool", "availability": "disabled"},
         )

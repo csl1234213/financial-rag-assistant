@@ -28,3 +28,7 @@ class ToolContext:
     execution: Optional["StrategyResult"] = None
     memory: Optional["MemoryResult"] = None
     parameters: Dict[str, Any] = field(default_factory=dict)
+    # The application composition layer sets this value from authenticated
+    # request scope.  Tools must not derive tenant scope from user-controlled
+    # ``parameters``.
+    tenant_id: Optional[int] = None

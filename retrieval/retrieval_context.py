@@ -22,3 +22,8 @@ class RetrievalContext:
     top_k: int = 5
     collection: str = "financial_reports"
     filters: Dict[str, str] = field(default_factory=dict)
+    # A request must always be scoped to a tenant.  Tenant ``0`` is the
+    # intentionally public/demo knowledge base; positive values are private
+    # tenant workspaces.
+    tenant_id: int = 0
+    include_public: bool = False

@@ -2,7 +2,8 @@
 # HttpTool — HTTP 请求工具
 # ============================================================
 # 发送 HTTP 请求并返回响应。
-# 当前为骨架实现，execute() 返回固定 ToolResult。
+# HTTP execution is intentionally disabled.  This tool never issues
+# request-controlled network calls.
 # ============================================================
 
 from agent.tools.base_tool import BaseTool
@@ -18,14 +19,10 @@ class HttpTool(BaseTool):
         return ToolMetadata(
             name="http",
             tool_type=ToolType.HTTP,
-            description="Send HTTP requests to external APIs",
+            description="Disabled: outbound HTTP calls are not approved",
             version="1.0.0",
-            capability=ToolCapability(
-                supports_parallel=True,
-                supports_stream=True,
-                supports_retry=True,
-                supports_async=True,
-            ),
+            capability=ToolCapability(),
+            metadata={"availability": "disabled"},
         )
 
     def supports(self, context: ToolContext) -> bool:
@@ -33,9 +30,9 @@ class HttpTool(BaseTool):
 
     def execute(self, context: ToolContext) -> ToolResult:
         return ToolResult(
-            status=ToolStatus.SUCCESS,
+            status=ToolStatus.SKIPPED,
             output=None,
             latency_ms=0.0,
-            error=None,
-            metadata={"tool": "HttpTool", "phase": "skeleton"},
+            error="HTTP execution is disabled; no outbound network adapter is configured",
+            metadata={"tool": "HttpTool", "availability": "disabled"},
         )

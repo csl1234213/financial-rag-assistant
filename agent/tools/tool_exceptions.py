@@ -24,3 +24,7 @@ class ToolRegistrationError(ToolError):
 
 class ToolNotSupported(ToolError):
     pass
+
+
+class ToolAuthorizationDenied(ToolError):
+    pass

@@ -26,8 +26,9 @@ import logging
 from typing import Union
 
 from .base_tool import BaseTool
+from .tool_authorization import ToolAuthorizationHook, evaluate_authorization
 from .tool_context import ToolContext
-from .tool_enums import ToolType
+from .tool_enums import ToolStatus, ToolType
 from .tool_exceptions import ToolNotSupported
 from .tool_factory import ToolFactory
 from .tool_result import ToolResult
@@ -36,8 +37,13 @@ logger = logging.getLogger(__name__)
 
 
 class ToolEngine:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, authorization_hook: ToolAuthorizationHook | None = None) -> None:
+        # ``None`` preserves the original engine behavior for all existing
+        # callers.  Governance-aware entry points can opt in explicitly.
+        from agent.tools.implementations import register_builtin_tools
+
+        register_builtin_tools()
+        self._authorization_hook = authorization_hook
 
     # ============================================================
     # Execute
@@ -48,6 +54,12 @@ class ToolEngine:
         context: ToolContext,
         tool: Union[str, ToolType],
     ) -> ToolResult:
+        tool_name = tool.value if isinstance(tool, ToolType) else tool
+
+        denied_result = self._authorization_denied_result(tool_name, context)
+        if denied_result is not None:
+            return denied_result
+
         tool_instance = self._create_tool(tool)
 
         if not tool_instance.supports(context):
@@ -74,6 +86,34 @@ class ToolEngine:
 
     def after_execute(self, result: ToolResult) -> None:
         pass
+
+    # ============================================================
+    # Optional authorization extension
+    # ============================================================
+
+    def _authorization_denied_result(
+        self,
+        tool_name: str,
+        context: ToolContext,
+    ) -> ToolResult | None:
+        if self._authorization_hook is None:
+            return None
+
+        decision = evaluate_authorization(self._authorization_hook, tool_name, context)
+        if decision.allowed:
+            return None
+        return ToolResult(
+            status=ToolStatus.SKIPPED,
+            error=decision.reason or f"Tool '{tool_name}' was not authorized",
+            metadata={
+                "tool": tool_name,
+                "governance": {
+                    "decision": "deny",
+                    "reason": decision.reason,
+                    **dict(decision.metadata),
+                },
+            },
+        )
 
     # ============================================================
     # Internal helpers
