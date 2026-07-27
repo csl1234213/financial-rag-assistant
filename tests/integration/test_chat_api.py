@@ -150,6 +150,25 @@ class TestChatAPI:
         response = client.post("/api/v1/chat", json={})
         assert response.status_code == 422
 
+    def test_openapi_exposes_typed_chat_response_contract(self, client):
+        schemas = client.get("/openapi.json").json()["components"]["schemas"]
+
+        citation_properties = schemas["Citation"]["properties"]
+        assert {
+            "rank",
+            "source",
+            "chunk_id",
+            "similarity",
+            "preview",
+        }.issubset(citation_properties)
+        assert "filename" not in citation_properties
+        assert "snippet" not in citation_properties
+
+        routing_properties = schemas["Routing"]["properties"]
+        execution_properties = schemas["Execution"]["properties"]
+        assert "provider" in routing_properties
+        assert "provider" not in execution_properties
+
     def test_chat_with_company_filter(self, client):
         with patch(
             "api.services.chat_service.run_agent",
