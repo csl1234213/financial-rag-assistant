@@ -1,33 +1,20 @@
+import json
 import logging
-import os
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from cache.session import session_cache
-from config.storage import storage_config
 from observability.logger import log_agent_request, log_agent_response
 from observability.tracer import finish_trace, node_span, start_trace
+from services.agent_runtime.checkpointing import (
+    agent_checkpointer,
+    scoped_checkpoint_thread_id,
+)
 from services.agent_runtime.factory import get_agent_graph, is_agent_available
-from storage.agent.checkpoint import PostgresSaver
 from storage.agent.repository import AgentRepository
 from storage.database import SessionLocal
 
 logger = logging.getLogger(__name__)
-
-
-def _get_memory_path(tenant_id: int) -> str:
-    memory_dir = Path(storage_config.agent_memory_dir)
-    memory_dir.mkdir(parents=True, exist_ok=True)
-    db_path = memory_dir / f"tenant_{tenant_id}.db"
-    return str(db_path.resolve())
-
-
-def _set_tenant_memory_path(tenant_id: int):
-    db_path = _get_memory_path(tenant_id)
-    os.environ["LANGGRAPH_CHECKPOINT_DB"] = db_path
-    os.environ["LANGGRAPH_CHECKPOINT_DB_PATH"] = db_path
-    return db_path
 
 
 def run_agent(
@@ -35,8 +22,16 @@ def run_agent(
     thread_id: str = "default",
     tenant_id: Optional[int] = None,
     user_id: Optional[int] = None,
+    company: Optional[str] = None,
 ) -> Dict[str, Any]:
     t0 = time.time()
+    scope_tenant_id = tenant_id or 0
+    history = (
+        _load_history(tenant_id, user_id, thread_id)
+        if tenant_id is not None
+        else []
+    )
+    cache_key = _cache_key(question, history, company)
 
     trace = start_trace(
         thread_id=thread_id,
@@ -50,7 +45,7 @@ def run_agent(
         question=question,
     )
 
-    result = _try_cache(thread_id)
+    result = _try_cache(scope_tenant_id, user_id, thread_id, cache_key)
     if result:
         result["trace_id"] = trace.request_id
         result["duration"] = round(time.time() - t0, 3)
@@ -65,34 +60,46 @@ def run_agent(
         return result
 
     if tenant_id is not None:
-        _set_tenant_memory_path(tenant_id)
-        _ensure_session(tenant_id, user_id, thread_id)
+        _record_message(
+            tenant_id,
+            user_id,
+            thread_id,
+            role="user",
+            content=question,
+        )
 
     if is_agent_available():
         try:
-            checkpoint_saver = _create_checkpoint_saver(tenant_id)
             agent = get_agent_graph()
-
-            with node_span(trace, "planner", metadata={"thread_id": thread_id}):
-                pass
-
-            with node_span(trace, "retriever", metadata={"thread_id": thread_id}):
-                pass
-
-            with node_span(trace, "agent_execution", metadata={"thread_id": thread_id}):
-                result = agent["run_agent"](question, thread_id=thread_id)
-
-            with node_span(
-                trace, "generate",
-                metadata={
-                    "quality_score": result.get("quality_score", 0.0),
-                    "tools_used": result.get("tools_used", []),
-                },
-            ):
-                pass
-
-            if checkpoint_saver:
-                _save_checkpoint(checkpoint_saver, thread_id, result)
+            with agent_checkpointer(tenant_id, user_id) as checkpointer:
+                checkpoint_thread_id = (
+                    scoped_checkpoint_thread_id(
+                        scope_tenant_id,
+                        user_id,
+                        thread_id,
+                    )
+                    if checkpointer is not None
+                    else None
+                )
+                with node_span(
+                    trace,
+                    "agent_graph",
+                    metadata={
+                        "thread_id": thread_id,
+                        "durable": checkpointer is not None,
+                    },
+                ):
+                    result = agent["run_agent"](
+                        question,
+                        company=company,
+                        thread_id=thread_id,
+                        tenant_id=scope_tenant_id,
+                        user_id=user_id,
+                        history=history,
+                        trace=trace,
+                        checkpointer=checkpointer,
+                        checkpoint_thread_id=checkpoint_thread_id,
+                    )
 
             duration = round(time.time() - t0, 3)
             output = {
@@ -100,17 +107,47 @@ def run_agent(
                 "thread_id": result.get("thread_id", thread_id),
                 "tools_used": result.get("tools_used", []),
                 "sources": result.get("sources", []),
+                "citations": result.get("citations", []),
+                "research_mode": result.get("research_mode", "default"),
+                "evidence_count": result.get("evidence_count", 0),
+                "plan": result.get("plan", {}),
                 "companies": result.get("companies", []),
                 "research_plan": result.get("research_plan", []),
                 "quality_score": result.get("quality_score", 0.0),
                 "critique": result.get("critique", {}),
                 "revision_count": result.get("revision_count", 0),
+                "intent": result.get("intent", {}),
+                "routing": result.get("routing"),
+                "planning": result.get("planning"),
+                "execution": result.get("execution"),
+                "workflow": result.get("workflow"),
                 "history": [],
                 "duration": duration,
                 "trace_id": trace.request_id,
             }
 
-            _save_to_cache(thread_id, output)
+            if tenant_id is not None:
+                _record_message(
+                    tenant_id,
+                    user_id,
+                    thread_id,
+                    role="assistant",
+                    content=output["answer"],
+                    metadata={
+                        "trace_id": trace.request_id,
+                        "tools_used": output["tools_used"],
+                        "quality_score": output["quality_score"],
+                    },
+                )
+                output["history"] = _load_history(tenant_id, user_id, thread_id)
+
+            _save_to_cache(
+                scope_tenant_id,
+                user_id,
+                thread_id,
+                cache_key,
+                output,
+            )
 
             finish_trace(
                 trace,
@@ -154,7 +191,6 @@ def run_agent(
                 error=str(e),
             )
             return _fallback_response(question, thread_id, str(e), trace.request_id)
-
     duration = round(time.time() - t0, 3)
     finish_trace(
         trace,
@@ -167,68 +203,131 @@ def run_agent(
     return _fallback_response(question, thread_id, "", trace.request_id)
 
 
-def _ensure_session(tenant_id: int, user_id: Optional[int], thread_id: str):
+def _load_history(
+    tenant_id: int,
+    user_id: Optional[int],
+    thread_id: str,
+    limit: int = 8,
+) -> list[Dict[str, Any]]:
+    """Read a tenant- and user-scoped history for prompt construction."""
     db = SessionLocal()
     try:
         repo = AgentRepository(db)
-        repo.get_or_create_session(tenant_id, user_id, thread_id)
+        session = repo.get_session(tenant_id, user_id, thread_id)
+        if session is None:
+            return []
+        messages = repo.get_messages(session.id, limit=limit)
+        return [
+            {
+                "role": message.role,
+                "content": message.content,
+                "metadata": message.metadata_dict,
+            }
+            for message in messages
+        ]
+    except Exception as exc:
+        logger.warning("Unable to load agent session history: %s", exc)
+        return []
     finally:
         db.close()
 
 
-def _create_checkpoint_saver(tenant_id: Optional[int]) -> Optional[PostgresSaver]:
-    if storage_config.use_postgres and tenant_id is not None:
-        db = SessionLocal()
-        try:
-            return PostgresSaver(db, tenant_id)
-        except Exception as e:
-            logger.warning(f"PostgresSaver unavailable: {e}")
-    return None
-
-
-def _save_checkpoint(saver: PostgresSaver, thread_id: str, result: Dict[str, Any]):
+def _record_message(
+    tenant_id: int,
+    user_id: Optional[int],
+    thread_id: str,
+    *,
+    role: str,
+    content: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Persist a conversation turn without making the chat request fail."""
+    db = SessionLocal()
     try:
-        saver.put(
-            {"configurable": {"thread_id": thread_id}},
-            {
-                "answer": result.get("answer", ""),
-                "tools_used": result.get("tools_used", []),
-                "quality_score": result.get("quality_score", 0.0),
-                "sources": result.get("sources", []),
-            },
-        )
-    except Exception as e:
-        logger.warning(f"Checkpoint save failed: {e}")
+        repo = AgentRepository(db)
+        session = repo.get_or_create_session(tenant_id, user_id, thread_id)
+        repo.add_message(session.id, role, content, metadata)
+        repo.touch_session(session)
+    except Exception as exc:
+        logger.warning("Unable to persist agent session message: %s", exc)
+    finally:
+        db.close()
 
 
-def _try_cache(thread_id: str) -> Optional[Dict[str, Any]]:
-    cached = session_cache.get_session(thread_id)
+def _cache_key(
+    question: str,
+    history: list[Dict[str, Any]],
+    company: Optional[str],
+) -> str:
+    return json.dumps(
+        {"question": question, "company": company, "history": history},
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+
+
+def _try_cache(
+    tenant_id: int,
+    user_id: Optional[int],
+    thread_id: str,
+    request_key: str,
+) -> Optional[Dict[str, Any]]:
+    cached = session_cache.get_session(
+        thread_id,
+        tenant_id,
+        request_key,
+        user_id=user_id or 0,
+    )
     if cached:
-        logger.info(f"Cache hit for thread: {thread_id}")
+        logger.info("Cache hit for tenant=%s thread=%s", tenant_id, thread_id)
         return cached
     return None
 
 
-def _save_to_cache(thread_id: str, result: Dict[str, Any]):
+def _save_to_cache(
+    tenant_id: int,
+    user_id: Optional[int],
+    thread_id: str,
+    request_key: str,
+    result: Dict[str, Any],
+):
     try:
-        session_cache.save_session(thread_id, result)
+        session_cache.save_session(
+            thread_id,
+            result,
+            tenant_id,
+            request_key,
+            user_id=user_id or 0,
+        )
     except Exception as e:
         logger.warning(f"Cache save failed: {e}")
 
 
 def _fallback_response(question: str, thread_id: str, error: str = "", trace_id: str = "") -> Dict[str, Any]:
+    # ``error`` is intentionally accepted for backwards compatibility but is
+    # never reflected to clients. The full exception remains in structured
+    # logs and the trace identified by ``trace_id``.
+    del error
     return {
         "answer": f"[Agent Runtime Fallback] Unable to process: '{question}'. "
-                  f"Please ensure financial-rag-langchain is installed and configured. "
-                  f"{'Error: ' + error if error else ''}",
+                  "Please retry or inspect the runtime trace.",
         "thread_id": thread_id,
         "tools_used": [],
         "sources": [],
+        "citations": [],
+        "research_mode": "default",
+        "evidence_count": 0,
+        "plan": {},
         "companies": [],
         "research_plan": [],
         "quality_score": 0.0,
         "critique": {},
         "revision_count": 0,
+        "planning": None,
+        "routing": None,
+        "execution": None,
+        "workflow": None,
         "history": [],
         "duration": 0,
         "trace_id": trace_id,
