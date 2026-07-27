@@ -1,5 +1,12 @@
+from storage.agent.checkpoint_store import AgentCheckpointStore, PostgresSaver
 from storage.agent.models import AgentCheckpoint, AgentMessage, AgentSession
 from storage.agent.repository import AgentRepository
-from storage.agent.checkpoint import PostgresSaver
 
-__all__ = ["AgentSession", "AgentMessage", "AgentCheckpoint", "AgentRepository", "PostgresSaver"]
+__all__ = [
+    "AgentSession",
+    "AgentMessage",
+    "AgentCheckpoint",
+    "AgentRepository",
+    "AgentCheckpointStore",
+    "PostgresSaver",
+]

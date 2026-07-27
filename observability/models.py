@@ -1,10 +1,11 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from observability.serialization import to_json_safe
 from storage.database import Base
 
 if TYPE_CHECKING:
@@ -50,13 +51,14 @@ class AgentTrace(Base):
     @property
     def meta(self) -> Dict[str, Any]:
         try:
-            return json.loads(self._metadata)
+            value = json.loads(self._metadata)
+            return value if isinstance(value, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
 
     @meta.setter
-    def meta(self, value: Dict[str, Any]) -> None:
-        self._metadata = json.dumps(value, ensure_ascii=False)
+    def meta(self, value: Mapping[str, Any]) -> None:
+        self._metadata = json.dumps(to_json_safe(value), ensure_ascii=False, sort_keys=True)
 
 
 class AgentSpan(Base):
@@ -84,10 +86,11 @@ class AgentSpan(Base):
     @property
     def meta(self) -> Dict[str, Any]:
         try:
-            return json.loads(self._metadata)
+            value = json.loads(self._metadata)
+            return value if isinstance(value, dict) else {}
         except (json.JSONDecodeError, TypeError):
             return {}
 
     @meta.setter
-    def meta(self, value: Dict[str, Any]) -> None:
-        self._metadata = json.dumps(value, ensure_ascii=False)
+    def meta(self, value: Mapping[str, Any]) -> None:
+        self._metadata = json.dumps(to_json_safe(value), ensure_ascii=False, sort_keys=True)

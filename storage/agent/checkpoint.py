@@ -10,30 +10,46 @@ logger = logging.getLogger(__name__)
 
 
 class PostgresSaver:
-    """
-    Postgres-based checkpoint saver for LangGraph.
+    """Persist application checkpoint snapshots through ``AgentRepository``.
 
-    Replaces SqliteSaver with tenant-isolated PostgreSQL storage.
-    Compatible with LangGraph's checkpoint interface.
+    This adapter backs the application audit/session tables.  It is not the
+    LangGraph runtime checkpointer; production graph persistence is selected
+    by ``services.agent_runtime.checkpointing`` and uses LangGraph's official
+    PostgreSQL saver.
     """
 
-    def __init__(self, db: Session, tenant_id: int):
+    def __init__(self, db: Session, tenant_id: int, user_id: Optional[int] = None):
         self.repo = AgentRepository(db)
         self.tenant_id = tenant_id
+        self.user_id = user_id
 
-    def put(self, config: Dict[str, Any], checkpoint: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def put(
+        self,
+        config: Dict[str, Any],
+        checkpoint: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         thread_id = self._extract_thread_id(config)
         checkpoint_data = {
             "checkpoint": checkpoint,
             "metadata": metadata or {},
             "config": {"configurable": config.get("configurable", {})},
         }
-        cp = self.repo.save_checkpoint(thread_id, checkpoint_data)
+        cp = self.repo.save_checkpoint(
+            self.tenant_id,
+            thread_id,
+            checkpoint_data,
+            user_id=self.user_id,
+        )
         return {"configurable": {"thread_id": thread_id, "checkpoint_id": str(cp.id)}}
 
     def get(self, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         thread_id = self._extract_thread_id(config)
-        cp = self.repo.get_latest_checkpoint(thread_id)
+        cp = self.repo.get_latest_checkpoint(
+            self.tenant_id,
+            thread_id,
+            user_id=self.user_id,
+        )
         if cp is None:
             return None
         data = json.loads(cp.checkpoint_data)
@@ -67,3 +83,11 @@ class PostgresSaver:
 
     def __exit__(self, *args):
         pass
+
+
+# Explicit application-layer name for new callers.  The implementation stays
+# at the historical path so existing imports and serialized references remain
+# stable.
+AgentCheckpointStore = PostgresSaver
+
+__all__ = ["AgentCheckpointStore", "PostgresSaver"]

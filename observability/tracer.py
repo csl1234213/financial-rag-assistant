@@ -3,7 +3,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy.orm import Session
 
@@ -18,10 +18,20 @@ def start_trace(
     tenant_id: Optional[int] = None,
     user_id: Optional[int] = None,
 ) -> AgentTrace:
+    """Create a trace for a tenant-scoped request.
+
+    Anonymous requests (including the legacy public ``tenant_id=0`` sentinel)
+    intentionally have no persistence scope. They retain their request id and
+    timing for the caller/log stream, but ``finish_trace`` will not attempt an
+    invalid foreign-key write. Persisting anonymous traces requires an explicit
+    schema and access-control design.
+    """
+
     request_id = str(uuid.uuid4())[:12]
+    tenant_scope = tenant_id if tenant_id is not None and tenant_id > 0 else None
     trace = AgentTrace(
         request_id=request_id,
-        tenant_id=tenant_id or 0,
+        tenant_id=tenant_scope,
         user_id=user_id,
         thread_id=thread_id,
         status="started",
@@ -42,8 +52,19 @@ def finish_trace(
         trace.duration_ms = (
             trace.finished_at - trace.started_at
         ).total_seconds() * 1000
-    if metadata:
-        trace.meta = metadata
+    if metadata is not None:
+        trace.meta = _merge_metadata(trace.meta, metadata)
+
+    if trace.tenant_id is None:
+        trace.meta = _merge_metadata(
+            trace.meta,
+            {"persistence": "skipped_no_tenant_scope"},
+        )
+        logger.info(
+            "Skipping persistence for anonymous trace request_id=%s",
+            trace.request_id,
+        )
+        return trace
 
     should_close = db is None
     if db is None:
@@ -53,10 +74,11 @@ def finish_trace(
         db.commit()
         db.refresh(trace)
         return trace
-    except Exception as e:
-        logger.error(f"Failed to save trace: {e}")
+    except Exception:
+        logger.exception("Failed to save trace request_id=%s", trace.request_id)
         if db:
             db.rollback()
+        trace.meta = _merge_metadata(trace.meta, {"persistence": "failed"})
         return trace
     finally:
         if should_close and db:
@@ -68,10 +90,18 @@ def add_span(
     node_name: str,
     status: str = "started",
     duration_ms: Optional[float] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    db: Optional[Session] = None,
 ) -> AgentSpan:
+    """Attach a span to ``trace`` and optionally enlist it in a caller transaction.
+
+    Assigning the relationship (rather than only ``trace_id``) lets SQLAlchemy
+    cascade spans created before the trace has an id.  ``finish_trace`` can then
+    persist the complete request graph in one transaction.
+    """
+
     span = AgentSpan(
-        trace_id=trace.id,
+        trace=trace,
         node_name=node_name,
         status=status,
         duration_ms=duration_ms,
@@ -79,8 +109,11 @@ def add_span(
     )
     if status in ("success", "failed"):
         span.finished_at = datetime.now(timezone.utc)
-    if metadata:
+    if metadata is not None:
         span.meta = metadata
+    if db is not None:
+        db.add(trace)
+        db.add(span)
     return span
 
 
@@ -88,10 +121,11 @@ def add_span(
 def node_span(
     trace: AgentTrace,
     node_name: str,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    db: Optional[Session] = None,
 ):
     t0 = time.time()
-    span = add_span(trace, node_name, status="started", metadata=metadata)
+    span = add_span(trace, node_name, status="started", metadata=metadata, db=db)
     try:
         yield span
         span.status = "success"
@@ -105,6 +139,17 @@ def node_span(
     finally:
         span.duration_ms = round((time.time() - t0) * 1000, 2)
         span.finished_at = datetime.now(timezone.utc)
+        if db is not None:
+            db.add(span)
+
+
+def _merge_metadata(
+    existing: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Preserve earlier trace fields while allowing terminal fields to update."""
+
+    return {**dict(existing), **dict(incoming)}
 
 
 def get_trace_by_request_id(db: Session, request_id: str) -> Optional[AgentTrace]:

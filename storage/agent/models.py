@@ -1,15 +1,11 @@
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from storage.database import Base
-
-if TYPE_CHECKING:
-    from models.tenant import Tenant
-    from models.user import User
 
 
 class AgentSession(Base):
@@ -40,7 +36,13 @@ class AgentSession(Base):
     )
 
     __table_args__ = (
-        Index("ix_agent_sessions_tenant_thread", "tenant_id", "thread_id", unique=True),
+        Index(
+            "ix_agent_sessions_tenant_user_thread",
+            "tenant_id",
+            "user_id",
+            "thread_id",
+            unique=True,
+        ),
     )
 
 
@@ -75,6 +77,10 @@ class AgentCheckpoint(Base):
     __tablename__ = "agent_checkpoints"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Checkpoints are keyed by a client-controlled thread ID, so thread_id
+    # alone is not a tenant boundary.
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     thread_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     checkpoint_data: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -82,7 +88,17 @@ class AgentCheckpoint(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
     )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     __table_args__ = (
-        Index("ix_agent_checkpoints_thread", "thread_id", "created_at"),
+        Index(
+            "ix_agent_checkpoints_tenant_user_thread",
+            "tenant_id",
+            "user_id",
+            "thread_id",
+            "created_at",
+        ),
     )

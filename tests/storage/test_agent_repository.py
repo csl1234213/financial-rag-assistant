@@ -2,34 +2,32 @@ import sys
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from storage.agent.models import AgentCheckpoint, AgentMessage, AgentSession
 from storage.agent.repository import AgentRepository
-from storage.database import SessionLocal, init_db
+from storage.database import Base
 
-
-@pytest.fixture(autouse=True, scope="session")
-def setup_db_once():
-    init_db()
-    yield
+engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @pytest.fixture
 def db():
-    db = SessionLocal()
-    yield db
-    db.close()
-
-
-@pytest.fixture(autouse=True)
-def cleanup(db):
-    yield
-    db.query(AgentMessage).delete()
-    db.query(AgentCheckpoint).delete()
-    db.query(AgentSession).delete()
-    db.commit()
+    Base.metadata.create_all(bind=engine)
+    session = TestingSessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+        Base.metadata.drop_all(bind=engine)
 
 
 class TestAgentRepository:
@@ -44,7 +42,7 @@ class TestAgentRepository:
     def test_get_session(self, db):
         repo = AgentRepository(db)
         repo.create_session(tenant_id=2, user_id=2, thread_id="test_thread_2")
-        session = repo.get_session(tenant_id=2, thread_id="test_thread_2")
+        session = repo.get_session(tenant_id=2, user_id=2, thread_id="test_thread_2")
         assert session is not None
         assert session.tenant_id == 2
 
@@ -88,14 +86,33 @@ class TestAgentRepository:
         repo.create_session(tenant_id=10, user_id=1, thread_id="shared_thread")
         repo.create_session(tenant_id=20, user_id=2, thread_id="shared_thread")
 
-        s10 = repo.get_session(tenant_id=10, thread_id="shared_thread")
-        s20 = repo.get_session(tenant_id=20, thread_id="shared_thread")
+        s10 = repo.get_session(tenant_id=10, user_id=1, thread_id="shared_thread")
+        s20 = repo.get_session(tenant_id=20, user_id=2, thread_id="shared_thread")
 
         assert s10 is not None
         assert s20 is not None
         assert s10.id != s20.id
         assert s10.tenant_id == 10
         assert s20.tenant_id == 20
+
+    def test_user_isolation_within_same_tenant_and_thread(self, db):
+        repo = AgentRepository(db)
+        first = repo.get_or_create_session(
+            tenant_id=30,
+            user_id=301,
+            thread_id="default",
+        )
+        second = repo.get_or_create_session(
+            tenant_id=30,
+            user_id=302,
+            thread_id="default",
+        )
+        repo.add_message(first.id, "user", "first user's private question")
+
+        assert first.id != second.id
+        assert repo.get_session(30, 301, "default").id == first.id
+        assert repo.get_session(30, 302, "default").id == second.id
+        assert repo.get_messages(second.id) == []
 
     def test_messages_ordered_by_created_at(self, db):
         repo = AgentRepository(db)
