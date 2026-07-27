@@ -9,6 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.__version__ import BASE_VERSION
+
 load_dotenv()
 
 # =========================
@@ -73,7 +75,7 @@ CHUNK_OVERLAP = 200
 # =========================
 
 APP_ENV = os.environ.get("APP_ENV", "development")
-APP_VERSION = os.environ.get("APP_VERSION", "7.3.3")
+APP_VERSION = os.environ.get("APP_VERSION", BASE_VERSION)
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent

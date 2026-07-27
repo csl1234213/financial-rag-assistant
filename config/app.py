@@ -4,9 +4,11 @@ App-level configuration (FastAPI, version, title).
 
 import os
 
+from agent.__version__ import BASE_VERSION
+
 APP_TITLE = "Financial Research Copilot API"
 APP_DESCRIPTION = "Production API for Financial Research Copilot"
-APP_VERSION = os.environ.get("APP_VERSION", "7.3.3")
+APP_VERSION = os.environ.get("APP_VERSION", BASE_VERSION)
 
 API_HOST = os.environ.get("API_HOST", "0.0.0.0")
 API_PORT = int(os.environ.get("API_PORT", "8000"))

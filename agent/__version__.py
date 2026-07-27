@@ -21,9 +21,15 @@
 #   - Regression:            4/4 passed
 # ============================================================
 
+"""Application release version.
+
+``BASE_VERSION`` is the source-controlled product version. Deployments may
+override the reported runtime version through ``APP_VERSION`` (for example to
+append an immutable build identifier) without creating another code-level
+version source.
+"""
+
 import os
 
-__version__ = os.getenv(
-    "APP_VERSION",
-    "8.1.0"
-)
+BASE_VERSION = "8.1.0"
+__version__ = os.getenv("APP_VERSION", BASE_VERSION)
