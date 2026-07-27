@@ -32,6 +32,7 @@ from .workflows import (  # noqa: F401 — auto-registration
     DirectChatWorkflow,
     RAGWorkflow,
     ResearchWorkflow,
+    ToolPipelineWorkflow,
 )
 
 __all__ = [

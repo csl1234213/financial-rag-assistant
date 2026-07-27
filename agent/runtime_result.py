@@ -32,6 +32,11 @@ class RuntimeResult:
 
     routing: Optional[Dict[str, Any]] = None
 
+    # Runtime-only dependency used by the composition layer to make the
+    # generation call through the provider selected by ModelRouter. It is not
+    # part of API serialization.
+    provider_instance: Optional[Any] = field(default=None, repr=False, compare=False)
+
     planning: Optional[Dict[str, Any]] = None
 
     execution: Optional[Dict[str, Any]] = None

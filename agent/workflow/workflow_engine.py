@@ -37,7 +37,7 @@ class WorkflowEngine:
         ExecutionStrategyType.RAG: WorkflowType.RAG,
         ExecutionStrategyType.MULTI_STEP: WorkflowType.MULTI_STEP,
         ExecutionStrategyType.PARALLEL: WorkflowType.PARALLEL,
-        ExecutionStrategyType.TOOL_CALLING: WorkflowType.MULTI_STEP,
+        ExecutionStrategyType.TOOL_CALLING: WorkflowType.TOOL_PIPELINE,
         ExecutionStrategyType.MULTI_DOCUMENT: WorkflowType.RAG,
         ExecutionStrategyType.HYBRID: WorkflowType.MULTI_STEP,
         ExecutionStrategyType.AGENT_WORKFLOW: WorkflowType.MULTI_STEP,

@@ -136,11 +136,16 @@ class TestWorkflowEngine:
     # 6. TOOL_CALLING → TOOL_PIPELINE
     # ============================================================
 
-    def test_tool_calling_maps_to_multi_step(self):
+    def test_tool_calling_maps_to_single_execution_tool_pipeline(self):
         ctx = _make_context(strategy=ExecutionStrategyType.TOOL_CALLING)
         result = self.engine.build(ctx)
 
-        assert result.workflow == WorkflowType.MULTI_STEP
+        assert result.workflow == WorkflowType.TOOL_PIPELINE
+        assert len(result.steps) == 1
+        assert result.steps[0].metadata == {
+            "strategy": "tool_calling",
+        }
+        assert result.requires_retrieval is False
 
     # ============================================================
     # 7. Unknown strategy → fallback to DIRECT_CHAT
@@ -265,7 +270,7 @@ class TestWorkflowEngine:
         (ExecutionStrategyType.RAG, WorkflowType.RAG),
         (ExecutionStrategyType.MULTI_STEP, WorkflowType.MULTI_STEP),
         (ExecutionStrategyType.PARALLEL, WorkflowType.PARALLEL),
-        (ExecutionStrategyType.TOOL_CALLING, WorkflowType.MULTI_STEP),
+        (ExecutionStrategyType.TOOL_CALLING, WorkflowType.TOOL_PIPELINE),
         (ExecutionStrategyType.MULTI_DOCUMENT, WorkflowType.RAG),
         (ExecutionStrategyType.HYBRID, WorkflowType.MULTI_STEP),
         (ExecutionStrategyType.AGENT_WORKFLOW, WorkflowType.MULTI_STEP),

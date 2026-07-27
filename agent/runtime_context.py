@@ -18,6 +18,10 @@ class RuntimeContext:
 
     company: Optional[str] = None
 
+    tenant_id: int = 0
+
+    thread_id: Optional[str] = None
+
     evidences: List[Evidence] = field(default_factory=list)
 
     execution_results: List[ExecutionResult] = field(default_factory=list)

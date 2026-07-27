@@ -4,7 +4,7 @@ from typing import Optional
 
 from agent.execution.execution_context import ExecutionContext
 from agent.execution.execution_dispatcher import ExecutionDispatcher
-from agent.execution.execution_engine import ExecutionEngine as StrategyExecutionEngine
+from agent.execution.execution_engine import StrategyExecutionEngine
 from agent.execution.execution_handler import ExecutionHandlerContext
 from agent.execution.handlers import (  # noqa: F401 — auto-registration
     DirectLLMHandler,
@@ -13,7 +13,7 @@ from agent.execution.handlers import (  # noqa: F401 — auto-registration
     RagHandler,
     ToolCallingHandler,
 )
-from agent.execution_engine import ExecutionEngine
+from agent.execution.step_execution_engine import StepExecutionEngine
 from agent.memory.memory_bridge import MemoryBridge
 from agent.memory.memory_engine import MemoryEngine
 from agent.metrics.metric_bridge import MetricBridge
@@ -61,7 +61,7 @@ class AgentRuntime:
     def __init__(
         self,
         planner: QueryPlanner,
-        executor: ExecutionEngine,
+        executor: StepExecutionEngine,
         reasoner: ReasoningEngine,
         retriever,
         intent_analyzer,
@@ -96,6 +96,9 @@ class AgentRuntime:
         self,
         question: str,
         company: Optional[str] = None,
+        *,
+        tenant_id: int = 0,
+        thread_id: Optional[str] = None,
     ) -> RuntimeResult:
         """
         Execute the full Agent pipeline for one question.
@@ -140,12 +143,14 @@ class AgentRuntime:
         # 4. Routing — from TaskResult + ComplexityResult
         routing_info = None
         routing_context = None
+        routed_provider = None
         if self.router is not None:
             routing_context = self.planner.build_routing_context(
                 task_result,
                 complexity_result,
             )
             routed = self.router.route(routing_context)
+            routed_provider = routed["provider"]
             routing_info = {
                 "provider": routed["routing"].provider,
                 "model": routed["routing"].model,
@@ -167,6 +172,7 @@ class AgentRuntime:
                 task=task_result,
                 complexity=complexity_result,
                 routing=routing_context,
+                plan=plan,
             )
             strategy_result = self.strategy_engine.execute(exec_ctx)
             logger.info(
@@ -252,13 +258,24 @@ class AgentRuntime:
             )
 
         # 8. Execute — dispatch via ExecutionDispatcher
-        ctx = RuntimeContext(question=question, company=company)
+        ctx = RuntimeContext(
+            question=question,
+            company=company,
+            tenant_id=tenant_id,
+            thread_id=thread_id,
+        )
         reliability_info = None
 
         if self.dispatcher is not None and strategy_result is not None:
             handler_ctx = ExecutionHandlerContext(
                 plan=plan,
                 executor=self.executor,
+                parallelism=max(1, strategy_result.parallelism),
+                shared_context={
+                    "tenant_id": tenant_id,
+                    "thread_id": thread_id,
+                    "include_public": tenant_id != 0,
+                },
             )
 
             _execution_output: list = []
@@ -387,6 +404,8 @@ class AgentRuntime:
             context = output.context
             citations = output.citations
             execution_results = output.execution_results
+            if strategy_info is not None and output.tool_calls:
+                strategy_info["tool_calls"] = output.tool_calls
         else:
             shared = {"_all_evidence": []}
             self.executor.execute(plan, shared)
@@ -485,6 +504,7 @@ class AgentRuntime:
             plan=plan,
             intent_result=intent_result,
             routing=routing_info,
+            provider_instance=routed_provider,
             planning=planning_info,
             execution=strategy_info,
             workflow=workflow_info,
