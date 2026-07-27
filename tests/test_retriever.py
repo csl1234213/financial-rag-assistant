@@ -25,8 +25,10 @@ class FakeModel:
 class FakeStore:
     def __init__(self, results=None):
         self.results = results or []
+        self.tenant_scopes = []
 
-    def similarity_search(self, query_embedding, top_k=5):
+    def similarity_search(self, query_embedding, top_k=5, tenant_id=None):
+        self.tenant_scopes.append(tenant_id)
         return self.results[:top_k]
 
 
@@ -54,6 +56,19 @@ class TestHybridRetriever:
         results = retriever.retrieve(ctx, store)
         assert len(results) == 2
         assert results[0].document_id == "doc_1"
+        assert store.tenant_scopes == [0]
+
+    def test_retrieve_forwards_tenant_scope(self, retriever):
+        store = FakeStore(
+            results=[
+                _make_result("doc_1", "doc_1_0", 0.95, "Tenant evidence."),
+            ]
+        )
+        ctx = RetrievalContext(question="Revenue", tenant_id=42)
+
+        retriever.retrieve(ctx, store)
+
+        assert store.tenant_scopes == [42]
 
     def test_retrieve_company_filter(self, retriever):
         store = FakeStore(results=[

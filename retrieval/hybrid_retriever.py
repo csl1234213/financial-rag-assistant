@@ -16,16 +16,23 @@ After (V4):
     Context = planning layer
 """
 
+from __future__ import annotations
+
+import logging
 import re
 from dataclasses import dataclass
+from threading import Lock
 from typing import Dict, List
 
 from agent.reasoning_models import Evidence
+from retrieval.bm25_retriever import BM25Retriever
 from retrieval.document_filter import DocumentFilter
 from retrieval.metadata_filter import MetadataFilter
 from retrieval.retrieval_context import RetrievalContext
 from storage.embedding_store import EmbeddingStore
 from storage.vector_models import SearchResult
+
+logger = logging.getLogger(__name__)
 
 # =========================
 # Data Classes
@@ -38,6 +45,27 @@ class RetrievalResult:
     chunks: List
     document_ids: List[str]
     companies: List[str]
+
+
+@dataclass(frozen=True)
+class HybridRetrievalConfig:
+    """Configuration for deterministic reciprocal-rank fusion."""
+
+    enabled: bool = True
+    vector_weight: float = 1.0
+    lexical_weight: float = 1.0
+    rrf_k: int = 60
+    candidate_multiplier: int = 4
+
+    def __post_init__(self) -> None:
+        if self.vector_weight < 0 or self.lexical_weight < 0:
+            raise ValueError("hybrid retrieval weights cannot be negative")
+        if self.vector_weight + self.lexical_weight <= 0:
+            raise ValueError("at least one hybrid retrieval weight must be positive")
+        if self.rrf_k < 1:
+            raise ValueError("rrf_k must be at least 1")
+        if self.candidate_multiplier < 1:
+            raise ValueError("candidate_multiplier must be at least 1")
 
 
 # =========================
@@ -82,10 +110,19 @@ class HybridRetriever:
     - Post-filter and return SearchResult[]
     """
 
-    def __init__(self, model=None):
+    def __init__(
+        self,
+        model=None,
+        *,
+        config: HybridRetrievalConfig | None = None,
+        lexical_retriever: BM25Retriever | None = None,
+    ):
         self.model = model
+        self._model_lock = Lock()
         self.metadata_filter = MetadataFilter()
         self.document_filter = DocumentFilter()
+        self.config = config or HybridRetrievalConfig()
+        self.lexical_retriever = lexical_retriever or BM25Retriever()
 
     # =========================
     # V4: New Primary Interface
@@ -96,6 +133,9 @@ class HybridRetriever:
         context: RetrievalContext,
         store: EmbeddingStore,
     ) -> List[SearchResult]:
+        if context.top_k <= 0:
+            return []
+
         doc_filter = self.document_filter.build(context.document_ids)
         meta_filter = self.metadata_filter.build(
             company=context.company,
@@ -103,15 +143,210 @@ class HybridRetriever:
         )
 
         query_embedding = self._get_query_embedding(context.question)
+        candidate_k = context.top_k * self.config.candidate_multiplier
+        tenant_scopes = [context.tenant_id]
+        if context.include_public and context.tenant_id != 0:
+            tenant_scopes.append(0)
 
-        results = store.similarity_search(
-            query_embedding=query_embedding,
+        vector_results: list[SearchResult] = []
+        for tenant_id in tenant_scopes:
+            scoped_results = store.similarity_search(
+                query_embedding=query_embedding,
+                top_k=candidate_k,
+                tenant_id=tenant_id,
+            )
+            scoped_results = self._apply_tenant_scope(scoped_results, tenant_id)
+            vector_results.extend(
+                self._apply_filters(scoped_results, doc_filter, meta_filter)
+            )
+
+        # ``EmbeddingStore`` owns score semantics and must return ranked
+        # results. Some stores expose distance (lower is better), while legacy
+        # stores expose similarity (higher is better); preserving their order
+        # avoids guessing from numeric values.
+        vector_results = self._deduplicate(vector_results)[:candidate_k]
+
+        if not self.config.enabled or self.config.lexical_weight == 0:
+            return vector_results[: context.top_k]
+
+        lexical_corpus = self._load_lexical_corpus(
+            store=store,
+            tenant_scopes=tenant_scopes,
+            doc_filter=doc_filter,
+            meta_filter=meta_filter,
+        )
+        if not lexical_corpus:
+            return vector_results[: context.top_k]
+
+        lexical_results = self.lexical_retriever.search(
+            query=context.question,
+            documents=lexical_corpus,
+            top_k=candidate_k,
+        )
+        if not lexical_results:
+            return vector_results[: context.top_k]
+
+        return self._reciprocal_rank_fusion(
+            vector_results,
+            lexical_results,
             top_k=context.top_k,
         )
 
-        results = self._apply_filters(results, doc_filter, meta_filter)
+    @staticmethod
+    def _merge_ranked_results(
+        primary: List[SearchResult],
+        secondary: List[SearchResult],
+        top_k: int,
+    ) -> List[SearchResult]:
+        """Merge tenant and public results without duplicate chunks."""
+        return HybridRetriever._deduplicate([*primary, *secondary])[:top_k]
 
-        return results
+    def _load_lexical_corpus(
+        self,
+        *,
+        store: EmbeddingStore,
+        tenant_scopes: list[int],
+        doc_filter: Dict,
+        meta_filter: Dict,
+    ) -> list[SearchResult] | None:
+        corpus_loader = getattr(store, "lexical_corpus", None)
+        if not callable(corpus_loader):
+            return None
+
+        corpus: list[SearchResult] = []
+        try:
+            for tenant_id in tenant_scopes:
+                scoped_documents = corpus_loader(tenant_id=tenant_id)
+                scoped_documents = self._apply_tenant_scope(
+                    scoped_documents,
+                    tenant_id,
+                )
+                corpus.extend(
+                    self._apply_filters(
+                        scoped_documents,
+                        doc_filter,
+                        meta_filter,
+                    )
+                )
+        except Exception:
+            logger.warning(
+                "Lexical corpus unavailable; using vector-only retrieval",
+                exc_info=True,
+            )
+            return None
+
+        return self._deduplicate(
+            sorted(
+                corpus,
+                key=lambda item: (item.document_id, item.chunk_id),
+            )
+        )
+
+    def _reciprocal_rank_fusion(
+        self,
+        vector_results: list[SearchResult],
+        lexical_results: list[SearchResult],
+        *,
+        top_k: int,
+    ) -> list[SearchResult]:
+        records: dict[tuple[str, str], SearchResult] = {}
+        fused_scores: dict[tuple[str, str], float] = {}
+        vector_ranks: dict[tuple[str, str], int] = {}
+        lexical_ranks: dict[tuple[str, str], int] = {}
+
+        for rank, result in enumerate(vector_results, start=1):
+            key = self._result_key(result)
+            records.setdefault(key, result)
+            vector_ranks.setdefault(key, rank)
+            fused_scores[key] = fused_scores.get(key, 0.0) + (
+                self.config.vector_weight / (self.config.rrf_k + rank)
+            )
+
+        for rank, result in enumerate(lexical_results, start=1):
+            key = self._result_key(result)
+            records.setdefault(key, result)
+            lexical_ranks.setdefault(key, rank)
+            fused_scores[key] = fused_scores.get(key, 0.0) + (
+                self.config.lexical_weight / (self.config.rrf_k + rank)
+            )
+
+        missing_rank = len(records) + 1
+        ordered_keys = sorted(
+            records,
+            key=lambda key: (
+                -fused_scores[key],
+                vector_ranks.get(key, missing_rank),
+                lexical_ranks.get(key, missing_rank),
+                key,
+            ),
+        )
+        maximum_score = (
+            self.config.vector_weight + self.config.lexical_weight
+        ) / (self.config.rrf_k + 1)
+        lexical_by_key = {
+            self._result_key(result): result
+            for result in lexical_results
+        }
+
+        fused: list[SearchResult] = []
+        for key in ordered_keys[:top_k]:
+            result = records[key]
+            metadata = dict(result.metadata)
+            lexical_result = lexical_by_key.get(key)
+            metadata.update(
+                {
+                    "retrieval_strategy": "hybrid_rrf",
+                    "score_semantics": "relevance",
+                    "rrf_score": fused_scores[key],
+                    "vector_rank": vector_ranks.get(key),
+                    "bm25_rank": lexical_ranks.get(key),
+                    "bm25_score": (
+                        lexical_result.metadata.get("bm25_score")
+                        if lexical_result is not None
+                        else None
+                    ),
+                }
+            )
+            fused.append(
+                SearchResult(
+                    document_id=result.document_id,
+                    chunk_id=result.chunk_id,
+                    score=round(fused_scores[key] / maximum_score, 6),
+                    content=result.content,
+                    metadata=metadata,
+                )
+            )
+        return fused
+
+    @staticmethod
+    def _result_key(result: SearchResult) -> tuple[str, str]:
+        return result.document_id, result.chunk_id
+
+    @staticmethod
+    def _deduplicate(results: List[SearchResult]) -> List[SearchResult]:
+        deduplicated: List[SearchResult] = []
+        seen: set[tuple[str, str]] = set()
+        for result in results:
+            key = HybridRetriever._result_key(result)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduplicated.append(result)
+        return deduplicated
+
+    @staticmethod
+    def _apply_tenant_scope(
+        results: List[SearchResult],
+        tenant_id: int,
+    ) -> List[SearchResult]:
+        """Reject a result if its explicit tenant metadata crosses scope."""
+        scoped: list[SearchResult] = []
+        for result in results:
+            result_tenant = result.metadata.get("tenant_id")
+            if result_tenant is not None and result_tenant != tenant_id:
+                continue
+            scoped.append(result)
+        return scoped
 
     # =========================
     # V4: Evidence (for Agent pipeline)
@@ -127,25 +362,60 @@ class HybridRetriever:
         evidences = []
         for rank, r in enumerate(results):
             local_context = extract_local_context(r.content, context.question)
+            evidence_metadata = {
+                "rank": rank + 1,
+                "chunk_id": r.chunk_id,
+                "document_id": r.document_id,
+            }
+            for field in (
+                "retrieval_strategy",
+                "rrf_score",
+                "vector_rank",
+                "bm25_rank",
+                "bm25_score",
+            ):
+                value = r.metadata.get(field)
+                if value is not None:
+                    evidence_metadata[field] = value
             evidences.append(Evidence(
                 content=local_context,
                 source=r.metadata.get("source", ""),
                 company=r.metadata.get("company", context.company or ""),
-                confidence=round(r.score, 4),
-                metadata={
-                    "rank": rank + 1,
-                    "chunk_id": r.chunk_id,
-                    "document_id": r.document_id,
-                },
+                confidence=self._evidence_confidence(r),
+                metadata=evidence_metadata,
             ))
         return evidences
+
+    @staticmethod
+    def _evidence_confidence(result: SearchResult) -> float:
+        """Normalize explicit distance/similarity fields to relevance."""
+        for field in ("similarity_score", "confidence"):
+            value = result.metadata.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return round(min(max(float(value), 0.0), 1.0), 4)
+
+        score = float(result.score)
+        semantics = result.metadata.get("score_semantics")
+        if semantics == "distance":
+            relevance = 1.0 / (1.0 + max(score, 0.0))
+        elif semantics in {"relevance", "similarity"}:
+            relevance = score
+        else:
+            # Backward compatibility: historical in-memory stores used score
+            # as confidence and did not attach a semantics marker.
+            relevance = score
+        return round(min(max(relevance, 0.0), 1.0), 4)
 
     # =========================
     # Internal
     # =========================
 
     def _get_query_embedding(self, question: str) -> List[float]:
-        return self.model.encode(question, convert_to_tensor=False).tolist()
+        # A single embedding model is shared across API requests and across
+        # the bounded parallel retrieval workers. Model inference is guarded;
+        # vector-store requests can still run concurrently after encoding.
+        with self._model_lock:
+            return self.model.encode(question, convert_to_tensor=False).tolist()
 
     def _apply_filters(
         self,
