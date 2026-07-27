@@ -76,17 +76,47 @@ class TestSaveEmbeddings:
 class TestLoadEmbeddingModel:
     @patch("embedding.SentenceTransformer")
     def test_loads_model_with_correct_name(self, mock_st):
+        from config import EMBEDDING_MODEL_REVISION
         from embedding import load_embedding_model
-        load_embedding_model()
-        mock_st.assert_called_once_with("all-MiniLM-L6-v2")
+
+        load_embedding_model(force_reload=True)
+        mock_st.assert_called_once_with(
+            "all-MiniLM-L6-v2",
+            revision=EMBEDDING_MODEL_REVISION,
+        )
 
     @patch("embedding.SentenceTransformer")
     def test_returns_model_instance(self, mock_st):
         from embedding import load_embedding_model
         mock_model = MagicMock()
         mock_st.return_value = mock_model
-        result = load_embedding_model()
+        result = load_embedding_model(force_reload=True)
         assert result is mock_model
+
+    @patch("embedding.SentenceTransformer")
+    def test_reuses_process_local_model(self, mock_st):
+        from embedding import load_embedding_model
+
+        model = MagicMock()
+        mock_st.return_value = model
+        first = load_embedding_model(force_reload=True)
+        second = load_embedding_model()
+
+        assert first is second
+        mock_st.assert_called_once()
+
+    @patch("embedding.SentenceTransformer")
+    def test_status_does_not_trigger_model_loading(self, mock_st):
+        import embedding
+
+        embedding._model = None
+        embedding._model_error_type = None
+
+        status = embedding.get_embedding_model_status()
+
+        assert status["state"] == "not_loaded"
+        assert status["model"] == "all-MiniLM-L6-v2"
+        mock_st.assert_not_called()
 
 
 @pytest.mark.unit
