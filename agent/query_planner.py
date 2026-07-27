@@ -1,3 +1,5 @@
+from threading import Lock
+
 from agent.execution_plan import ExecutionPlan, PlanStep, StepType
 from agent.planning import (
     ComplexityAnalyzer,
@@ -6,6 +8,10 @@ from agent.planning import (
     TaskAnalyzer,
     TaskResult,
     TaskType,
+)
+from agent.planning.financial_metric_parser import (
+    FinancialMetricInvocation,
+    parse_financial_metric_query,
 )
 from llm.router import RoutingContext, RoutingPriority
 
@@ -29,6 +35,7 @@ class QueryPlanner:
 
     def __init__(self):
         self._step_counter = 1
+        self._plan_lock = Lock()
         self.task_analyzer = TaskAnalyzer()
         self.complexity_analyzer = ComplexityAnalyzer()
 
@@ -48,6 +55,16 @@ class QueryPlanner:
         self,
         context: PlanningContext,
     ) -> tuple[ExecutionPlan, TaskResult, ComplexityResult]:
+        # The production runtime owns one planner shared by concurrent FastAPI
+        # requests. The rule engine is fast, and serializing this small
+        # stateful section prevents request plans from corrupting step IDs.
+        with self._plan_lock:
+            return self._plan_serialized(context)
+
+    def _plan_serialized(
+        self,
+        context: PlanningContext,
+    ) -> tuple[ExecutionPlan, TaskResult, ComplexityResult]:
         self._reset_counter()
 
         task_result = self.task_analyzer.analyze(context)
@@ -55,8 +72,14 @@ class QueryPlanner:
         task_type = task_result.task.task_type
 
         companies = [e for e in task_result.extracted_entities if not e.isdigit()]
+        metric_invocation = parse_financial_metric_query(context.question)
 
-        if task_type == TaskType.COMPARISON:
+        if metric_invocation is not None:
+            plan = self._build_financial_metric_plan(
+                context.question,
+                metric_invocation,
+            )
+        elif task_type == TaskType.COMPARISON:
             plan = self._build_compare_plan(context.question, companies)
         elif task_type == TaskType.DOCUMENT_QA:
             plan = self._build_single_plan(context.question, companies)
@@ -75,6 +98,35 @@ class QueryPlanner:
         plan.complexity_reason = complexity_result.reason
 
         return plan, task_result, complexity_result
+
+    # =========================
+    # Governed Financial Tool
+    # =========================
+
+    def _build_financial_metric_plan(
+        self,
+        query: str,
+        invocation: FinancialMetricInvocation,
+    ) -> ExecutionPlan:
+        plan = ExecutionPlan(
+            intent="financial_calculation",
+            original_query=query,
+            metadata={
+                "tool_policy": "financial_metrics_only",
+                "deterministic": True,
+            },
+        )
+        plan.tasks.append(
+            PlanStep(
+                step_id=self._next_id(),
+                step_type=StepType.TOOL_CALL,
+                description=f"Calculate {invocation.operation}",
+                query=query,
+                parameters=dict(invocation.parameters),
+                tool_name=invocation.tool_name,
+            )
+        )
+        return plan
 
     # =========================
     # Routing Context

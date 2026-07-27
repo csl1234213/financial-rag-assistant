@@ -17,6 +17,7 @@ from agent.planning import ComplexityResult, TaskResult
 from llm.router import RoutingContext
 
 if TYPE_CHECKING:
+    from agent.execution_plan import ExecutionPlan
     from agent.tools.tool_context import ToolContext
     from agent.workflow.workflow_result import WorkflowResult
 
@@ -28,6 +29,11 @@ class ExecutionContext:
     complexity: ComplexityResult
 
     routing: RoutingContext
+
+    # The planner output is optional for compatibility with callers that use
+    # the strategy engine in isolation.  The production Agent runtime passes
+    # it so tool selection can require an explicit, typed TOOL_CALL node.
+    plan: Optional["ExecutionPlan"] = field(default=None)
 
     workflow: Optional["WorkflowResult"] = field(default=None)
 

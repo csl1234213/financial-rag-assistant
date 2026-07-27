@@ -1,22 +1,12 @@
-# ============================================================
-# ParallelHandler — Execute multiple retrieval queries in parallel (placeholder)
-# ============================================================
-# Used when ExecutionResult.strategy == ExecutionStrategyType.PARALLEL
-# Placeholder: delegates to RAG handler for now.
-# Future: parallel execution of multiple retrieval sub-queries.
-# ============================================================
-
-import logging
+"""Bounded parallel retrieval execution handler."""
 
 from agent.execution.execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
-from agent.execution.handlers.rag_handler import RagHandler
+from agent.execution.plan_execution import PlanExecutionCoordinator
 from agent.execution.strategy_enums import ExecutionStrategyType
-
-logger = logging.getLogger(__name__)
 
 
 class ParallelHandler(BaseExecutionHandler):
@@ -28,5 +18,4 @@ class ParallelHandler(BaseExecutionHandler):
         self,
         ctx: ExecutionHandlerContext,
     ) -> ExecutionOutput:
-        logger.info("ParallelHandler: delegating to RAG (placeholder)")
-        return RagHandler().execute(ctx)
+        return PlanExecutionCoordinator(ctx).execute_parallel_retrievals()

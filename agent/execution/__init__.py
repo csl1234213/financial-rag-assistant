@@ -14,7 +14,7 @@
 
 from .execution_context import ExecutionContext
 from .execution_dispatcher import ExecutionDispatcher
-from .execution_engine import ExecutionEngine
+from .execution_engine import ExecutionEngine, StrategyExecutionEngine
 from .execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
@@ -23,6 +23,7 @@ from .execution_handler import (
 from .execution_handler_registry import ExecutionHandlerRegistry
 from .execution_result import ExecutionResult
 from .execution_strategy import BaseExecutionStrategy
+from .step_execution_engine import StepExecutionEngine
 from .strategy_enums import ExecutionStrategyType
 from .strategy_factory import StrategyFactory
 from .strategy_registry import StrategyRegistry
@@ -35,6 +36,8 @@ __all__ = [
     "StrategyRegistry",
     "StrategyFactory",
     "ExecutionEngine",
+    "StrategyExecutionEngine",
+    "StepExecutionEngine",
     "BaseExecutionHandler",
     "ExecutionHandlerContext",
     "ExecutionOutput",

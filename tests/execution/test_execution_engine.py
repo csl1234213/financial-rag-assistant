@@ -14,6 +14,7 @@ from agent.execution import (
     ExecutionContext,
     ExecutionEngine,
     ExecutionStrategyType,
+    StrategyRegistry,
 )
 from agent.planning import (
     ComplexityLevel,
@@ -54,8 +55,36 @@ class TestExecutionEngine:
 
     @pytest.fixture(autouse=True)
     def _setup(self):
+        original_registry = {
+            name: StrategyRegistry.get(name)
+            for name in StrategyRegistry.list_strategies()
+        }
+        from agent.execution.strategies import (
+            DirectLLMStrategy,
+            MultiStepStrategy,
+            ParallelStrategy,
+            RagStrategy,
+            ToolCallingStrategy,
+        )
+
+        built_in_strategies = (
+            ("rag", RagStrategy),
+            ("direct_llm", DirectLLMStrategy),
+            ("parallel", ParallelStrategy),
+            ("multi_step", MultiStepStrategy),
+            ("tool_calling", ToolCallingStrategy),
+        )
+        StrategyRegistry.clear()
+        for name, strategy in built_in_strategies:
+            StrategyRegistry.register(name, strategy)
+
         self.engine = ExecutionEngine()
-        yield
+        try:
+            yield
+        finally:
+            StrategyRegistry.clear()
+            for name, strategy in original_registry.items():
+                StrategyRegistry.register(name, strategy)
 
     # =========================
     # Strategy Selection

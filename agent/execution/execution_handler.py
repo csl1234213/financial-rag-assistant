@@ -17,8 +17,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from agent.execution.step_execution_engine import StepExecutionEngine
 from agent.execution.strategy_enums import ExecutionStrategyType
-from agent.execution_engine import ExecutionEngine
 from agent.execution_plan import ExecutionPlan
 from agent.execution_result import ExecutionResult
 from agent.reasoning_models import Evidence
@@ -28,7 +28,16 @@ from agent.reasoning_models import Evidence
 class ExecutionHandlerContext:
     plan: ExecutionPlan
 
-    executor: ExecutionEngine
+    executor: StepExecutionEngine
+
+    # Bounded strategy-level fan-out. Only the parallel handler consumes this
+    # value, and only for independent retrieval steps.
+    parallelism: int = 1
+
+    # Request-scoped values (tenant, thread, trace, etc.) are passed through
+    # this object instead of module globals so concurrent requests cannot
+    # leak retrieval state into one another.
+    shared_context: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -40,6 +49,11 @@ class ExecutionOutput:
     evidences: List[Evidence] = field(default_factory=list)
 
     execution_results: List[ExecutionResult] = field(default_factory=list)
+
+    # Structured, request-scoped trace of actual governed tool executions.
+    # This is distinct from retrieval evidence and is safe to expose through
+    # the runtime execution metadata.
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class BaseExecutionHandler(ABC):

@@ -14,7 +14,7 @@ class ExecutionEngine:
     through registered handlers.
 
     Different from:
-    agent.execution.execution_engine.ExecutionEngine (StrategyExecutionEngine)
+    agent.execution.execution_engine.StrategyExecutionEngine
     which decides execution strategy (RAG / DirectLLM / Parallel / MultiStep).
 
     This engine delegates actual step execution to handlers.
@@ -50,9 +50,30 @@ class ExecutionEngine:
         completed: Dict[int, Any] = {}
 
         for step in plan.tasks:
-            self._execute_step(step, shared_context, completed)
+            self.execute_step(step, shared_context, completed)
 
         return plan
+
+    def execute_step(
+        self,
+        step: PlanStep,
+        shared_context: Optional[Dict[str, Any]] = None,
+        completed: Optional[Dict[int, Any]] = None,
+    ) -> ExecutionResult:
+        """Execute one plan step against an explicit dependency snapshot.
+
+        Advanced execution handlers use this method to schedule independent
+        retrieval steps concurrently without sharing mutable evidence lists.
+        A production engine is fully configured before it serves requests;
+        handlers must not be registered while steps are executing.
+        """
+        if shared_context is None:
+            shared_context = {}
+        if completed is None:
+            completed = {}
+
+        self._execute_step(step, shared_context, completed)
+        return step.result
 
     # =========================
     # Step Execution
@@ -64,6 +85,8 @@ class ExecutionEngine:
         shared_context: Dict[str, Any],
         completed: Dict[int, Any],
     ):
+        shared_context["_step_results"] = dict(completed)
+
         if not self._dependencies_met(step, completed):
             step.status = StepStatus.SKIPPED
             step.result = ExecutionResult(
@@ -95,6 +118,7 @@ class ExecutionEngine:
                 output=output,
             )
             completed[step.step_id] = output
+            shared_context["_step_results"] = dict(completed)
         except Exception as e:
             step.status = StepStatus.FAILED
             step.result = ExecutionResult(
@@ -120,3 +144,11 @@ class ExecutionEngine:
                 return False
 
         return True
+
+
+# Explicit architectural name for new callers.  Keeping the implementation
+# class at its historical location preserves import, introspection, and
+# serialization compatibility.
+StepExecutionEngine = ExecutionEngine
+
+__all__ = ["ExecutionEngine", "StepExecutionEngine"]

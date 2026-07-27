@@ -104,6 +104,91 @@ class TestQueryPlanner:
         step_types = [t.step_type for t in plan.tasks]
         assert StepType.RETRIEVE in step_types
 
+    def test_explicit_growth_query_builds_typed_financial_tool_step(
+        self,
+        planner,
+    ):
+        context = PlanningContext(
+            question="Calculate revenue growth from 100 to 125",
+            companies=[],
+        )
+
+        plan, _, _ = planner.plan(context)
+
+        assert plan.intent == "financial_calculation"
+        assert plan.metadata == {
+            "tool_policy": "financial_metrics_only",
+            "deterministic": True,
+        }
+        assert len(plan.tasks) == 1
+        step = plan.tasks[0]
+        assert step.step_type is StepType.TOOL_CALL
+        assert step.tool_name == "financial_metrics"
+        assert step.parameters == {
+            "operation": "growth_rate",
+            "previous": 100,
+            "current": 125,
+        }
+
+    @pytest.mark.parametrize(
+        ("question", "operation", "expected_parameters"),
+        [
+            (
+                "Calculate margin of 30 on 120",
+                "margin",
+                {"numerator": 30, "denominator": 120},
+            ),
+            (
+                "Calculate ratio of 150 to 100",
+                "ratio",
+                {"numerator": 150, "denominator": 100},
+            ),
+            (
+                "Calculate CAGR from 100 to 121 over 2 years",
+                "cagr",
+                {
+                    "starting_value": 100,
+                    "ending_value": 121,
+                    "periods": 2,
+                },
+            ),
+        ],
+    )
+    def test_supported_financial_queries_are_deterministically_typed(
+        self,
+        planner,
+        question,
+        operation,
+        expected_parameters,
+    ):
+        plan, _, _ = planner.plan(
+            PlanningContext(question=question, companies=[]),
+        )
+
+        step = plan.tasks[0]
+        assert step.step_type is StepType.TOOL_CALL
+        assert step.tool_name == "financial_metrics"
+        assert step.parameters == {
+            "operation": operation,
+            **expected_parameters,
+        }
+
+    def test_ambiguous_financial_values_do_not_create_tool_call(
+        self,
+        planner,
+    ):
+        plan, _, _ = planner.plan(
+            PlanningContext(
+                question="growth from 100 to 125 in 2025",
+                companies=[],
+            ),
+        )
+
+        assert all(
+            step.step_type is not StepType.TOOL_CALL
+            for step in plan.tasks
+        )
+
     def test_step_ids_are_sequential(self, planner):
         context = PlanningContext(
             question="Compare Apple and Tesla",

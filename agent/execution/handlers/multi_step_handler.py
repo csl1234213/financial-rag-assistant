@@ -1,22 +1,12 @@
-# ============================================================
-# MultiStepHandler — Execute multi-step reasoning workflow (placeholder)
-# ============================================================
-# Used when ExecutionResult.strategy == ExecutionStrategyType.MULTI_STEP
-# Placeholder: delegates to RAG handler for now.
-# Future: chain of reasoning steps (retrieve → analyze → synthesize).
-# ============================================================
-
-import logging
+"""Dependency-ordered multi-step execution handler."""
 
 from agent.execution.execution_handler import (
     BaseExecutionHandler,
     ExecutionHandlerContext,
     ExecutionOutput,
 )
-from agent.execution.handlers.rag_handler import RagHandler
+from agent.execution.plan_execution import PlanExecutionCoordinator
 from agent.execution.strategy_enums import ExecutionStrategyType
-
-logger = logging.getLogger(__name__)
 
 
 class MultiStepHandler(BaseExecutionHandler):
@@ -28,5 +18,4 @@ class MultiStepHandler(BaseExecutionHandler):
         self,
         ctx: ExecutionHandlerContext,
     ) -> ExecutionOutput:
-        logger.info("MultiStepHandler: delegating to RAG (placeholder)")
-        return RagHandler().execute(ctx)
+        return PlanExecutionCoordinator(ctx).execute_sequential()

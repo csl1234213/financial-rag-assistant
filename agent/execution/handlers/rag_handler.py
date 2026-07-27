@@ -11,8 +11,8 @@ from agent.execution.execution_handler import (
     ExecutionHandlerContext,
     ExecutionOutput,
 )
+from agent.execution.plan_execution import output_from_evidence
 from agent.execution.strategy_enums import ExecutionStrategyType
-from core.context_builder import build_context_from_evidence
 
 
 class RagHandler(BaseExecutionHandler):
@@ -24,17 +24,12 @@ class RagHandler(BaseExecutionHandler):
         self,
         ctx: ExecutionHandlerContext,
     ) -> ExecutionOutput:
-        shared = {"_all_evidence": []}
+        # Keep the original whole-plan executor contract for simple RAG.
+        # Advanced strategies use the step-level coordinator.
+        shared = dict(ctx.shared_context)
+        shared["_all_evidence"] = []
         ctx.executor.execute(ctx.plan, shared)
-        evidences = shared["_all_evidence"]
-
-        context, citations = build_context_from_evidence(evidences)
-
-        execution_results = [step.result for step in ctx.plan.tasks if step.result is not None]
-
-        return ExecutionOutput(
-            context=context,
-            citations=citations,
-            evidences=evidences,
-            execution_results=execution_results,
+        return output_from_evidence(
+            ctx.plan.tasks,
+            shared["_all_evidence"],
         )
