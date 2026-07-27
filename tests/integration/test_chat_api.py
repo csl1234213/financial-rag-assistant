@@ -4,9 +4,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+
+from api.app import app
+from auth.dependencies import get_optional_user
 
 
 def _fake_agent_result(
@@ -210,3 +214,32 @@ class TestChatAPI:
         assert "task_count" in data["plan"]
         assert "tasks" in data["plan"]
         assert isinstance(data["plan"]["tasks"], list)
+
+    def test_authenticated_chat_forwards_user_scope(self, client):
+        principal = SimpleNamespace(id=10, tenant_id=7)
+        app.dependency_overrides[get_optional_user] = lambda: principal
+
+        try:
+            with (
+                patch("api.routers.chat.can_chat", return_value=True),
+                patch(
+                    "api.services.chat_service.run_agent",
+                    side_effect=_fake_run_agent_success,
+                ) as run_agent_mock,
+            ):
+                response = client.post(
+                    "/api/v1/chat",
+                    json={
+                        "question": "Scoped question",
+                        "thread_id": "default",
+                    },
+                )
+
+            assert response.status_code == 200
+
+            scope = run_agent_mock.call_args.kwargs
+            assert scope["tenant_id"] == 7
+            assert scope["user_id"] == 10
+            assert scope["thread_id"] == "default"
+        finally:
+            app.dependency_overrides.pop(get_optional_user, None)
