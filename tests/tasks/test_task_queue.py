@@ -9,10 +9,10 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
+from auth.dependencies import get_current_user
 from models.task import TaskStatus as TaskStatusModel
 from models.task import TaskType as TaskTypeModel
 from models.tenant import Tenant
@@ -21,10 +21,11 @@ from storage.database import Base, get_db
 from tasks.models import TaskStatus, TaskType
 from tasks.queue import TaskQueue, get_task_queue
 from tasks.repository import TaskRepository
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_task_queue_integration.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database(
+    "test_task_queue_integration.db"
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -37,8 +38,9 @@ def override_get_db():
 
 
 @pytest.fixture
-def client():
+def client(repo_user):
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: repo_user
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

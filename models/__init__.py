@@ -1,3 +1,6 @@
+from billing.models import BillingRecord
+from observability.models import AgentSpan, AgentTrace
+
 from .document import Document
 from .plan import Plan
 from .subscription import TenantSubscription
@@ -6,9 +9,6 @@ from .tenant import Tenant
 from .usage import UsageRecord
 from .user import User
 from .worker_node import WorkerNode
-
-from billing.models import BillingRecord
-from observability.models import AgentSpan, AgentTrace
 
 __all__ = [
     "AgentSpan",

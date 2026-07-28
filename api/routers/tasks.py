@@ -3,8 +3,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from core.tenant_context import get_current_tenant_optional
-from models.tenant import Tenant
+from auth.dependencies import get_current_user
+from models.user import User
 from storage.database import get_db
 from tasks.repository import TaskRepository
 
@@ -14,7 +14,7 @@ router = APIRouter(tags=["Tasks"])
 @router.get("/tasks/{task_id}")
 def get_task_status(
     task_id: str,
-    tenant: Optional[Tenant] = Depends(get_current_tenant_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     repo = TaskRepository(db)
@@ -23,7 +23,7 @@ def get_task_status(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if tenant and task.tenant_id is not None and task.tenant_id != tenant.id:
+    if task.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Access denied: task belongs to another tenant")
 
     return {
@@ -47,12 +47,12 @@ def list_tasks(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
-    tenant: Optional[Tenant] = Depends(get_current_tenant_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     repo = TaskRepository(db)
     result = repo.list_tasks(
-        tenant_id=tenant.id if tenant else None,
+        tenant_id=current_user.tenant_id,
         status=status,
         page=page,
         size=size,

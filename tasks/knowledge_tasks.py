@@ -5,6 +5,7 @@ import fitz
 from core.usage_events import ResourceType, UsageEvent
 from document_loader import chunk_text, clean_text, get_company, get_quarter
 from embedding import load_embedding_model
+from models.document import Document
 from models.task import TaskStatus
 from services.usage_service import record_usage
 from storage.chroma_store import ChromaEmbeddingStore
@@ -13,9 +14,37 @@ from storage.vector_models import VectorDocument
 from tasks.repository import TaskRepository
 
 
+def _set_document_status(
+    db,
+    *,
+    document_id: int | None,
+    tenant_id: int,
+    status: str,
+    company: str | None = None,
+    period: str | None = None,
+) -> bool:
+    """Update a document only when it belongs to the task's tenant."""
+    if document_id is None:
+        return True
+
+    document = db.get(Document, document_id)
+    if document is None or document.tenant_id != tenant_id:
+        return False
+
+    document.status = status
+    if company is not None:
+        document.company = company
+    if period is not None:
+        document.period = period
+    db.commit()
+    return True
+
+
 def process_document_task(task_public_id: str):
     db = SessionLocal()
     repo = TaskRepository(db)
+    document_id: int | None = None
+    tenant_id: int | None = None
     try:
         task = repo.get_task(task_public_id)
         if task is None:
@@ -34,11 +63,30 @@ def process_document_task(task_public_id: str):
         file_path = payload.get("file_path")
         document_id = payload.get("document_id")
 
+        if document_id is not None and not _set_document_status(
+            db,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            status="processing",
+        ):
+            repo.update_task(
+                task_public_id,
+                status=TaskStatus.FAILED,
+                error_message="Document does not belong to this tenant",
+            )
+            return
+
         if not file_path or not os.path.exists(file_path):
             repo.update_task(
                 task_public_id,
                 status=TaskStatus.FAILED,
                 error_message=f"File not found: {file_path}",
+            )
+            _set_document_status(
+                db,
+                document_id=document_id,
+                tenant_id=tenant_id,
+                status="failed",
             )
             return
 
@@ -75,11 +123,15 @@ def process_document_task(task_public_id: str):
                 "collection": "financial_reports",
                 "tenant_id": tenant_id,
             }
-            doc_id = filename.lower().replace(".pdf", "").replace(" ", "_").replace("-", "_")
+            doc_id = (
+                f"tenant_{tenant_id}_document_{document_id}"
+                if document_id is not None
+                else filename.lower().replace(".pdf", "").replace(" ", "_").replace("-", "_")
+            )
             docs.append(
                 VectorDocument(
                     document_id=doc_id,
-                    chunk_id=f"{doc_id}_{i}",
+                    chunk_id=f"tenant_{tenant_id}_{doc_id}_{i}",
                     company=company,
                     content=chunk,
                     embedding=embedding,
@@ -100,6 +152,14 @@ def process_document_task(task_public_id: str):
                 "company": company,
                 "document_id": document_id,
             },
+        )
+        _set_document_status(
+            db,
+            document_id=document_id,
+            tenant_id=tenant_id,
+            status="indexed",
+            company=company,
+            period=quarter,
         )
 
         record_usage(
@@ -146,5 +206,12 @@ def process_document_task(task_public_id: str):
             status=TaskStatus.FAILED,
             error_message=str(e),
         )
+        if tenant_id is not None:
+            _set_document_status(
+                db,
+                document_id=document_id,
+                tenant_id=tenant_id,
+                status="failed",
+            )
     finally:
         db.close()

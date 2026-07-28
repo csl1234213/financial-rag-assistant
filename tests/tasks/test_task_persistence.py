@@ -10,19 +10,20 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
+from auth.dependencies import get_current_user
 from models.task import TaskStatus, TaskType
 from models.tenant import Tenant
 from models.user import User
 from storage.database import Base, get_db
 from tasks.repository import TaskRepository
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_task_persistence.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database(
+    "test_task_persistence.db"
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -80,8 +81,9 @@ def user(db_session, tenant):
 
 
 @pytest.fixture
-def client():
+def client(user):
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: user
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -293,9 +295,33 @@ class TestTaskAPI:
         assert data["page"] == 1
         assert data["size"] == 2
 
-    def test_unauthorized_request(self, client):
-        response = client.get("/api/v1/tasks/nonexistent")
-        assert response.status_code == 404
+    def test_unauthorized_request(self):
+        app.dependency_overrides[get_db] = override_get_db
+        with TestClient(app) as test_client:
+            response = test_client.get("/api/v1/tasks/nonexistent")
+        app.dependency_overrides.clear()
+        assert response.status_code == 401
+
+    def test_task_endpoint_rejects_another_tenants_task(self, client, db_session, tenant, user):
+        other_tenant = Tenant(name="Other tenant", slug="other-tenant")
+        db_session.add(other_tenant)
+        db_session.flush()
+        other_user = User(
+            email="other-tenant@example.com",
+            password_hash="hash",
+            tenant_id=other_tenant.id,
+        )
+        db_session.add(other_user)
+        db_session.commit()
+
+        hidden_task = TaskRepository(db_session).create_task(
+            TaskType.PROCESS_DOCUMENT,
+            {},
+            other_tenant.id,
+            other_user.id,
+        )
+        response = client.get(f"/api/v1/tasks/{hidden_task.public_id}")
+        assert response.status_code == 403
 
 
 class TestWorker:

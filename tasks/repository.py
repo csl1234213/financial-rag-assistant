@@ -72,11 +72,14 @@ class TaskRepository:
             "size": size,
         }
 
-    def claim_task(self) -> Optional[TaskModel]:
+    def claim_task(self, task_id: Optional[str] = None) -> Optional[TaskModel]:
+        """Atomically claim the next pending task, or one known task by public ID."""
+        query = self._db.query(TaskModel).filter(TaskModel.status == TaskStatus.PENDING.value)
+        if task_id is not None:
+            query = query.filter(TaskModel.public_id == task_id)
+
         task = (
-            self._db.query(TaskModel)
-            .filter(TaskModel.status == TaskStatus.PENDING.value)
-            .with_for_update(skip_locked=True)
+            query.with_for_update(skip_locked=True)
             .order_by(TaskModel.created_at.asc())
             .first()
         )
@@ -119,8 +122,19 @@ class TaskRepository:
         self._db.refresh(task)
         return task
 
-    def recover_stale_tasks(self) -> int:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=STALE_TASK_TIMEOUT_MINUTES)
+    def recover_stale_tasks(
+        self,
+        *,
+        stale_after_seconds: int | float | None = None,
+    ) -> int:
+        if stale_after_seconds is None:
+            stale_after_seconds = STALE_TASK_TIMEOUT_MINUTES * 60
+        if stale_after_seconds <= 0:
+            raise ValueError("stale_after_seconds must be greater than zero")
+
+        stale_threshold = datetime.now(timezone.utc) - timedelta(
+            seconds=stale_after_seconds
+        )
         stale_tasks = (
             self._db.query(TaskModel)
             .filter(

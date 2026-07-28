@@ -1,10 +1,8 @@
 import logging
 import time
-from datetime import datetime, timezone
 
 from billing.calculator import calculate_cost
 from billing.models import BillingRecord
-from billing.plans import TOKEN_PRICE_PER_1K_INPUT, TOKEN_PRICE_PER_1K_OUTPUT, TOOL_CALL_PRICE
 from core.usage_events import ResourceType, UsageEvent
 from models.task import TaskStatus
 from services.agent_runtime.runtime import run_agent
