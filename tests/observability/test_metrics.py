@@ -7,18 +7,15 @@ sys.path.insert(0, str(ROOT))
 import os
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from billing.models import BillingRecord
 from observability.metrics import get_agent_metrics, get_daily_metrics
-from observability.models import AgentTrace
 from observability.tracer import finish_trace, start_trace
 from storage.database import Base
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_obs_metrics.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_obs_metrics.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -114,6 +111,25 @@ class TestAgentMetrics:
         metrics = get_agent_metrics(db_session, tenant_id=1)
         assert metrics["total_cost"] == 0.005
 
+    def test_metrics_treats_in_progress_as_neither_success_nor_failure(self, db_session):
+        for status in ("success", "cache_hit", "fallback", "failed"):
+            trace = start_trace(thread_id=status, tenant_id=1)
+            finish_trace(trace, status=status, db=db_session)
+
+        in_progress = start_trace(thread_id="in-progress", tenant_id=1)
+        db_session.add(in_progress)
+        db_session.commit()
+
+        metrics = get_agent_metrics(db_session, tenant_id=1)
+
+        assert metrics["total_requests"] == 5
+        assert metrics["total_success"] == 3
+        assert metrics["total_failed"] == 1
+        assert metrics["total_cache_hits"] == 1
+        assert metrics["total_fallbacks"] == 1
+        assert metrics["total_in_progress"] == 1
+        assert metrics["success_rate"] == 75.0
+
 
 class TestDailyMetrics:
     def test_empty_daily(self, db_session):
@@ -133,3 +149,20 @@ class TestDailyMetrics:
         assert "success" in day_data
         assert "failed" in day_data
         assert "avg_latency_ms" in day_data
+
+    def test_daily_metrics_classifies_terminal_and_active_traces(self, db_session):
+        for status in ("success", "cache_hit", "fallback", "failed"):
+            trace = start_trace(thread_id=status, tenant_id=1)
+            finish_trace(trace, status=status, db=db_session)
+
+        db_session.add(start_trace(thread_id="active", tenant_id=1))
+        db_session.commit()
+
+        daily = get_daily_metrics(db_session, tenant_id=1, days=7)
+        day_data = daily["daily"][0]
+        assert day_data["requests"] == 5
+        assert day_data["success"] == 1
+        assert day_data["failed"] == 1
+        assert day_data["cache_hits"] == 1
+        assert day_data["fallbacks"] == 1
+        assert day_data["in_progress"] == 1

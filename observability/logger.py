@@ -1,8 +1,10 @@
 import json
 import logging
-import sys
 from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any, Dict, Optional
+
+from observability.serialization import to_json_safe
 
 
 class StructuredLogger:
@@ -16,7 +18,7 @@ class StructuredLogger:
             "event": event,
             **kwargs,
         }
-        return json.dumps(record, ensure_ascii=False, default=str)
+        return json.dumps(to_json_safe(record), ensure_ascii=False, sort_keys=True)
 
     def info(self, event: str, **kwargs):
         self._logger.info(self._format("INFO", event, **kwargs))
@@ -46,7 +48,8 @@ def log_agent_request(
         request_id=request_id,
         tenant_id=tenant_id,
         thread_id=thread_id,
-        question=question[:200],
+        question_chars=len(question),
+        question_sha256=sha256(question.encode("utf-8")).hexdigest(),
         **kwargs,
     )
 
