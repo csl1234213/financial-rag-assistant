@@ -38,7 +38,7 @@ class ChatService:
 
         reasoning = {
             "intent": intent_result.get("intent", ""),
-            "companies": intent_result.get("companies", []),
+             "companies": intent_result.get("companies") or [],
             "research_mode": result.get("research_mode", "default"),
             "evidence_count": result.get("evidence_count", 0),
         }
