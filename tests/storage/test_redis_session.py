@@ -3,8 +3,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 
@@ -15,7 +13,6 @@ class TestRedisSessionCache:
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
 
-        from cache import session as session_mod
         from cache.session import SessionCache
 
         cache = SessionCache()
@@ -27,7 +24,7 @@ class TestRedisSessionCache:
 
         mock_redis.setex.assert_called_once()
         call_args = mock_redis.setex.call_args[0]
-        assert "agent:session:test_thread" == call_args[0]
+        assert "agent:session:0:0:test_thread" == call_args[0]
         assert call_args[1] == 86400
 
         mock_redis.get.return_value = json.dumps(state)
@@ -60,7 +57,7 @@ class TestRedisSessionCache:
         cache._redis = mock_redis
         result = cache.delete_session("to_delete")
         assert result is True
-        mock_redis.delete.assert_called_once_with("agent:session:to_delete")
+        mock_redis.delete.assert_called_once_with("agent:session:0:0:to_delete")
 
     @patch("cache.session.is_redis_available")
     def test_exists_session(self, mock_available):
@@ -91,7 +88,7 @@ class TestRedisSessionCache:
         mock_available.return_value = True
         mock_redis = MagicMock()
 
-        from cache.session import SessionCache, SESSION_TTL
+        from cache.session import SESSION_TTL, SessionCache
 
         assert SESSION_TTL == 86400
 
@@ -126,3 +123,36 @@ class TestRedisSessionCache:
         assert cache.save_session("any", {}) is False
         assert cache.delete_session("any") is False
         assert cache.exists("any") is False
+
+    def test_tenant_and_request_scopes_produce_distinct_keys(self):
+        from cache.session import SessionCache
+
+        cache = SessionCache()
+
+        tenant_a = cache._key("default", tenant_id=1, request_key="first question")
+        tenant_b = cache._key("default", tenant_id=2, request_key="first question")
+        new_question = cache._key("default", tenant_id=1, request_key="second question")
+
+        assert tenant_a != tenant_b
+        assert tenant_a != new_question
+        assert "first question" not in tenant_a
+
+    def test_users_in_same_tenant_produce_distinct_keys(self):
+        from cache.session import SessionCache
+
+        cache = SessionCache()
+
+        user_a = cache._key(
+            "default",
+            tenant_id=1,
+            request_key="same question",
+            user_id=101,
+        )
+        user_b = cache._key(
+            "default",
+            tenant_id=1,
+            request_key="same question",
+            user_id=102,
+        )
+
+        assert user_a != user_b
