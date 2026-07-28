@@ -203,27 +203,127 @@ def test_tenant_isolation():
 # ============================================================
 # 7. Docker Runtime
 # ============================================================
+
+SERVICE_ALIASES: dict[str, tuple[str, ...]] = {
+    "backend": ("backend", "api"),
+    "frontend": ("frontend", "nginx"),
+    "worker": ("agent-worker", "worker"),
+    "redis": ("redis",),
+    "chromadb": ("chromadb",),
+}
+
+
+def _compose_project() -> str:
+    """Return the Compose project name used to discover running containers.
+
+    Resolution order:
+    1. ``E2E_COMPOSE_PROJECT`` environment variable
+    2. ``COMPOSE_PROJECT_NAME`` environment variable
+    3. ``financial-rag-prod`` default (historical production project name)
+    """
+    import os as _os
+    return (
+        _os.environ.get("E2E_COMPOSE_PROJECT")
+        or _os.environ.get("COMPOSE_PROJECT_NAME")
+        or "financial-rag-prod"
+    )
+
+
+def _resolve_container(service: str) -> str:
+    """Discover the first running container for *service* in the current
+    Compose project by inspecting Docker labels.
+
+    Returns the container ID (not the friendly name) so callers can pass it
+    directly to ``docker logs`` or ``docker inspect``.
+    """
+    project = _compose_project()
+    result = subprocess.run(
+        [
+            "docker", "ps",
+            "--filter", f"label=com.docker.compose.project={project}",
+            "--filter", f"label=com.docker.compose.service={service}",
+            "--filter", "status=running",
+            "--format", "{{.ID}}",
+            "--no-trunc",
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    container_id = result.stdout.strip().split("\n")[0].strip()
+    if not container_id:
+        raise RuntimeError(
+            f"No running container found for service '{service}' "
+            f"in Compose project '{project}'. "
+            "Is the stack running?"
+        )
+    return container_id
+
+
+def _running_service_names() -> set[str]:
+    """Return the set of Compose service names that are currently running."""
+    project = _compose_project()
+    result = subprocess.run(
+        [
+            "docker", "ps",
+            "--filter", f"label=com.docker.compose.project={project}",
+            "--filter", "status=running",
+            "--format", "{{.Label \"com.docker.compose.service\"}}",
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    return {name.strip() for name in result.stdout.strip().split("\n") if name.strip()}
+
+
+def _resolve_logical_service(logical: str, running: set[str]) -> str:
+    """Resolve *logical* service name to the actual running Compose service.
+
+    Uses ``SERVICE_ALIASES`` to map logical names to the active alias present
+    in *running*.  Raises ``AssertionError`` with a clear diagnostic when no
+    alias matches.
+    """
+    aliases = SERVICE_ALIASES.get(logical, (logical,))
+    for alias in aliases:
+        if alias in running:
+            return alias
+    raise AssertionError(
+        f"Logical service '{logical}' not found among running services. "
+        f"Accepted aliases: {aliases}. "
+        f"Running services: {sorted(running)}"
+    )
+
+
 @pytest.mark.e2e
 def test_docker_runtime():
-    result = subprocess.run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace")
-    services = result.stdout.strip().split("\n")
-    required = ["financial-frontend", "financial-backend", "financial-redis", "financial-chromadb"]
-    running = set()
-    for line in services:
-        for req in required:
-            if req in line and "Up" in line:
-                running.add(req)
-    missing = set(required) - running
-    assert len(missing) == 0, f"Missing: {missing}"
+    services = _running_service_names()
+    project = _compose_project()
+    missing = []
+    for logical in ("backend", "frontend", "redis", "chromadb"):
+        try:
+            _resolve_logical_service(logical, services)
+        except AssertionError:
+            missing.append(logical)
+    assert len(missing) == 0, (
+        f"Missing logical services: {missing}. "
+        f"Running Compose services: {sorted(services)}. "
+        f"Project: {project}"
+    )
+
 
 @pytest.mark.e2e
 def test_worker_heartbeat():
-    result = subprocess.run(["docker", "logs", "financial-rag-assistant-worker-1"],
-                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    services = _running_service_names()
+    worker_svc = _resolve_logical_service("worker", services)
+    container_id = _resolve_container(worker_svc)
+
+    result = subprocess.run(
+        ["docker", "logs", container_id],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
     combined = (result.stdout + result.stderr).lower()
-    assert "worker runner started" in combined or "waiting for tasks" in combined or "taskworker started" in combined, \
-        "No heartbeat in logs"
+    assert (
+        "worker runner started" in combined
+        or "waiting for tasks" in combined
+        or "taskworker started" in combined
+    ), "No heartbeat in logs"
 
 
 if __name__ == "__main__":
