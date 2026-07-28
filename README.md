@@ -1,10 +1,10 @@
-# Financial Agent Runtime Assistant V7.3.3
+# Financial Agent Runtime Assistant V8.1.0
 
 [![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
-[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-969%20passed-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
+[![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 
 ## AI-Powered Financial Agent Runtime for Multi-Document Research
 
@@ -24,6 +24,11 @@ Unlike traditional RAG demos, this project implements a **full Agent Runtime arc
 - **Workflow Orchestration** — Strategy-driven execution: RAG / DirectLLM / Parallel / MultiStep / ToolCalling
 - **LLM Provider Abstraction** — Factory pattern with pluggable providers (DeepSeek, Gemini)
 - **Pluggable Runtime Capabilities** — Memory, Metrics, Reliability, Tracing, Tool Calling
+- **LangGraph Orchestration** — Source-controlled plan, execute, and finalize graph
+- **Tenant-Safe Tool Use** — Governed retrieval contract with explicit tenant scope
+- **MCP Foundation** — Lifecycle-aware stdio JSON-RPC, schemas, allowlists, and authorization hooks
+- **Evaluation & Prompt Governance** — Versioned prompts, golden datasets, RAG/Agent metrics, and model benchmarks
+- **LoRA Readiness** — Validated SFT data and an explicit, opt-in Hugging Face training path
 
 ---
 
@@ -136,9 +141,28 @@ This design separates strategic decision-making from step-level execution, enabl
 | API Framework | FastAPI |
 | Vector Database | ChromaDB |
 | LLM Provider | DeepSeek (primary), Gemini (supported) |
-| Agent Runtime | Custom Agent Runtime Framework |
-| Testing | pytest (969 tests, 85%+ coverage) |
-| UI | Streamlit |
+| Agent Runtime | LangGraph orchestration + custom financial domain runtime |
+| AI Evaluation | Versioned golden datasets + deterministic RAG/Agent/model metrics |
+| Testing | pytest with an 85% CI coverage gate |
+| UI | React + TypeScript + Vite (development); Nginx static serving (Docker) |
+
+---
+
+## Runtime and Operations
+
+**The V8.1.0 canonical deployment entry point is the repository-root
+[`docker-compose.yml`](docker-compose.yml).** It runs the React/Nginx frontend,
+FastAPI API, `agent-worker`, PostgreSQL, Redis, and ChromaDB together.
+
+- [Current architecture](docs/ARCHITECTURE.md)
+- [Deployment topology](docs/DEPLOYMENT_ARCHITECTURE.md)
+- [Operational runbook](docs/OPERATIONS.md)
+- [AI engineering and extension guide](docs/AI_ENGINEERING_GUIDE.md)
+- [V8.1.0 release record](docs/releases/v8.1.0.md)
+- [V7.3.3 release record](docs/releases/v7.3.3.md)
+
+The files under `deploy/`, the Streamlit Dockerfile, and historical release
+documents are retained for reference. They are not the V8.1.0 startup path.
 
 ---
 
@@ -149,31 +173,33 @@ This design separates strategic decision-making from step-level execution, enabl
 git clone https://github.com/csl1234213/financial-rag-assistant.git
 cd financial-rag-assistant
 
-# 2. One-command start
-./scripts/start.sh
+# 2. Create a local runtime configuration; never commit this file.
+cp .env.example .env
+# Edit .env: set AUTH_SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD, and
+# DEEPSEEK_API_KEY. Root Compose constructs its internal database URLs.
 
-# 3. Open in browser
-#    UI:  http://localhost:8501
-#    API: http://localhost:8000/docs
+# 3. Build and start the canonical V8.1.0 stack.
+docker compose up -d --build
+
+# 4. Open in browser
+#    Copilot: http://localhost:3000
+#    API:     http://localhost:8000
+#    Swagger: http://localhost:8000/docs
 ```
 
 **Prerequisites:** Docker Desktop (or Docker Engine + Docker Compose)
 
-On first run, the script will:
-- Auto-create `.env` from `.env.example` (you'll be prompted to set your `DEEPSEEK_API_KEY`)
-- Build and start all containers
-- Wait for the API to become healthy
-- Print access URLs
-
 **Windows (PowerShell):**
 ```powershell
-.\scripts\start.ps1
+Copy-Item .env.example .env
+# Edit .env before starting.
+docker compose up -d --build
 ```
 
-**Development mode (hot-reload):**
-```bash
-./scripts/start.sh dev
-```
+For the React/Vite development workflow (`http://localhost:5173`), follow
+[the runbook](docs/OPERATIONS.md#reactvite-development) and set
+`VITE_API_BASE_URL=/api` in `frontend/.env`; Vite proxies that prefix to the
+local FastAPI service.
 
 ---
 
@@ -184,8 +210,8 @@ On first run, the script will:
 | `/api/v1/chat` | POST | Financial research chat |
 | `/api/v1/knowledge` | GET | Knowledge base overview |
 | `/api/v1/knowledge/statistics` | GET | Document & chunk statistics |
-| `/api/v1/upload` | POST | Upload PDF + auto-refresh |
-| `/api/v1/refresh` | POST | Rebuild knowledge base |
+| `/api/v1/upload` | POST | Upload a PDF and enqueue asynchronous indexing |
+| `/api/v1/refresh` | POST | Rebuild public demo knowledge (admin/owner only) |
 | `/api/v1/health` | GET | System health check |
 
 ---
@@ -262,6 +288,7 @@ V4.0  → Production Architecture
 V7.3.1 → Agent Runtime Framework
 V7.3.2 → Docker Production Packaging
 V7.3.3 → Demo Knowledge Bootstrap
+V8.1.0 → Production Agent Platform
 ```
 
 ---
@@ -307,7 +334,7 @@ $ docker compose up
 ```
 
 ```
-=== Financial Agent Runtime Assistant v7.3.3 ===
+=== Financial Agent Runtime Assistant v8.1.0 ===
 [Entrypoint] Running knowledge bootstrap...
 [Bootstrap] Knowledge base empty — initializing demo data...
 Loaded Documents: 5 (Tesla, NVIDIA, Apple)
@@ -321,7 +348,7 @@ Total Chunks: 257
 {
   "status": "ok",
   "service": "Financial Research Copilot",
-  "version": "7.3.3",
+  "version": "8.1.0",
   "api": "ok",
   "runtime": "ok",
   "embedding_model": "loaded",
@@ -393,7 +420,7 @@ FastAPI auto-generated API documentation at `/docs`:
 | `/api/v1/chat` | POST | Financial research chat |
 | `/api/v1/knowledge` | GET | Knowledge base overview |
 | `/api/v1/upload` | POST | Upload PDF documents |
-| `/api/v1/health` | GET | System health check (`APP_VERSION: "7.3.3"`) |
+| `/api/v1/health` | GET | System health check (`APP_VERSION: "8.1.0"`) |
 
 > Full demo script: [docs/demo/demo-script.md](docs/demo/demo-script.md)
 
@@ -406,7 +433,7 @@ FastAPI auto-generated API documentation at `/docs`:
 | ![Docker Startup](docs/demo/screenshots/docker-startup.png) | `docker compose up` — Bootstrap 5 PDFs, 257 chunks indexed, both services healthy |
 | ![Health API](docs/demo/screenshots/health-api.png) | `GET /api/v1/health` — All systems operational, embedding model loaded |
 | ![Swagger RAG](docs/demo/screenshots/swagger-rag.png) | `POST /api/v1/chat` — Tesla RAG research with 4 citations from `Tesla_Q2_2025.pdf` |
-| ![Streamlit RAG](docs/demo/screenshots/streamlit-rag.png) | Streamlit UI — NVIDIA RAG research multi-source (3 PDFs) with evidence |
+| ![Legacy UI RAG](docs/demo/screenshots/streamlit-rag.png) | Historical Streamlit UI screenshot; the supported V8.1.0 UI is React at `:3000` in Docker or Vite at `:5173` in development. |
 
 ---
 

@@ -1,9 +1,14 @@
-# Demo Script — Financial Agent Runtime Assistant v7.3.3
+# Demo Script — Financial Agent Runtime Assistant v8.1.0
+
+> This script uses the supported V8.1.0 root `docker-compose.yml` stack. For
+> the operational runbook and the Vite development workflow, see
+> [../OPERATIONS.md](../OPERATIONS.md).
 
 ## Prerequisites
 
 - Docker Desktop (or Docker Engine + Docker Compose)
-- `DEEPSEEK_API_KEY` in `.env` (auto-prompted by `start.sh`)
+- A local `.env` copied from `.env.example`, with a valid provider credential,
+  `AUTH_SECRET_KEY`, `POSTGRES_PASSWORD`, and `REDIS_PASSWORD`
 
 ---
 
@@ -13,14 +18,17 @@
 git clone https://github.com/csl1234213/financial-rag-assistant.git
 cd financial-rag-assistant
 
-# One-command start
-./scripts/start.sh
+# Create and configure local runtime settings first.
+cp .env.example .env
+
+# Build and start the V8.1.0 React + FastAPI stack.
+docker compose up -d --build
 ```
 
 **Expected output:**
 
 ```
-=== Financial Agent Runtime Assistant v7.3.3 ===
+=== Financial Agent Runtime Assistant v8.1.0 ===
 [Entrypoint] Running knowledge bootstrap...
 [Bootstrap] Knowledge base empty — initializing demo data...
 Loading embedding model...
@@ -34,8 +42,8 @@ Total Chunks: 257
 **Verify idempotency (restart):**
 
 ```bash
-docker compose restart financial-api
-docker logs financial-api --tail 5
+docker compose restart backend
+docker compose logs --tail 5 backend
 ```
 
 **Expected output:**
@@ -58,7 +66,7 @@ curl http://localhost:8000/api/v1/health | python -m json.tool
 {
     "status": "ok",
     "service": "Financial Research Copilot",
-    "version": "7.3.3",
+    "version": "8.1.0",
     "api": "ok",
     "runtime": "ok",
     "embedding_model": "loaded",
@@ -293,15 +301,15 @@ Available endpoints:
 | `/api/v1/chat` | POST | Financial research chat |
 | `/api/v1/knowledge` | GET | Knowledge base overview |
 | `/api/v1/knowledge/statistics` | GET | Document & chunk statistics |
-| `/api/v1/upload` | POST | Upload PDF + auto-refresh |
+| `/api/v1/upload` | POST | Upload PDF and enqueue asynchronous indexing |
 | `/api/v1/refresh` | POST | Rebuild knowledge base |
 | `/api/v1/health` | GET | System health check |
 
 ---
 
-## 9. Streamlit UI
+## 9. React Copilot UI
 
-Open browser: **http://localhost:8501**
+Open browser: **http://localhost:3000**
 
 Try the same queries in the UI:
 - "What is AI?" → Direct Chat
@@ -326,11 +334,11 @@ docker compose down -v
 ## Demo Flow Summary
 
 ```
-docker compose up
+docker compose up -d --build
   │
   ├── Bootstrap: 5 PDFs → 257 chunks
   │
-  ├── Health Check: version 7.3.3, model loaded
+  ├── Health Check: version 8.1.0, model loaded
   │
   ├── Direct Chat: "What is AI?"
   │     ├── Intent: DIRECT_CHAT
@@ -359,8 +367,8 @@ docker compose up
 ## Restart Verification (Idempotency)
 
 ```bash
-docker compose restart financial-api
-docker logs financial-api --tail 3
+docker compose restart backend
+docker compose logs --tail 3 backend
 ```
 
 **Expected output:**

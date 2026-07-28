@@ -1,4 +1,4 @@
-# Financial Agent Runtime Assistant — V7.3.3 Architecture
+# Financial Agent Runtime Assistant — V8.1.0 Architecture
 
 ## Overview
 
@@ -314,3 +314,4 @@ Research Report + Evidence Panel
 | V7.3.1 | Agent Runtime Framework (Layered Execution, Pluggable Capabilities) |
 | V7.3.2 | Docker Production Packaging |
 | V7.3.3 | Demo Knowledge Bootstrap |
+| V8.1.0 | Production Agent Platform |

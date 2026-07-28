@@ -1,375 +1,133 @@
-# Architecture — Financial RAG Assistant
+# Financial Agent Runtime Assistant V8.1.0 Architecture
 
-## High-Level Architecture
+This document describes the supported V8.1.0 runtime. The canonical container
+topology is defined by the repository-root
+[`docker-compose.yml`](../docker-compose.yml). For operational commands, see
+[OPERATIONS.md](OPERATIONS.md).
 
-Financial RAG Assistant is a production-ready AI research copilot with a layered architecture designed for financial document analysis. The system operates as a **Docker Compose multi-service application** with 5 containerized services.
+## System overview
 
-```
-                    ┌──────────────────────────────┐
-                    │           USER                │
-                    │    (Browser / API Client)     │
-                    └──────────────┬───────────────┘
-                                   │
-                                   ▼
-                    ┌──────────────────────────────┐
-                    │       REACT FRONTEND          │
-                    │    Vite + TypeScript + Nginx  │
-                    │          Port :3000           │
-                    └──────────────┬───────────────┘
-                                   │ HTTP REST + JWT
-                                   ▼
-                    ┌──────────────────────────────┐
-                    │       FASTAPI BACKEND          │
-                    │    REST API Gateway            │
-                    │    Port :8000                  │
-                    ├──────────────────────────────┤
-                    │  ┌──────────────────────────┐ │
-                    │  │     AUTH LAYER            │ │
-                    │  │  JWT + bcrypt password    │ │
-                    │  │  Tenant context injection │ │
-                    │  └──────────┬───────────────┘ │
-                    │             │                  │
-                    │  ┌──────────▼───────────────┐ │
-                    │  │     AGENT RUNTIME         │ │
-                    │  │  ┌─────────────────────┐ │ │
-                    │  │  │ Intent Analyzer     │ │ │
-                    │  │  │  → Direct Chat      │ │ │
-                    │  │  │  → Single Company   │ │ │
-                    │  │  │  → Compare Companies│ │ │
-                    │  │  │  → Global Research  │ │ │
-                    │  │  └────────┬────────────┘ │ │
-                    │  │           ▼               │ │
-                    │  │  ┌─────────────────────┐ │ │
-                    │  │  │ Query Planner       │ │ │
-                    │  │  │  Task → Complexity  │ │ │
-                    │  │  │  → Execution Plan   │ │ │
-                    │  │  └────────┬────────────┘ │ │
-                    │  │           ▼               │ │
-                    │  │  ┌─────────────────────┐ │ │
-                    │  │  │ Strategy Engine     │ │ │
-                    │  │  │  → RAG              │ │ │
-                    │  │  │  → Direct LLM       │ │ │
-                    │  │  │  → Parallel         │ │ │
-                    │  │  │  → MultiStep        │ │ │
-                    │  │  │  → Tool Calling     │ │ │
-                    │  │  └────────┬────────────┘ │ │
-                    │  │           ▼               │ │
-                    │  │  ┌─────────────────────┐ │ │
-                    │  │  │ Workflow Engine     │ │ │
-                    │  │  │  Build → Execute    │ │ │
-                    │  │  └─────────────────────┘ │ │
-                    │  └──────────────────────────┘ │
-                    │             │                  │
-                    │  ┌──────────▼───────────────┐ │
-                    │  │    HYBRID RETRIEVER       │ │
-                    │  │  Semantic + Keyword       │ │
-                    │  └──────────┬───────────────┘ │
-                    │             │                  │
-                    │  ┌──────────▼───────────────┐ │
-                    │  │    LLM PROVIDER LAYER     │ │
-                    │  │  ProviderFactory          │ │
-                    │  │  ProviderRegistry         │ │
-                    │  │  ModelRouter              │ │
-                    │  └──────────────────────────┘ │
-                    └──────────────┬───────────────┘
-                                   │
-                    ┌──────────────┼──────────────┐
-                    ▼              ▼              ▼
-            ┌──────────────┐ ┌──────────┐ ┌──────────────┐
-            │   ChromaDB    │ │  Redis   │ │    SQLite    │
-            │  Vector Store │ │ Streams  │ │  Task / User │
-            │   Port :8001  │ │ Port :6379│ │    DB        │
-            └──────────────┘ └────┬─────┘ └──────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────────┐
-                    │        WORKER POOL            │
-                    │    TaskWorker (x N replicas)  │
-                    │    ┌────────────────────────┐ │
-                    │    │ Consumer Group: workers│ │
-                    │    │ Auto-retry             │ │
-                    │    │ Heartbeat monitoring   │ │
-                    │    │ Stale task recovery    │ │
-                    │    └────────────────────────┘ │
-                    └──────────────┬───────────────┘
-                                   │
-                                   ▼
-                    ┌──────────────────────────────┐
-                    │    Document Processing        │
-                    │  PDF → Chunk → Embed → Store  │
-                    └──────────────────────────────┘
+```text
+Browser
+  |
+  | Docker: http://localhost:3000
+  v
+frontend (React build served by Nginx)
+  | /api/* reverse proxy
+  v
+backend (FastAPI, :8000)
+  |-- authentication and tenant context
+  |-- chat API -> source-controlled LangGraph
+  |      -> plan (intent) -> execute (Agent Runtime) -> finalize
+  |      -> governed RetrievalTool -> hybrid retrieval
+  |      -> ChromaDB -> LLM provider -> cited response
+  |
+  |-- PostgreSQL (:5432): users, tenants, documents, tasks, sessions
+  |-- Redis (:6379): cache, sessions, task queue / worker coordination
+  |-- ChromaDB (:8001 host / :8000 service): vector collections
+  |
+  `-- agent-worker (no public port)
+          -> claim durable task -> extract PDF -> chunk -> embed -> ChromaDB
 ```
 
----
+The Docker services use the `financial_network` bridge network and named
+volumes so persistent data survives container replacement. `frontend` is the
+React/Nginx service, `backend` is the FastAPI service, and `agent-worker` is the
+asynchronous document-processing service.
 
-## Multi-Tenant Security
+## Request paths
 
-### Tenant Isolation Model
+### Chat
 
-The system implements a **three-layer tenant isolation** model:
-
-```
-JWT Token
-    │
-    ▼
-User (user_id, tenant_id FK)
-    │
-    ▼
-Tenant (tenant_id, slug, name)
-    │
-    ├── Document (tenant_id FK)
-    │       └── Vector Metadata (tenant_id in ChromaDB)
-    │
-    └── Task (tenant_id FK)
-            └── Redis Stream Message (tenant_id in payload)
+```text
+React Copilot -> POST /api/v1/chat -> FastAPI service layer
+              -> authenticated tenant context
+              -> Agent Runtime / execution graph
+              -> intent + plan + strategy selection
+              -> tenant-scoped hybrid retrieval when needed
+              -> selected LLM provider
+              -> report, reasoning, execution metadata, workflow, citations
 ```
 
-### Authentication Flow
+Direct questions use the direct-LLM strategy. Research questions use the RAG
+strategy; retrieval receives the authenticated tenant scope and may include the
+public demo knowledge base where the policy allows it. The frontend is a client
+of the API only: it does not access PostgreSQL, Redis, or ChromaDB directly.
 
-1. **Register** → User created with auto-bind to `default` tenant → JWT returned
-2. **Login** → Password verified (bcrypt) → JWT issued with `sub: user_id`
-3. **Request** → `Authorization: Bearer <token>` → JWT decoded → User loaded → Tenant loaded
-4. **Tenant Context** → Injected into all API endpoints via FastAPI `Depends(get_current_tenant)`
+The Graph and domain runtime are intentionally separate. LangGraph owns
+request-state orchestration; the existing Agent Runtime owns financial
+planning, retrieval, provider routing, and response contracts. This avoids two
+divergent RAG implementations while keeping graph nodes observable and
+replaceable.
 
-### Data Scoping
+### Document ingestion
 
-| Layer | Isolation Mechanism |
-|-------|-------------------|
-| **Database** | All models (`Document`, `Task`) have `tenant_id` foreign key. Queries filter by `tenant_id`. |
-| **Vector Store** | ChromaDB collections include `tenant_id` in metadata. Retrieval filters by `tenant_id`. |
-| **Task Queue** | Redis Stream messages include `tenant_id` in payload. Workers filter tasks by tenant. |
-| **File Storage** | Uploads organized by tenant directory (not yet implemented, designed). |
-
-### Security Properties
-
-- **No cross-tenant data access**: All queries are scoped to `current_user.tenant_id`
-- **Token validation**: JWT signature verification on every request
-- **Password hashing**: bcrypt with salt, never stored in plaintext
-- **Tenant integrity**: Foreign key constraints ensure referential integrity
-
----
-
-## Async Task System
-
-### Architecture
-
-```
-┌─────────┐     ┌──────────┐     ┌───────────────┐     ┌──────────┐
-│ API      │────▶│  SQLite   │────▶│  Redis Streams │────▶│ Worker   │
-│ Backend  │     │ Task DB   │     │  Message Queue │     │ Pool     │
-└─────────┘     └──────────┘     └───────────────┘     └──────────┘
-                                                               │
-                                                               ▼
-                                                        ┌──────────────┐
-                                                        │  Processing  │
-                                                        │  ┌─────────┐ │
-                                                        │  │ Chunking│ │
-                                                        │  │Embedding│ │
-                                                        │  │ Store   │ │
-                                                        │  └─────────┘ │
-                                                        └──────────────┘
+```text
+Authenticated upload -> Document + durable Task in PostgreSQL
+                       -> Redis publication
+                       -> agent-worker claims the task
+                       -> PDF extraction / chunking / embedding
+                       -> tenant-scoped ChromaDB records
+                       -> task and document status update
 ```
 
-### Redis Streams
+This separation keeps upload requests short and makes work retryable. The
+worker must run alongside the API for uploaded documents to become searchable.
+The API and worker share the upload volume and both connect to the same Chroma
+HTTP service; they do not concurrently open a local Chroma persistence file.
 
-- **Stream Key**: `task:stream`
-- **Consumer Group**: `workers` (shared across all worker replicas)
-- **Message Format**: `{task_id, task_type, tenant_id, payload}`
-- **Acknowledgment**: `XACK` after successful processing
-- **Pending Recovery**: `XPENDING` for stale task detection and recovery
+## AI engineering extension points
 
-### Worker Pool
+Provider, prompt, retriever, tool, MCP, evaluation, and LoRA extension
+contracts are documented in
+[AI_ENGINEERING_GUIDE.md](AI_ENGINEERING_GUIDE.md). The online runtime does not
+install optional training dependencies or perform fine-tuning.
 
-- **Concurrency**: Configurable via `WORKER_CONCURRENCY` (default: 4 threads per worker)
-- **Scaling**: `docker compose up -d --scale worker=3` for horizontal scaling
-- **Heartbeat**: Periodic heartbeat to Redis (`HEARTBEAT_INTERVAL` seconds)
-- **Stale Recovery**: Workers detect and recover tasks abandoned by crashed workers
-- **Retry**: Automatic retry with configurable max attempts and backoff
+## Service contract
 
-### Task Lifecycle
+| Compose service | Runtime responsibility | Host exposure |
+| --- | --- | --- |
+| `frontend` | React static application, Nginx SPA fallback, `/api` proxy | `3000` |
+| `backend` | FastAPI, auth, Agent Runtime, API endpoints | `8000` |
+| `agent-worker` | Async document ingestion and task processing | none |
+| `postgres` | Relational application data and tenant-owned records | `5432` |
+| `redis` | Cache, session/task coordination | `6379` |
+| `chromadb` | Persistent vector database | `8001` |
 
-```
-PENDING → RUNNING → SUCCESS
-                  → FAILED (retry) → PENDING
-                  → FAILED (max retries exceeded)
-```
+The browser-facing production path is `frontend:3000 -> /api -> backend:8000`.
+In local frontend development, Vite serves the React app on `:5173` and calls
+the API at `http://localhost:8000`; the API CORS allowlist must include that
+origin.
 
-### Task Types
+## Application boundaries
 
-| Type | Handler | Description |
-|------|---------|-------------|
-| `PROCESS_DOCUMENT` | `process_document_task` | PDF chunking → embedding → ChromaDB storage |
+| Boundary | Primary modules | Responsibility |
+| --- | --- | --- |
+| API | `api/` | Request validation, authentication, response contracts, service composition |
+| Agent Runtime | `agent/`, `services/agent_runtime/` | Intent, planning, graph/strategy execution, runtime state |
+| Retrieval | `retrieval/`, `storage/` | Query scope, vector access, evidence normalization |
+| LLM | `llm/`, `prompt_builder.py`, `prompts/` | Provider selection, prompt construction, model calls |
+| Persistence | `storage/`, `cache/`, `tasks/` | PostgreSQL state, Redis-backed coordination, vector storage, task lifecycle |
+| Web client | `frontend/` | Copilot UI and typed HTTP API client |
 
----
+## Operational guarantees and ownership
 
-## Data Flow
+- **Tenant isolation:** API authentication supplies a tenant context; relational
+  queries, uploaded file paths, task records, checkpoints, and vector metadata
+  are scoped by that context.
+- **Durability:** PostgreSQL is the source of truth for application records and
+  task state. Redis is coordination/queue infrastructure, not the only record
+  of a document-processing request.
+- **RAG traceability:** Research responses include evidence/citation metadata so
+  the UI and callers can present source provenance.
+- **Boundary-safe tools:** Tool execution is governed by server-side
+  authorization and receives trusted context rather than browser-provided
+  tenant identifiers.
 
-### Upload Flow
+## Supported deployment boundary
 
-```
-User Uploads PDF
-    │
-    ▼
-POST /api/v1/upload
-    │
-    ├── Save PDF to storage/uploads/
-    │
-    ├── Create Document record (tenant_id scoped)
-    │
-    ├── Create Task record (status: PENDING, tenant_id scoped)
-    │
-    ├── Publish message to Redis Stream
-    │
-    └── Return task_id to user
-            │
-            ▼
-    Worker picks up task
-            │
-            ├── Load PDF → Extract text
-            ├── Chunk text (sentence-transformers tokenizer)
-            ├── Generate embeddings
-            ├── Store in ChromaDB (with tenant_id metadata)
-            ├── Update Task: status → RUNNING, progress → 50
-            ├── Refresh knowledge base
-            └── Update Task: status → SUCCESS, progress → 100
-```
-
-### Query Flow
-
-```
-User Question
-    │
-    ▼
-POST /api/v1/chat
-    │
-    ▼
-Agent Runtime
-    │
-    ├── Intent Analyzer
-    │   └── Classify: Direct Chat / Single Company / Compare / Global
-    │
-    ├── Query Planner
-    │   ├── Task Analysis (entity extraction, keyword classification)
-    │   ├── Complexity Analysis (LOW / MEDIUM / HIGH)
-    │   └── Build Routing Context
-    │
-    ├── Strategy Engine
-    │   └── Select: RAG / Direct LLM / Parallel / MultiStep / Tool Calling
-    │
-    ├── Workflow Engine
-    │   ├── Build workflow steps (Retrieve → Reason → Answer)
-    │   └── Execute steps with dependency resolution
-    │
-    ├── Hybrid Retriever
-    │   ├── Semantic search (embedding similarity)
-    │   ├── Keyword search (BM25)
-    │   ├── Fusion (weighted combination)
-    │   └── Filter by tenant_id
-    │
-    ├── LLM Provider
-    │   ├── ModelRouter selects provider (DeepSeek / Gemini / Claude)
-    │   ├── ProviderFactory creates provider instance
-    │   └── Generate response with retrieved context
-    │
-    └── Response
-        ├── report: Markdown research report
-        ├── citations: Source documents with similarity scores
-        ├── reasoning: Intent, evidence count, companies
-        ├── execution: Strategy, retrieval usage
-        └── workflow: Type, status, steps completed
-```
-
----
-
-## LLM Provider Abstraction
-
-### Factory + Registry + Router Pattern
-
-```
-Request
-    │
-    ▼
-ModelRouter
-    │
-    ├── RoutingPolicy (CapabilityRoutingPolicy)
-    │   └── Select provider based on task type, cost, priority
-    │
-    ├── ProviderRegistry
-    │   └── List available providers with capabilities
-    │
-    └── ProviderFactory
-        └── Create provider instance with config
-            │
-            ▼
-BaseProvider.chat(messages)
-    ├── DeepSeekProvider (Production)
-    ├── GeminiProvider (Supported)
-    └── ClaudeProvider (Reserved)
-```
-
-### Supported Providers
-
-| Provider | Status | API | Configuration |
-|----------|--------|-----|---------------|
-| DeepSeek | Production | OpenAI-compatible | `DEEPSEEK_API_KEY` |
-| Gemini | Supported | Google AI SDK | `GEMINI_API_KEY` |
-| Claude | Reserved | Anthropic SDK | `CLAUDE_API_KEY` |
-
----
-
-## Infrastructure
-
-### Docker Compose Topology
-
-```
-Network: financial_network
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ Frontend │  │ Backend  │  │ Worker   │  │ Worker   │   │
-│  │ (Nginx)  │  │(FastAPI) │  │  (1)     │  │  (2)     │   │
-│  │  :3000   │  │  :8000   │  │          │  │          │   │
-│  └──────────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-│                     │              │              │          │
-│                     └──────────────┼──────────────┘          │
-│                                    │                         │
-│                     ┌──────────────┼──────────────┐          │
-│                     ▼              ▼              ▼          │
-│              ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│              │ ChromaDB │  │  Redis   │  │  SQLite  │      │
-│              │  :8001   │  │  :6379   │  │ (volume) │      │
-│              └──────────┘  └──────────┘  └──────────┘      │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-
-Named Volumes:
-  chroma_data    → /chroma/chroma (ChromaDB persistence)
-  redis_data     → /data (Redis RDB/AOF)
-  db_data        → /app/data (SQLite shared between backend + workers)
-  uploads_data   → /app/storage/uploads (PDF files)
-  logs_data      → /app/logs (application logs)
-```
-
-### Health Checks
-
-| Service | Check | Interval | Timeout |
-|---------|-------|----------|---------|
-| Frontend | Nginx serving static files | Docker built-in | - |
-| Backend | `GET /api/v1/health` | 30s | 10s |
-| ChromaDB | `GET /api/v2/heartbeat` | 30s | 10s |
-| Redis | `redis-cli ping` | 10s | 5s |
-| Worker | Heartbeat to Redis | Configurable | - |
-
----
-
-## Key Design Decisions
-
-1. **SQLite over PostgreSQL**: Minimizes infrastructure complexity for single-node deployment. Named volume sharing enables multi-container access. Suitable for team-scale usage (< 100 concurrent users).
-
-2. **Redis Streams over Celery**: Lighter weight, fewer dependencies. Redis is already used for caching. Streams provide consumer groups, message acknowledgment, and pending message recovery out of the box.
-
-3. **ChromaDB over Pinecone/Weaviate**: Open-source, self-hosted, no vendor lock-in. Native Docker support. Sufficient performance for document-scale retrieval (< 10K documents).
-
-4. **Agent Runtime over LangChain**: Full control over orchestration logic. No framework lock-in. Clean separation of concerns (Intent → Planning → Strategy → Workflow → Execution). Pluggable capabilities (Memory, Metrics, Tracing).
-
-5. **ProviderFactory over hardcoded LLM**: Swap providers without code changes. ModelRouter selects provider based on task type and capabilities. Registry pattern for extensibility.
+Use the root `docker-compose.yml` for V8.1.0. The `deploy/` Compose variants,
+`docker/Dockerfile.ui`, and Streamlit-oriented material describe an earlier
+deployment line and are kept only as historical artifacts. Do not combine those
+files with the root Compose stack. Historical product milestones remain in
+[`docs/releases/`](releases/).
