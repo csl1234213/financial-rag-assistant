@@ -133,12 +133,11 @@ class CapabilityRoutingPolicy(BaseRoutingPolicy):
                     return ("Default chat provider", 0.85)
             return ("General purpose", 0.5)
 
-        if matched == 0:
+        if matched != required:
             return ("No capability match", 0.0)
 
-        confidence = matched / required
         reason = "Supports: " + ", ".join(reasons)
-        return (reason, confidence)
+        return (reason, 1.0)
 
     def _get_capability(self, name: str):
         provider_class = ProviderRegistry.get(name)

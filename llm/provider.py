@@ -5,7 +5,7 @@
 # This module exists for backward compatibility with existing code
 # that calls call_llm(prompt). New code should use:
 #
-#   from config.llm import LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, ...
+#   from config import LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, ...
 #   from llm.factory.provider_factory import ProviderFactory
 #   from llm.providers.provider_config import ProviderConfig
 #
@@ -19,7 +19,7 @@
 #   response = provider.chat(ChatRequest(...))
 # ============================================================
 
-from config.llm import (
+from config import (
     LLM_API_KEY,
     LLM_BASE_URL,
     LLM_MAX_TOKENS,
@@ -33,6 +33,7 @@ from config.llm import (
 from .adapters.deepseek_provider import DeepSeekProvider
 from .adapters.gemini_provider import GeminiProvider
 from .factory.provider_factory import ProviderFactory
+from .providers.base_provider import BaseProvider
 from .providers.provider_config import ProviderConfig
 from .providers.provider_models import ChatRequest
 from .providers.provider_registry import ProviderRegistry
@@ -55,14 +56,21 @@ def _build_config() -> ProviderConfig:
     )
 
 
-def call_llm(prompt: str) -> str:
-    config = _build_config()
-    provider = ProviderFactory.create(config)
+def call_llm(
+    prompt: str,
+    *,
+    provider: BaseProvider | None = None,
+    system_prompt: str = "You are a professional financial analyst.",
+) -> str:
+    """Generate through the provider selected by the runtime when supplied."""
+    if provider is None:
+        config = _build_config()
+        provider = ProviderFactory.create(config)
     request = ChatRequest(
         messages=[{"role": "user", "content": prompt}],
-        system_prompt="You are a professional financial analyst.",
-        temperature=0.2,
-        max_tokens=1000,
+        system_prompt=system_prompt,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_TOKENS,
     )
     response = provider.chat(request)
     return response.content

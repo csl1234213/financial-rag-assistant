@@ -16,7 +16,9 @@ class ProviderCapability:
     checking if provider == "deepseek", which makes the code cleaner
     and supports future providers without changes.
 
-    Each provider declares its own capabilities truthfully.
+    Each provider declares only capabilities implemented by this adapter's
+    public contract. A vendor supporting a feature is not sufficient if the
+    local ``ChatRequest``/``chat`` path cannot accept and execute it.
     Planner / Agent uses these fields to auto-select the best provider.
     """
 

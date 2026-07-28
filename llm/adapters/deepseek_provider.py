@@ -58,17 +58,17 @@ class DeepSeekProvider(BaseProvider):
 
     def get_capability(self) -> ProviderCapability:
         return ProviderCapability(
-            supports_stream=self._stream,
-            supports_function_call=True,
+            supports_stream=False,
+            supports_function_call=False,
             supports_image=False,
             supports_audio=False,
             supports_video=False,
-            supports_json_mode=True,
-            supports_embedding=True,
+            supports_json_mode=False,
+            supports_embedding=False,
             supports_reranking=False,
             supports_reasoning_effort=False,
             supports_system_prompt=True,
-            supports_tools=True,
+            supports_tools=False,
             supports_multimodal=False,
             max_context_tokens=128000,
         )

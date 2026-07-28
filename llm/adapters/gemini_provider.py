@@ -51,18 +51,18 @@ class GeminiProvider(BaseProvider):
 
     def get_capability(self) -> ProviderCapability:
         return ProviderCapability(
-            supports_stream=True,
-            supports_function_call=True,
-            supports_image=True,
-            supports_audio=True,
-            supports_video=True,
-            supports_json_mode=True,
-            supports_embedding=True,
+            supports_stream=False,
+            supports_function_call=False,
+            supports_image=False,
+            supports_audio=False,
+            supports_video=False,
+            supports_json_mode=False,
+            supports_embedding=False,
             supports_reranking=False,
-            supports_reasoning_effort=True,
+            supports_reasoning_effort=False,
             supports_system_prompt=True,
-            supports_tools=True,
-            supports_multimodal=True,
+            supports_tools=False,
+            supports_multimodal=False,
             max_context_tokens=1048576,
         )
 

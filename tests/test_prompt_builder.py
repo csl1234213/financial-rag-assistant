@@ -6,7 +6,12 @@ sys.path.insert(0, str(ROOT))
 
 import pytest
 
-from prompt_builder import PROMPT_RULES, build_compare_prompt, build_prompt
+from prompt_builder import (
+    PROMPT_RULES,
+    build_compare_prompt,
+    build_direct_chat_prompt,
+    build_prompt,
+)
 
 
 @pytest.mark.unit
@@ -182,3 +187,18 @@ class TestPromptRules:
         assert "financial analyst" in PROMPT_RULES
         assert "Evidence" in PROMPT_RULES
         assert "invent facts" in PROMPT_RULES
+
+
+@pytest.mark.unit
+def test_direct_chat_prompt_is_versioned_and_contains_role_history():
+    prompt = build_direct_chat_prompt(
+        "What is AI?",
+        history=[
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "How can I help?"},
+        ],
+    )
+
+    assert "User: Hello" in prompt
+    assert "Assistant: How can I help?" in prompt
+    assert "User: What is AI?" in prompt
