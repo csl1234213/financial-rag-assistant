@@ -1,11 +1,10 @@
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import Tuple
 
 from sqlalchemy.orm import Session
 
 from billing.plans import get_plan_limits, is_enterprise
-from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.usage import UsageRecord
 
@@ -97,7 +96,6 @@ def _check_token_quota(
     tenant_id: int,
 ) -> Tuple[bool, str]:
     plan_slug = _get_tenant_plan_slug(db, tenant_id)
-    limits = get_plan_limits(plan_slug)
 
     if is_enterprise(plan_slug):
         return True, ""

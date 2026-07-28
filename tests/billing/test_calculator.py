@@ -5,22 +5,19 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from billing.calculator import calculate_cost
 from billing.models import BillingRecord
 from billing.plans import (
-    PLANS,
     get_plan_limits,
     get_plan_price,
     is_enterprise,
 )
 from storage.database import Base
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_billing.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_billing.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

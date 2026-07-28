@@ -8,7 +8,6 @@ import os
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
@@ -25,10 +24,9 @@ from services.plan_service import (
 )
 from services.usage_service import record_usage
 from storage.database import Base, get_db
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_subscription.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_subscription.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -484,7 +482,12 @@ class TestChatLimitEnforcement:
         mock_response = {
             "report": "Mock",
             "citations": [],
-            "reasoning": {},
+            "reasoning": {
+                "intent": "DIRECT_CHAT",
+                "companies": [],
+                "research_mode": "default",
+                "evidence_count": 0,
+            },
             "plan": {},
             "execution_time": 0.1,
         }

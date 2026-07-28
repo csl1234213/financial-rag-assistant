@@ -8,8 +8,8 @@ from storage.database import Base
 
 if TYPE_CHECKING:
     from models.tenant import Tenant
-    from models.user import User
     from models.usage import UsageRecord
+    from models.user import User
 
 
 class BillingRecord(Base):

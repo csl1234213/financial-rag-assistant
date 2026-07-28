@@ -5,23 +5,20 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 import os
-from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from billing.service import check_quota
 from billing.plans import get_plan_limits
+from billing.service import check_quota
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.tenant import Tenant
 from models.usage import UsageRecord
 from storage.database import Base
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_quota.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_quota.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

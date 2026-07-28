@@ -9,7 +9,7 @@ import os
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
@@ -23,10 +23,9 @@ from services.usage_service import (
     record_usage,
 )
 from storage.database import Base, get_db
+from tests.storage_paths import create_sqlite_test_database
 
-TEST_DATABASE_URL = "sqlite:///./test_usage_metering.db"
-
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL, engine = create_sqlite_test_database("test_usage_metering.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -428,7 +427,12 @@ class TestUsageIntegration:
         mock_response = {
             "report": "Mock response",
             "citations": [],
-            "reasoning": {},
+            "reasoning": {
+                "intent": "DIRECT_CHAT",
+                "companies": [],
+                "research_mode": "default",
+                "evidence_count": 0,
+            },
             "plan": {},
             "execution_time": 0.1,
         }
