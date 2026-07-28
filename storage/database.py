@@ -41,7 +41,7 @@ def _ensure_default_plans(db: Session):
     initialize_default_plans(db)
 
 
-def init_db():
+def _import_models() -> None:
     import billing.models  # noqa: F401
     import models.document  # noqa: F401
     import models.plan  # noqa: F401
@@ -54,11 +54,22 @@ def init_db():
     import observability.models  # noqa: F401
     import storage.agent.models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
 
+def seed_defaults() -> None:
+    """Seed idempotent reference data after migrations create the schema."""
+
+    _import_models()
     db = SessionLocal()
     try:
         _ensure_default_tenant(db)
         _ensure_default_plans(db)
     finally:
         db.close()
+
+
+def init_db():
+    """Local/test bootstrap; production runs Alembic before seeding."""
+
+    _import_models()
+    Base.metadata.create_all(bind=engine)
+    seed_defaults()

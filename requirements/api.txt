@@ -10,3 +10,4 @@ httptools==0.8.0
 uvicorn==0.49.0
 websockets==16.0
 SQLAlchemy>=2.0
+alembic==1.14.1
