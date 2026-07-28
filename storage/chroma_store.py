@@ -37,6 +37,7 @@ class ChromaEmbeddingStore(EmbeddingStore):
                     ssl=_resolve_ssl(ssl),
                 )
             else:
+                _ensure_local_mode_is_safe()
                 self.mode = "persistent"
                 path = persist_directory or os.getenv("CHROMA_PATH", "./chroma_db")
                 self.client = chromadb.PersistentClient(path=str(path))
@@ -281,3 +282,12 @@ def _resolve_ssl(explicit_ssl: bool | None) -> bool:
         "yes",
         "on",
     }
+
+
+def _ensure_local_mode_is_safe() -> None:
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    if app_env in {"production", "prod"}:
+        raise EmbeddingStoreError(
+            "CHROMA_HOST must be set in production; "
+            "PersistentClient is not supported in production mode"
+        )
