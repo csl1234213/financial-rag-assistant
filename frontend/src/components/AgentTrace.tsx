@@ -41,7 +41,7 @@ export function AgentTrace({ response, labels }: AgentTraceProps) {
       title: labels.execution,
       items: [
         [labels.strategy, response.execution?.strategy ?? 'N/A'],
-        [labels.provider, response.execution?.provider ?? 'N/A'],
+        [labels.provider, response.routing?.provider ?? 'N/A'],
       ],
     },
     {

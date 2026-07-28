@@ -5,26 +5,29 @@
 // ---- Chat / Agent ----
 
 export interface Citation {
-  filename: string;
-  page: number;
-  similarity: number;
-  snippet: string;
+  rank: number;
+  source: string;
+  chunk_id: string;
+  similarity: number | null;
+  preview: string;
 }
 
 export interface Reasoning {
   intent: string;
   companies: string[];
   research_mode: string;
+  evidence_count: number;
 }
 
 export interface Execution {
   strategy: string;
-  provider: string;
+  [key: string]: unknown;
 }
 
 export interface Workflow {
   type: string;
   status: string;
+  [key: string]: unknown;
 }
 
 export interface Plan {
@@ -34,6 +37,7 @@ export interface Plan {
 }
 
 export interface Routing {
+  provider: string;
   agent?: string;
   pipeline?: string;
   [key: string]: unknown;
@@ -55,10 +59,10 @@ export interface ChatResponse {
   reasoning: Reasoning;
   plan: Plan;
   execution_time: number;
-  routing?: Routing;
-  planning?: Planning;
-  execution?: Execution;
-  workflow?: Workflow;
+  routing: Routing | null;
+  planning: Planning | null;
+  execution: Execution | null;
+  workflow: Workflow | null;
 }
 
 // ---- Knowledge ----

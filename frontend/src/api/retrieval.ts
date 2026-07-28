@@ -1,12 +1,7 @@
-import { apiBaseUrl, ApiClientError } from './client';
+import { ApiClientError, toApiUrl } from './client';
 import type { RetrievalChunk, RetrievalMetrics, RetrievalResponse } from '../types/api';
 
-const retrievalQueryEndpoint = '/api/v1/retrieval/query';
-
-function toApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${apiBaseUrl}${normalizedPath}`;
-}
+const retrievalQueryEndpoint = '/v1/retrieval/query';
 
 function parseJson(text: string): unknown | undefined {
   if (!text) return undefined;

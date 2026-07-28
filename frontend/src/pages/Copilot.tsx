@@ -48,7 +48,7 @@ const copy = {
     evidence: {
       title: 'Evidence',
       empty: 'Evidence will appear after analysis.',
-      page: 'Page',
+      chunk: 'Chunk',
       snippet: 'Snippet: ',
       similarity: (score: number) => `${(score * 100).toFixed(1)}% match`,
     },
@@ -92,7 +92,7 @@ const copy = {
     evidence: {
       title: '证据',
       empty: '分析完成后将在此显示证据。',
-      page: '页码',
+      chunk: '分块',
       snippet: '片段：',
       similarity: (score: number) => `匹配度 ${(score * 100).toFixed(1)}%`,
     },
@@ -165,7 +165,7 @@ export function Copilot() {
               {currentResponse.citations.map((citation) => (
                 <EvidenceCard
                   citation={citation}
-                  key={`${citation.filename}-${citation.page}`}
+                  key={`${citation.source}-${citation.chunk_id}`}
                   labels={labels.evidence}
                 />
               ))}

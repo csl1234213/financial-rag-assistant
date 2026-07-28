@@ -3,28 +3,40 @@
   "reasoning": {
     "intent": "SINGLE_COMPANY",
     "companies": ["Tesla"],
-    "research_mode": "COMPANY_ANALYSIS"
+    "research_mode": "COMPANY_ANALYSIS",
+    "evidence_count": 2
+  },
+  "plan": {
+    "intent": "single_company",
+    "task_count": 1,
+    "tasks": []
   },
   "execution": {
-    "strategy": "rag",
+    "strategy": "rag"
+  },
+  "routing": {
     "provider": "DeepSeek"
   },
   "workflow": {
-    "type": "RAG",
-    "status": "COMPLETED"
+    "type": "rag",
+    "status": "completed"
   },
+  "planning": null,
+  "execution_time": 0.72,
   "citations": [
     {
-      "filename": "Tesla_Q2_2025.pdf",
-      "page": 14,
+      "rank": 1,
+      "source": "Tesla_Q2_2025.pdf",
+      "chunk_id": "tesla_q2_2025_14",
       "similarity": 0.9321,
-      "snippet": "Automotive revenue and gross margin reflect vehicle deliveries, average selling prices, and production costs during the quarter."
+      "preview": "Automotive revenue and gross margin reflect vehicle deliveries, average selling prices, and production costs during the quarter."
     },
     {
-      "filename": "Tesla_Q2_2025.pdf",
-      "page": 27,
+      "rank": 2,
+      "source": "Tesla_Q2_2025.pdf",
+      "chunk_id": "tesla_q2_2025_27",
       "similarity": 0.8874,
-      "snippet": "Energy generation and storage revenue increased as deployment volumes and Megapack demand expanded."
+      "preview": "Energy generation and storage revenue increased as deployment volumes and Megapack demand expanded."
     }
   ]
 }

@@ -12,7 +12,7 @@ interface AgentTimelineProps {
 function buildTimeline(response: ChatResponse | null, loading: boolean): AgentStepData[] {
   if (response) {
     const strategy = response.execution?.strategy || 'rag';
-    const provider = response.execution?.provider || 'deepseek';
+    const provider = response.routing?.provider || 'unknown';
     const workflowType = response.workflow?.type || 'rag';
     const intent = response.reasoning?.intent || 'SINGLE_COMPANY';
     const companies = response.reasoning?.companies || [];

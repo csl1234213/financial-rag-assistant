@@ -10,10 +10,8 @@ interface CitationCardProps {
 export function CitationCard({ citation, index }: CitationCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const sourceName = citation.filename?.replace(/\.pdf$/i, '') || `Source ${index + 1}`;
-  const page = citation.page ?? 0;
-  const similarity = citation.similarity ?? 0;
-  const snippet = citation.snippet || '';
+  const sourceName = citation.source.replace(/\.pdf$/i, '') || `Source ${index + 1}`;
+  const snippet = citation.preview;
 
   return (
     <article className="citation-card">
@@ -21,9 +19,11 @@ export function CitationCard({ citation, index }: CitationCardProps) {
         <div className="citation-card__source-info">
           <span className="citation-card__index">[{index + 1}]</span>
           <span className="citation-card__source-name">{sourceName}</span>
-          {page > 0 && <span className="citation-card__page">p.{page}</span>}
+          {citation.chunk_id && (
+            <span className="citation-card__page">{citation.chunk_id}</span>
+          )}
         </div>
-        <SourceBadge similarity={similarity} />
+        <SourceBadge similarity={citation.similarity} />
       </div>
 
       <div className={`citation-card__body ${expanded ? 'citation-card__body--expanded' : ''}`}>
@@ -33,7 +33,7 @@ export function CitationCard({ citation, index }: CitationCardProps) {
       <div className="citation-card__footer">
         <span className="citation-card__meta">
           <span className="citation-card__meta-label">Source</span>
-          <span className="citation-card__meta-value">{citation.filename}</span>
+          <span className="citation-card__meta-value">{citation.source}</span>
         </span>
         <button
           type="button"

@@ -1,7 +1,7 @@
-import { apiBaseUrl, ApiClientError } from './client';
+import { ApiClientError, toApiUrl } from './client';
 import type { HealthResponse } from '../types/api';
 
-const healthEndpoint = '/api/v1/health';
+const healthEndpoint = '/v1/health';
 
 function parseJson(text: string): unknown | undefined {
   if (!text) return undefined;
@@ -16,7 +16,7 @@ export async function getHealth(): Promise<HealthResponse> {
   let response: Response;
 
   try {
-    response = await fetch(`${apiBaseUrl}${healthEndpoint}`);
+    response = await fetch(toApiUrl(healthEndpoint));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Network request failed.';
     throw new ApiClientError(message);

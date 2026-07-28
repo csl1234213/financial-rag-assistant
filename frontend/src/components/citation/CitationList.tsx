@@ -35,7 +35,7 @@ export function CitationList({
         <div className="citation-list">
           {citations.map((citation, index) => (
             <CitationCard
-              key={`${citation.filename}-${index}`}
+              key={`${citation.source}-${citation.chunk_id}-${index}`}
               citation={citation}
               index={index}
             />

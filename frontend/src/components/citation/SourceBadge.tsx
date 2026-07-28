@@ -1,7 +1,7 @@
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 interface SourceBadgeProps {
-  similarity: number;
+  similarity: number | null;
 }
 
 function getConfidenceLevel(similarity: number): ConfidenceLevel {
@@ -23,6 +23,14 @@ const confidenceIcons: Record<ConfidenceLevel, string> = {
 };
 
 export function SourceBadge({ similarity }: SourceBadgeProps) {
+  if (similarity === null) {
+    return (
+      <span className="source-badge" title="Similarity score unavailable">
+        N/A
+      </span>
+    );
+  }
+
   const level = getConfidenceLevel(similarity);
   const pct = `${(similarity * 100).toFixed(1)}%`;
 

@@ -1,15 +1,10 @@
-import { apiBaseUrl, ApiClientError } from './client';
+import { ApiClientError, toApiUrl } from './client';
 import { MOCK_DOCUMENTS } from '../types/knowledge';
 import type { KnowledgeDocument } from '../types/knowledge';
 
-const knowledgeEndpoint = '/api/v1/knowledge';
-const knowledgeUploadEndpoint = '/api/v1/knowledge/upload';
-const knowledgeRefreshEndpoint = '/api/v1/knowledge/refresh';
-
-function toApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${apiBaseUrl}${normalizedPath}`;
-}
+const knowledgeEndpoint = '/v1/knowledge';
+const knowledgeUploadEndpoint = '/v1/knowledge/upload';
+const knowledgeRefreshEndpoint = '/v1/knowledge/refresh';
 
 function parseJson(text: string): unknown | undefined {
   if (!text) return undefined;

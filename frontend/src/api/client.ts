@@ -1,6 +1,12 @@
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+import { buildApiUrl, normalizeApiBaseUrl } from './url';
 
-export const apiBaseUrl = (configuredBaseUrl || 'http://localhost:8000').replace(/\/+$/, '');
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+/**
+ * API base includes the reverse-proxy prefix. Endpoint modules own only the
+ * versioned path below it (for example, `/v1/chat`).
+ */
+export const apiBaseUrl = normalizeApiBaseUrl(configuredBaseUrl || '/api');
 
 export interface ApiErrorDetail {
   detail?: string;
@@ -80,9 +86,8 @@ function parseJson(text: string): unknown | undefined {
   }
 }
 
-function toApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${apiBaseUrl}${normalizedPath}`;
+export function toApiUrl(path: string): string {
+  return buildApiUrl(apiBaseUrl, path);
 }
 
 export async function postJson<TResponse>(path: string, body: unknown): Promise<TResponse> {

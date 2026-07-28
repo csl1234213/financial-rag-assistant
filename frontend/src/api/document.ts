@@ -1,14 +1,9 @@
-import { apiBaseUrl, ApiClientError } from './client';
+import { ApiClientError, toApiUrl } from './client';
 import { MOCK_DOCUMENT_DETAILS, MOCK_CHUNKS } from '../types/knowledge';
 import type { DocumentDetail, DocumentChunk } from '../types/knowledge';
 
-const knowledgeDetailEndpoint = (id: string) => `/api/v1/knowledge/${id}`;
-const knowledgeChunksEndpoint = (id: string) => `/api/v1/knowledge/${id}/chunks`;
-
-function toApiUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${apiBaseUrl}${normalizedPath}`;
-}
+const knowledgeDetailEndpoint = (id: string) => `/v1/knowledge/${id}`;
+const knowledgeChunksEndpoint = (id: string) => `/v1/knowledge/${id}/chunks`;
 
 function parseJson(text: string): unknown | undefined {
   if (!text) return undefined;
