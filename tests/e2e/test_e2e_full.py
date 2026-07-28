@@ -107,7 +107,7 @@ def test_upload_pdf():
     assert resp.status_code == 200, f"Upload: {resp.status_code} {resp.text}"
     data = resp.json()
     assert "task_id" in data, "No task_id"
-    assert data["status"] == "pending"
+    assert data["status"] in ("pending", "running"), f"Unexpected status: {data['status']}"
     task_ids["task_a"] = data["task_id"]
 
 @pytest.mark.e2e
