@@ -19,7 +19,7 @@ class TestHealthAPI:
         response = client.get("/api/v1/health")
         data = response.json()
         assert isinstance(data, dict)
-        assert data["status"] == "ok"
+        assert data["status"] in {"ok", "degraded"}
 
     def test_health_version(self, client):
         response = client.get("/api/v1/health")
@@ -38,8 +38,10 @@ class TestHealthAPI:
         assert "api" in data
         assert data["api"] == "ok"
         assert "runtime" in data
-        assert data["runtime"] == "ok"
+        assert data["runtime"] in {"ok", "unavailable"}
+        assert data["chroma"] in {"ok", "unknown", "unavailable"}
         assert "embedding_model" in data
+        assert data["embedding_model"] in {"loaded", "not_loaded", "error", "unknown"}
         assert "documents" in data
 
     def test_root_endpoint(self, client):

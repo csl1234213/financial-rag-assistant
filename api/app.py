@@ -9,6 +9,7 @@ from api.routers.agent_sessions import router as agent_sessions_router
 from api.routers.auth import router as auth_router
 from api.routers.billing import router as billing_router
 from api.routers.chat import router as chat_router
+from api.routers.health import health as system_health
 from api.routers.health import router as health_router
 from api.routers.knowledge import router as knowledge_router
 from api.routers.monitoring import router as monitoring_router
@@ -24,6 +25,7 @@ from middleware.security import (
     RequestTimingMiddleware,
     SecurityHeadersMiddleware,
 )
+from middleware.tenant_audit import TenantAuditMiddleware
 
 DEFAULT_CORS_ORIGINS = ("http://localhost:5173",)
 _PRODUCTION_ENVIRONMENTS = {"production", "prod"}
@@ -76,6 +78,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(TenantAuditMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -108,18 +111,6 @@ def root():
 
 @app.get("/health")
 def health_root():
-    from api.routers.health import _check_database, _check_redis
+    """Compatibility alias for the canonical versioned health endpoint."""
 
-    db_status = _check_database()
-    redis_status = _check_redis()
-
-    overall = "ok" if db_status == "ok" else "degraded"
-
-    return {
-        "status": overall,
-        "service": "Financial Research Copilot",
-        "version": __version__,
-        "api": "ok",
-        "database": db_status,
-        "redis": redis_status,
-    }
+    return system_health()

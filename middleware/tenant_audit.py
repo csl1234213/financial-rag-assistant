@@ -15,7 +15,10 @@ logger = logging.getLogger("tenant_audit")
 
 class TenantAuditMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        request_id = str(uuid.uuid4())
+        request_id = getattr(request.state, "request_id", None) or request.headers.get(
+            "X-Request-ID"
+        )
+        request_id = request_id or str(uuid.uuid4())
         request.state.request_id = request_id
 
         start_time = time.time()
