@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from api.app import app
-from storage.database import init_db, SessionLocal
+from storage.database import init_db
 
 client = TestClient(app)
 

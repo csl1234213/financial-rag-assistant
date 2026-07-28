@@ -1,7 +1,6 @@
-import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,8 +8,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from api.app import app
-from auth.jwt import create_access_token
-from storage.database import Base, SessionLocal, engine, init_db
+from storage.database import SessionLocal, init_db
 
 client = TestClient(app)
 
