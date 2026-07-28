@@ -25,6 +25,31 @@ from middleware.security import (
     SecurityHeadersMiddleware,
 )
 
+DEFAULT_CORS_ORIGINS = ("http://localhost:5173",)
+_PRODUCTION_ENVIRONMENTS = {"production", "prod"}
+
+
+def get_cors_origins(
+    raw_origins: str | None = None,
+    *,
+    app_env: str | None = None,
+) -> list[str]:
+    """Parse the comma-separated CORS allowlist supplied by the environment."""
+
+    configured_origins = raw_origins if raw_origins is not None else os.getenv("CORS_ORIGINS", "")
+    origins = [
+        origin.strip().rstrip("/")
+        for origin in configured_origins.split(",")
+        if origin.strip()
+    ]
+    if origins:
+        return origins
+
+    environment = (app_env if app_env is not None else os.getenv("APP_ENV", "development"))
+    if environment.strip().lower() in _PRODUCTION_ENVIRONMENTS:
+        raise RuntimeError("CORS_ORIGINS must be explicitly configured when APP_ENV=production.")
+    return list(DEFAULT_CORS_ORIGINS)
+
 
 def get_positive_int_setting(name: str, default: int) -> int:
     """Read a positive integer setting and fail fast on invalid deployment input."""
@@ -46,7 +71,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=get_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
