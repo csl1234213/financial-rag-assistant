@@ -48,6 +48,17 @@ def _ensure_providers_registered():
         ProviderRegistry.register("gemini", GeminiProvider)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_application_rate_limit(monkeypatch):
+    """Prevent unrelated TestClient calls from sharing one global IP quota.
+
+    The middleware behavior itself is covered by a dedicated isolated app in
+    ``tests/security/test_rate_limit_middleware.py``.
+    """
+
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+
+
 @pytest.fixture(scope="session")
 def client():
     from api.app import app
