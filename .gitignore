@@ -44,6 +44,7 @@ venv/
 
 test_*.txt
 *.log
+/backup/
 
 
 # =========================
@@ -52,6 +53,12 @@ test_*.txt
 
 *.sqlite3
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 
 
 # =========================

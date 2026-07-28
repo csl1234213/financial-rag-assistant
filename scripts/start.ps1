@@ -1,103 +1,58 @@
-# PowerShell
-# ============================================================
-# start.ps1 — One-Command Deploy for Windows
-# ============================================================
-# Usage:
-#   .\scripts\start.ps1          # production mode
-#   .\scripts\start.ps1 dev      # development mode
-# ============================================================
+# Start the canonical V8.1.0 Docker Compose stack on Windows.
+#
+# .\scripts\start.ps1       # React/Nginx UI on :3000
+# .\scripts\start.ps1 dev   # API/worker stack; run Vite separately on :5173
 param(
+    [ValidateSet("prod", "stack", "dev")]
     [string]$Mode = "prod"
 )
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = (Resolve-Path "$ScriptDir\..").Path
-
-$EnvFile     = "$ProjectRoot\.env"
-$EnvExample  = "$ProjectRoot\.env.example"
-
-$ApiUrl    = "http://localhost:8000"
-$UiUrl     = "http://localhost:8501"
-$HealthUrl = "$ApiUrl/api/v1/health"
+$EnvFile = "$ProjectRoot\.env"
+$EnvExample = "$ProjectRoot\.env.example"
+$ApiUrl = "http://localhost:8000"
 $MaxRetries = 30
 $RetryInterval = 2
 
-# ============================================================
-# Step 1: Auto .env initialization
-# ============================================================
 if (-not (Test-Path $EnvFile)) {
-    Write-Host "=========================================="
-    Write-Host "  .env not found — creating from .env.example"
-    Write-Host "=========================================="
     Copy-Item $EnvExample $EnvFile
-    Write-Host ""
-    Write-Host "  IMPORTANT: Please edit .env to set your DEEPSEEK_API_KEY before proceeding."
-    Write-Host "  File: $EnvFile"
-    Write-Host ""
-    Read-Host "  Press Enter to continue after editing, or Ctrl+C to abort"
+    Write-Host "Created $EnvFile from .env.example."
+    Write-Host "Before production, set AUTH_SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD, DEEPSEEK_API_KEY, and CORS_ORIGINS."
 }
 
-# ============================================================
-# Step 2: Select compose files
-# ============================================================
+Set-Location $ProjectRoot
+
 if ($Mode -eq "dev") {
-    Write-Host "=========================================="
-    Write-Host "  Starting in DEVELOPMENT mode (hot-reload)"
-    Write-Host "=========================================="
-    $ComposeArgs = @("-f", "docker-compose.base.yml", "-f", "docker-compose.dev.yml")
+    $UiUrl = "http://localhost:5173"
+    Write-Host "Starting API, worker, and stateful services for Vite development..."
+    docker compose up -d --build backend agent-worker
+    Write-Host "Run 'cd frontend; npm run dev' in another terminal for the React dev server."
 } else {
-    Write-Host "=========================================="
-    Write-Host "  Starting in PRODUCTION mode"
-    Write-Host "=========================================="
-    $ComposeArgs = @("-f", "docker-compose.base.yml", "-f", "docker-compose.prod.yml")
+    $UiUrl = "http://localhost:3000"
+    Write-Host "Starting the complete V8.1.0 Compose stack..."
+    docker compose up -d --build
 }
 
-# ============================================================
-# Step 3: Build & Start
-# ============================================================
-Set-Location "$ProjectRoot\deploy"
-
-Write-Host ""
-Write-Host "Building and starting containers..."
-docker compose @ComposeArgs up -d --build
-
-# ============================================================
-# Step 4: Health check loop
-# ============================================================
-Write-Host ""
-Write-Host "Waiting for API to become healthy..."
+Write-Host "Waiting for API health..."
 for ($i = 1; $i -le $MaxRetries; $i++) {
     try {
-        $response = Invoke-RestMethod -Uri $HealthUrl -Method Get -TimeoutSec 3
+        $response = Invoke-RestMethod -Uri "$ApiUrl/api/v1/health" -Method Get -TimeoutSec 3
         if ($response.status -eq "ok") {
-            Write-Host ""
-            Write-Host "=========================================="
-            Write-Host "  Financial Research Copilot Ready!"
-            Write-Host "=========================================="
-            Write-Host ""
-            Write-Host "  API:      $ApiUrl"
-            Write-Host "  Swagger:  $ApiUrl/docs"
-            Write-Host "  UI:       $UiUrl"
-            Write-Host ""
-            Write-Host "  Status:   docker ps"
-            Write-Host "  Logs:     .\scripts\logs.ps1"
-            Write-Host "  Stop:     .\scripts\stop.ps1"
-            Write-Host ""
+            Write-Host "Financial Research Copilot is ready."
+            Write-Host "  API:     $ApiUrl"
+            Write-Host "  Swagger: $ApiUrl/docs"
+            Write-Host "  UI:      $UiUrl"
+            Write-Host "  Logs:    .\scripts\logs.sh"
             exit 0
         }
     } catch {
-        # Retry
+        # The service may still be bootstrapping its database and embedding model.
     }
     Write-Host "  [$i/$MaxRetries] Waiting..." -NoNewline
     Write-Host "`r" -NoNewline
     Start-Sleep -Seconds $RetryInterval
 }
 
-Write-Host ""
-Write-Host "=========================================="
-Write-Host "  WARNING: API did not become healthy within $($MaxRetries * $RetryInterval)s"
-Write-Host "=========================================="
-Write-Host "  Check logs: docker compose logs"
-Write-Host ""
-exit 1
+Write-Error "API did not become healthy. Inspect logs with: docker compose logs backend"

@@ -1,10 +1,7 @@
 [tool.pytest.ini_options]
-addopts = [
-    "--cov=.",
-    "--cov-report=term",
-    "--cov-report=html",
-    "--cov-fail-under=85",
-]
+# Coverage is configured explicitly in CI through .coveragerc. Keeping it out
+# of default test runs makes focused local regression checks fast and avoids
+# enforcing a repository-wide coverage gate on ad-hoc developer commands.
 markers = [
     "unit: Unit tests (fast, isolated)",
     "integration: Integration tests (module collaboration)",

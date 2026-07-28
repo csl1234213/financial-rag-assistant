@@ -17,6 +17,8 @@ omit =
     */scripts/*
 
 [report]
+fail_under = 85
+show_missing = True
 omit =
     tests/*
     */tests/*

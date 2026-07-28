@@ -27,8 +27,10 @@ frontend/dist/
 .gitignore
 
 # Environment
-.env
-.env.local
+.env*
+**/.env*
+!.env.example
+!**/.env.example
 
 # OS
 .DS_Store
@@ -37,8 +39,13 @@ Thumbs.db
 # Tests
 tests/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
+chroma_db_test_*/
+test_*.txt
+benchmark_result*.txt
 
 # Docker
 docker-compose.override.yml
@@ -47,9 +54,22 @@ docker-compose.override.yml
 # Logs
 logs/
 *.log
+artifacts/
+backup/
 
 # Uploads
 storage/uploads/*
+uploads/
 
 # ChromaDB
 chroma_db/
+cache/*
+!cache/*.py
+
+# Local databases must never enter an image build context
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*

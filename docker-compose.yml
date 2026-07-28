@@ -23,10 +23,10 @@ services:
     image: postgres:16-alpine
     container_name: financial-postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-financial}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-financial_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-financial_rag}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -45,15 +45,30 @@ services:
   redis:
     image: redis:7-alpine
     container_name: financial-redis
-    command: redis-server --appendonly yes --save 60 1 --save 300 10
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--save",
+        "60",
+        "1",
+        "--save",
+        "300",
+        "10",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}",
+      ]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     networks:
       - financial_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,10 +78,10 @@ services:
   # ChromaDB — Vector Database
   # ==========================================================
   chromadb:
-    image: chromadb/chroma:0.6.3
+    image: chromadb/chroma:1.5.9
     container_name: financial-chromadb
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
     environment:
@@ -86,27 +101,30 @@ services:
   # FastAPI Backend
   # ==========================================================
   backend:
+    image: financial-rag-assistant-runtime:${APP_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.api
     container_name: financial-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - uploads_data:/app/storage/uploads
-      - chroma_local:/app/chroma_db
       - agent_memory:/app/storage/memory
       - logs_data:/app/logs
-      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
+      - huggingface_cache:/home/appuser/.cache/huggingface
     env_file:
       - .env
     environment:
+      - APP_ENV=production
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
-      - DATABASE_URL=${DATABASE_URL:-postgresql://financial:financial_secret@postgres:5432/financial_rag}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-financial_rag}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
       - AGENT_MEMORY_DIR=/app/storage/memory
+      - TRUST_PROXY_HEADERS=true
+      - RUN_DATABASE_MIGRATIONS=true
     depends_on:
       chromadb:
         condition: service_healthy
@@ -117,7 +135,7 @@ services:
     networks:
       - financial_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/ready"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -153,30 +171,32 @@ services:
   # Agent Worker — Async Agent Task Execution
   # ==========================================================
   agent-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
-    container_name: financial-agent-worker
-    command: python -m workers.agent_worker
+    # API and worker share one immutable runtime image. This avoids exporting
+    # duplicate multi-GB ML dependency layers during local and CI builds.
+    image: financial-rag-assistant-runtime:${APP_VERSION:-latest}
+    command: ["python", "-m", "workers.agent_worker"]
     volumes:
+      - uploads_data:/app/storage/uploads
       - agent_memory:/app/storage/memory
-      - chroma_local:/app/chroma_db
       - logs_data:/app/logs
-      - ${USERPROFILE:-~}/.cache/huggingface:/home/appuser/.cache/huggingface
+      - huggingface_cache:/home/appuser/.cache/huggingface
     env_file:
       - .env
     environment:
+      - APP_ENV=production
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
-      - DATABASE_URL=${DATABASE_URL:-postgresql://financial:financial_secret@postgres:5432/financial_rag}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-financial_rag}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
       - AGENT_MEMORY_DIR=/app/storage/memory
       - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
       - WORKER_POLL_TIMEOUT=${WORKER_POLL_TIMEOUT:-1.0}
       - MAX_TASK_RUNTIME=${MAX_TASK_RUNTIME:-3600}
-      - WORKER_ID=${WORKER_ID:-agent-worker-1}
+      - RUN_DATABASE_MIGRATIONS=false
     depends_on:
+      backend:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -185,13 +205,17 @@ services:
         condition: service_healthy
     networks:
       - financial_network
+    healthcheck:
+      test: ["CMD", "python", "-m", "workers.agent_worker", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:
   chroma_data:
     name: financial_chroma_data
-  chroma_local:
-    name: financial_chroma_local
   uploads_data:
     name: financial_uploads
   logs_data:
@@ -202,6 +226,8 @@ volumes:
     name: financial_redis_data
   agent_memory:
     name: financial_agent_memory
+  huggingface_cache:
+    name: financial_huggingface_cache
 
 networks:
   financial_network:

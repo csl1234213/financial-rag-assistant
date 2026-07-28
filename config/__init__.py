@@ -122,7 +122,12 @@ _ui_exports = getattr(
     (name for name in vars(_ui_config) if not name.startswith("_")),
 )
 for _name in _ui_exports:
-    globals()[_name] = getattr(_ui_config, _name)
+    # Root configuration is authoritative for names shared with a specialised
+    # module.  UI-only names remain available from ``config`` for backward
+    # compatibility, while values such as UPLOAD_DIR keep their canonical
+    # Path-based type and project-root default.
+    if _name not in globals():
+        globals()[_name] = getattr(_ui_config, _name)
 
 __all__ = [
     "PDFS_DIR",

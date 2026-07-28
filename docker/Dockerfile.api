@@ -15,10 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+# Install only production API/worker dependencies. The development, legacy UI,
+# and optional training layers are intentionally excluded from this image.
+COPY requirements ./requirements
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements/api.txt && \
+    pip check
 
 # ============================================================
 # Runtime stage
@@ -56,6 +58,6 @@ USER appuser
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+    CMD curl -f http://localhost:8000/api/v1/ready || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
