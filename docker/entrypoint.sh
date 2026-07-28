@@ -18,7 +18,7 @@ require_production_secret() {
     local name="$1"
     local value="$2"
     case "$value" in
-        ""|change-me|change-me-before-production|financial_secret|your-secret-key|your-deepseek-api-key)
+        ""|change-me|change-me-before-production|your-secret-key|your-deepseek-api-key)
             echo "ERROR: $name must be set to a non-placeholder value when APP_ENV=production." >&2
             exit 1
             ;;

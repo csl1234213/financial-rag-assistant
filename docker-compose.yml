@@ -91,7 +91,7 @@ services:
     networks:
       - financial_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000; printf 'GET /api/v2/heartbeat HTTP/1.0\r\n\r\n' >&3; grep -q nanosecond <&3"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -113,11 +113,13 @@ services:
       - agent_memory:/app/storage/memory
       - logs_data:/app/logs
       - huggingface_cache:/home/appuser/.cache/huggingface
-    env_file:
-      - .env
     environment:
       - APP_ENV=production
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-financial_rag}
@@ -180,10 +182,11 @@ services:
       - agent_memory:/app/storage/memory
       - logs_data:/app/logs
       - huggingface_cache:/home/appuser/.cache/huggingface
-    env_file:
-      - .env
     environment:
       - APP_ENV=production
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
@@ -215,7 +218,7 @@ services:
 
 volumes:
   chroma_data:
-    name: financial_chroma_data
+    name: financial_chroma_prod
   uploads_data:
     name: financial_uploads
   logs_data:

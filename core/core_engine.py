@@ -151,7 +151,25 @@ def get_chunk_count():
 # Runtime Wiring
 # =========================
 
-retriever = HybridRetriever(_get_model())
+_retriever = None
+_retrieval_tool_executor = None
+_runtime = None
+
+
+def _get_retriever():
+    global _retriever
+    if _retriever is None:
+        _retriever = HybridRetriever(_get_model())
+    return _retriever
+
+
+def _get_retrieval_tool_executor():
+    global _retrieval_tool_executor
+    if _retrieval_tool_executor is None:
+        _retrieval_tool_executor = TenantRetrievalToolExecutor(_get_retriever())
+    return _retrieval_tool_executor
+
+
 intent_analyzer = IntentAnalyzer()
 query_planner = QueryPlanner()
 
@@ -161,14 +179,13 @@ reasoning_engine = ReasoningEngine()
 strategy_engine = StrategyExecutionEngine()
 
 dispatcher = ExecutionDispatcher()
-retrieval_tool_executor = TenantRetrievalToolExecutor(retriever)
 financial_metrics_tool_engine = ToolEngine(
     authorization_hook=authorize_financial_metrics_tool,
 )
 
 
 def _retrieve_handler(step, shared_context):
-    evidences = retrieval_tool_executor.execute(
+    evidences = _get_retrieval_tool_executor().execute(
         store=_get_store(),
         query=step.query or "",
         company=step.company,
@@ -193,18 +210,23 @@ engine.register_handler(
 
 router = ModelRouter(policy=RoutingPolicy(CapabilityRoutingPolicy()))
 
-runtime = AgentRuntime(
-    planner=query_planner,
-    executor=engine,
-    reasoner=reasoning_engine,
-    retriever=retriever,
-    intent_analyzer=intent_analyzer,
-    router=router,
-    strategy_engine=strategy_engine,
-    dispatcher=dispatcher,
-    workflow_engine=WorkflowEngine(),
-    workflow_executor=WorkflowExecutor(),
-)
+
+def _get_runtime():
+    global _runtime
+    if _runtime is None:
+        _runtime = AgentRuntime(
+            planner=query_planner,
+            executor=engine,
+            reasoner=reasoning_engine,
+            retriever=_get_retriever(),
+            intent_analyzer=intent_analyzer,
+            router=router,
+            strategy_engine=strategy_engine,
+            dispatcher=dispatcher,
+            workflow_engine=WorkflowEngine(),
+            workflow_executor=WorkflowExecutor(),
+        )
+    return _runtime
 
 
 # =========================
@@ -221,7 +243,7 @@ def run_rag(
     conversation_history: Sequence[dict[str, Any]] | None = None,
 ) -> RAGResult:
     research_mode = detect_research_mode(question)
-    result = runtime.run(
+    result = _get_runtime().run(
         question,
         company,
         tenant_id=tenant_id,
