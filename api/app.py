@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +25,19 @@ from middleware.security import (
     SecurityHeadersMiddleware,
 )
 
+
+def get_positive_int_setting(name: str, default: int) -> int:
+    """Read a positive integer setting and fail fast on invalid deployment input."""
+
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
 app = FastAPI(
     title="Financial Research Copilot API",
     description="Production API for Financial Research Copilot",
@@ -41,8 +56,8 @@ app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     RateLimitMiddleware,
-    requests_per_window=100,
-    window_seconds=60,
+    requests_per_window=get_positive_int_setting("RATE_LIMIT_REQUESTS", 100),
+    window_seconds=get_positive_int_setting("RATE_LIMIT_WINDOW", 60),
 )
 
 app.include_router(health_router, prefix="/api/v1")
