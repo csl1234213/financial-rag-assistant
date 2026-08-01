@@ -28,7 +28,11 @@ from agent.workflow.workflows import (  # noqa: F401 — auto-registration
     ResearchWorkflow,
     ToolPipelineWorkflow,
 )
-from config import DEBUG_MODE
+from config import (
+    DEBUG_MODE,
+    EMBEDDING_MODEL,
+    EMBEDDING_MODEL_REVISION,
+)
 from core.citation_formatter import format_citations
 from core.intent_analyzer import IntentAnalyzer
 from core.rag_result import RAGResult
@@ -39,6 +43,8 @@ from document_loader import (
     load_documents,
 )
 from embedding import (
+    embed_passages,
+    embedding_rows_to_lists,
     load_embedding_model,
 )
 from llm.provider import call_llm
@@ -111,25 +117,41 @@ def refresh_knowledge_base():
     model = _get_model()
 
     chunks = load_documents(PDF_FOLDER)
+    embeddings = embedding_rows_to_lists(
+        embed_passages(
+            model,
+            [str(chunk["text"]) for chunk in chunks],
+        )
+    )
+    if len(embeddings) != len(chunks):
+        raise ValueError("Embedding model returned an unexpected vector count")
 
     store.create_collection("financial_reports")
     store.delete_by_tenant(PUBLIC_TENANT_ID)
 
     docs = []
-    for chunk in chunks:
-        embedding = model.encode(chunk["text"], convert_to_tensor=False).tolist()
+    for chunk, embedding in zip(chunks, embeddings, strict=True):
+        content_sha256 = str(chunk["content_sha256"])
         docs.append(
             VectorDocument(
-                document_id=chunk["document_id"],
-                chunk_id="public_%s_%d" % (chunk["document_id"], chunk["chunk_id"]),
-                company=chunk["company"],
-                content=chunk["text"],
+                document_id=str(chunk["document_id"]),
+                chunk_id=f"public_{content_sha256}_{chunk['chunk_id']}",
+                company=str(chunk["company"]),
+                content=str(chunk["text"]),
                 embedding=embedding,
                 metadata={
-                    "source": chunk["source"],
-                    "quarter": chunk.get("quarter", ""),
+                    "source": str(chunk["source"]),
+                    "quarter": str(chunk.get("quarter", "")),
                     "collection": "financial_reports",
                     "tenant_id": PUBLIC_TENANT_ID,
+                    "page": int(chunk["page"]),
+                    "section": str(chunk["section"]),
+                    "ocr_used": bool(chunk["ocr_used"]),
+                    "parser_version": str(chunk["parser_version"]),
+                    "chunker_version": str(chunk["chunker_version"]),
+                    "embedding_model": EMBEDDING_MODEL,
+                    "embedding_revision": EMBEDDING_MODEL_REVISION or "unversioned",
+                    "content_sha256": content_sha256,
                 },
             )
         )
@@ -211,22 +233,43 @@ engine.register_handler(
 router = ModelRouter(policy=RoutingPolicy(CapabilityRoutingPolicy()))
 
 
+def _build_runtime(runtime_router: ModelRouter) -> AgentRuntime:
+    return AgentRuntime(
+        planner=query_planner,
+        executor=engine,
+        reasoner=reasoning_engine,
+        retriever=_get_retriever(),
+        intent_analyzer=intent_analyzer,
+        router=runtime_router,
+        strategy_engine=strategy_engine,
+        dispatcher=dispatcher,
+        workflow_engine=WorkflowEngine(),
+        workflow_executor=WorkflowExecutor(),
+    )
+
+
 def _get_runtime():
     global _runtime
     if _runtime is None:
-        _runtime = AgentRuntime(
-            planner=query_planner,
-            executor=engine,
-            reasoner=reasoning_engine,
-            retriever=_get_retriever(),
-            intent_analyzer=intent_analyzer,
-            router=router,
-            strategy_engine=strategy_engine,
-            dispatcher=dispatcher,
-            workflow_engine=WorkflowEngine(),
-            workflow_executor=WorkflowExecutor(),
-        )
+        _runtime = _build_runtime(router)
     return _runtime
+
+
+def _get_request_runtime(llm_settings):
+    if llm_settings is None or not llm_settings.provider_configs:
+        return _get_runtime()
+
+    request_router = ModelRouter(
+        policy=RoutingPolicy(
+            CapabilityRoutingPolicy(
+                default_provider=llm_settings.default_provider,
+                provider_models=llm_settings.provider_models,
+            )
+        ),
+        provider_configs=llm_settings.provider_configs,
+        available_providers=list(llm_settings.provider_configs),
+    )
+    return _build_runtime(request_router)
 
 
 # =========================
@@ -241,9 +284,10 @@ def run_rag(
     tenant_id: int = 0,
     thread_id: str | None = None,
     conversation_history: Sequence[dict[str, Any]] | None = None,
+    llm_settings=None,
 ) -> RAGResult:
     research_mode = detect_research_mode(question)
-    result = _get_runtime().run(
+    result = _get_request_runtime(llm_settings).run(
         question,
         company,
         tenant_id=tenant_id,

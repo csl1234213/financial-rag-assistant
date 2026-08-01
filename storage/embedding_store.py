@@ -65,7 +65,8 @@ class EmbeddingStore(ABC):
         return []
 
     @abstractmethod
-    def delete_document(self, document_id: str) -> None:
+    def delete_document(self, document_id: str, *, tenant_id: int) -> None:
+        """Delete a document only within the trusted tenant scope."""
         pass
 
     @abstractmethod

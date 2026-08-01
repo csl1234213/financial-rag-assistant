@@ -28,7 +28,7 @@ def _fake_run_rag(question, **_scope):
         intent={"intent": "SINGLE_COMPANY", "companies": ["Tesla"]},
         evidence=[],
         plan=plan,
-        routing={"provider": "deepseek", "model": "deepseek-chat"},
+        routing={"provider": "deepseek", "model": "deepseek-v4-flash"},
         planning={"task_type": "document_qa"},
         execution={"strategy": "rag", "use_retrieval": True, "use_tools": False},
         workflow={"type": "rag", "status": "DONE"},

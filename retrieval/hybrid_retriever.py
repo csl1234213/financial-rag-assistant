@@ -20,19 +20,24 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from threading import Lock
 from typing import Dict, List
 
 from agent.reasoning_models import Evidence
+from embedding import embed_query
 from retrieval.bm25_retriever import BM25Retriever
 from retrieval.document_filter import DocumentFilter
 from retrieval.metadata_filter import MetadataFilter
+from retrieval.query_enrichment import enrich_financial_query
 from retrieval.retrieval_context import RetrievalContext
 from storage.embedding_store import EmbeddingStore
 from storage.vector_models import SearchResult
 
 logger = logging.getLogger(__name__)
+
+_ENRICHED_QUERY_LEXICAL_WEIGHT_MULTIPLIER = 2.0
 
 # =========================
 # Data Classes
@@ -142,7 +147,11 @@ class HybridRetriever:
             filters=context.filters,
         )
 
-        query_embedding = self._get_query_embedding(context.question)
+        retrieval_query = enrich_financial_query(
+            context.question,
+            context.company,
+        )
+        query_embedding = self._get_query_embedding(retrieval_query)
         candidate_k = context.top_k * self.config.candidate_multiplier
         tenant_scopes = [context.tenant_id]
         if context.include_public and context.tenant_id != 0:
@@ -160,11 +169,12 @@ class HybridRetriever:
                 self._apply_filters(scoped_results, doc_filter, meta_filter)
             )
 
-        # ``EmbeddingStore`` owns score semantics and must return ranked
-        # results. Some stores expose distance (lower is better), while legacy
-        # stores expose similarity (higher is better); preserving their order
-        # avoids guessing from numeric values.
-        vector_results = self._deduplicate(vector_results)[:candidate_k]
+        # Merge independently ranked tenant scopes only when the store exposes
+        # score direction. Legacy stores without semantics retain their stable
+        # best-first ordering.
+        vector_results = self._deduplicate(
+            self._globally_rank_vector_results(vector_results)
+        )[:candidate_k]
 
         if not self.config.enabled or self.config.lexical_weight == 0:
             return vector_results[: context.top_k]
@@ -179,7 +189,7 @@ class HybridRetriever:
             return vector_results[: context.top_k]
 
         lexical_results = self.lexical_retriever.search(
-            query=context.question,
+            query=retrieval_query,
             documents=lexical_corpus,
             top_k=candidate_k,
         )
@@ -190,6 +200,12 @@ class HybridRetriever:
             vector_results,
             lexical_results,
             top_k=context.top_k,
+            lexical_weight=(
+                self.config.lexical_weight
+                * _ENRICHED_QUERY_LEXICAL_WEIGHT_MULTIPLIER
+                if retrieval_query != context.question
+                else self.config.lexical_weight
+            ),
         )
 
     @staticmethod
@@ -248,7 +264,13 @@ class HybridRetriever:
         lexical_results: list[SearchResult],
         *,
         top_k: int,
+        lexical_weight: float | None = None,
     ) -> list[SearchResult]:
+        effective_lexical_weight = (
+            self.config.lexical_weight
+            if lexical_weight is None
+            else lexical_weight
+        )
         records: dict[tuple[str, str], SearchResult] = {}
         fused_scores: dict[tuple[str, str], float] = {}
         vector_ranks: dict[tuple[str, str], int] = {}
@@ -267,7 +289,7 @@ class HybridRetriever:
             records.setdefault(key, result)
             lexical_ranks.setdefault(key, rank)
             fused_scores[key] = fused_scores.get(key, 0.0) + (
-                self.config.lexical_weight / (self.config.rrf_k + rank)
+                effective_lexical_weight / (self.config.rrf_k + rank)
             )
 
         missing_rank = len(records) + 1
@@ -281,7 +303,7 @@ class HybridRetriever:
             ),
         )
         maximum_score = (
-            self.config.vector_weight + self.config.lexical_weight
+            self.config.vector_weight + effective_lexical_weight
         ) / (self.config.rrf_k + 1)
         lexical_by_key = {
             self._result_key(result): result
@@ -305,6 +327,7 @@ class HybridRetriever:
                         if lexical_result is not None
                         else None
                     ),
+                    "lexical_weight": effective_lexical_weight,
                 }
             )
             fused.append(
@@ -320,7 +343,15 @@ class HybridRetriever:
 
     @staticmethod
     def _result_key(result: SearchResult) -> tuple[str, str]:
-        return result.document_id, result.chunk_id
+        normalized_content = re.sub(
+            r"\s+",
+            " ",
+            unicodedata.normalize("NFKC", result.content),
+        ).strip().casefold()
+        return (
+            result.document_id,
+            normalized_content or result.chunk_id,
+        )
 
     @staticmethod
     def _deduplicate(results: List[SearchResult]) -> List[SearchResult]:
@@ -333,6 +364,55 @@ class HybridRetriever:
             seen.add(key)
             deduplicated.append(result)
         return deduplicated
+
+    @staticmethod
+    def _globally_rank_vector_results(
+        results: List[SearchResult],
+    ) -> List[SearchResult]:
+        """Merge private/public candidates using explicit score semantics.
+
+        Chroma returns each tenant scope in best-first distance order. Merely
+        concatenating those lists permanently favored the private scope even
+        when a public candidate was substantially closer. Explicit distance,
+        similarity, and relevance scores are converted to one relevance
+        direction. Legacy results without score semantics keep their original
+        stable ordering because their numeric direction is unknowable.
+        """
+
+        ranked: list[tuple[int, SearchResult, float | None]] = [
+            (
+                index,
+                result,
+                HybridRetriever._vector_relevance(result),
+            )
+            for index, result in enumerate(results)
+        ]
+        if not any(relevance is not None for _, _, relevance in ranked):
+            return list(results)
+
+        ranked.sort(
+            key=lambda item: (
+                item[2] is None,
+                -(item[2] if item[2] is not None else 0.0),
+                item[0],
+            )
+        )
+        return [result for _, result, _ in ranked]
+
+    @staticmethod
+    def _vector_relevance(result: SearchResult) -> float | None:
+        for field in ("similarity_score", "confidence"):
+            value = result.metadata.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+
+        semantics = result.metadata.get("score_semantics")
+        score = float(result.score)
+        if semantics == "distance":
+            return 1.0 / (1.0 + max(score, 0.0))
+        if semantics in {"similarity", "relevance"}:
+            return score
+        return None
 
     @staticmethod
     def _apply_tenant_scope(
@@ -373,6 +453,14 @@ class HybridRetriever:
                 "vector_rank",
                 "bm25_rank",
                 "bm25_score",
+                "page",
+                "section",
+                "ocr_used",
+                "parser_version",
+                "chunker_version",
+                "embedding_model",
+                "embedding_revision",
+                "content_sha256",
             ):
                 value = r.metadata.get(field)
                 if value is not None:
@@ -415,7 +503,11 @@ class HybridRetriever:
         # the bounded parallel retrieval workers. Model inference is guarded;
         # vector-store requests can still run concurrently after encoding.
         with self._model_lock:
-            return self.model.encode(question, convert_to_tensor=False).tolist()
+            return embed_query(
+                self.model,
+                question,
+                convert_to_tensor=False,
+            ).tolist()
 
     def _apply_filters(
         self,
@@ -473,7 +565,11 @@ class HybridRetriever:
                 if c.get("document_id") in document_ids
             ]
 
-        question_embedding = self.model.encode(question, convert_to_tensor=True)
+        question_embedding = embed_query(
+            self.model,
+            question,
+            convert_to_tensor=True,
+        )
         scores = util.cos_sim(question_embedding, embeddings)[0]
         indexes = scores.argsort(descending=True)[:top_k]
 

@@ -18,7 +18,8 @@ def _config(provider: str, *, stream: bool = True) -> ProviderConfig:
 
 
 def test_deepseek_does_not_advertise_unimplemented_chat_features() -> None:
-    capability = DeepSeekProvider(_config("deepseek")).get_capability()
+    provider = DeepSeekProvider(_config("deepseek"))
+    capability = provider.get_capability()
 
     assert capability.supports_system_prompt is True
     assert capability.supports_stream is False
@@ -26,6 +27,11 @@ def test_deepseek_does_not_advertise_unimplemented_chat_features() -> None:
     assert capability.supports_tools is False
     assert capability.supports_json_mode is False
     assert capability.supports_embedding is False
+    assert capability.max_context_tokens == 1_000_000
+    assert provider.list_models() == [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    ]
 
 
 def test_gemini_text_adapter_does_not_advertise_vendor_only_features() -> None:
@@ -47,7 +53,7 @@ def test_gemini_text_adapter_does_not_advertise_vendor_only_features() -> None:
 def test_capability_policy_rejects_a_partial_required_feature_match() -> None:
     policy = CapabilityRoutingPolicy(
         default_provider="deepseek",
-        default_model="deepseek-chat",
+        default_model="deepseek-v4-flash",
     )
     context = RoutingContext(
         task=TaskType.IMAGE_ANALYSIS,

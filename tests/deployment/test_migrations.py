@@ -15,6 +15,7 @@ EXPECTED_TABLES = {
     "agent_traces",
     "billing_records",
     "documents",
+    "llm_provider_settings",
     "plans",
     "tasks",
     "tenant_subscriptions",
@@ -52,11 +53,38 @@ def test_fresh_database_upgrades_to_head_without_schema_drift(
             for column in inspector.get_columns("agent_checkpoints")
         }
         assert "archived_at" in checkpoint_columns
+        llm_setting_columns = {
+            column["name"]
+            for column in inspector.get_columns("llm_provider_settings")
+        }
+        assert "is_default" in llm_setting_columns
+        document_columns = {
+            column["name"]
+            for column in inspector.get_columns("documents")
+        }
+        assert {
+            "content_sha256",
+            "byte_size",
+            "uploaded_by_user_id",
+            "indexed_chunk_count",
+        } <= document_columns
+        document_indexes = {
+            index["name"]: index
+            for index in inspector.get_indexes("documents")
+        }
+        deduplication_index = document_indexes[
+            "uq_documents_tenant_content_sha256"
+        ]
+        assert deduplication_index["unique"] == 1
+        assert deduplication_index["column_names"] == [
+            "tenant_id",
+            "content_sha256",
+        ]
 
         with engine.connect() as connection:
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        assert revision == "20260726_03"
+        assert revision == "20260729_07"
     finally:
         engine.dispose()

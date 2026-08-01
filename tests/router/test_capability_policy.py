@@ -36,7 +36,7 @@ class _MockDeepSeekProvider(BaseProvider):
         return True
 
     def list_models(self) -> list:
-        return ["deepseek-chat"]
+        return ["deepseek-v4-flash"]
 
     def get_capability(self) -> ProviderCapability:
         return ProviderCapability(
@@ -98,9 +98,9 @@ class TestCapabilityRoutingPolicy:
     def policy(self):
         return CapabilityRoutingPolicy(
             default_provider="deepseek",
-            default_model="deepseek-chat",
+            default_model="deepseek-v4-flash",
             provider_models={
-                "deepseek": "deepseek-chat",
+                "deepseek": "deepseek-v4-flash",
                 "gemini": "gemini-2.5-flash",
             },
         )
@@ -230,7 +230,7 @@ class TestCapabilityRoutingPolicy:
         result = policy.select(ctx)
 
         assert result.provider == "deepseek"
-        assert result.model == "deepseek-chat"
+        assert result.model == "deepseek-v4-flash"
         assert result.reason == "Default chat provider"
         assert result.confidence == 0.85
         assert result.fallback_provider is None
@@ -343,16 +343,16 @@ class TestCapabilityRoutingPolicy:
     def test_custom_provider_models(self):
         policy = CapabilityRoutingPolicy(
             default_provider="deepseek",
-            default_model="deepseek-chat",
+            default_model="deepseek-v4-flash",
             provider_models={
-                "deepseek": "deepseek-reasoner",
+                "deepseek": "deepseek-v4-pro",
                 "gemini": "gemini-2.5-pro",
             },
         )
         ctx = RoutingContext(task=TaskType.CHAT)
         result = policy.select(ctx)
 
-        assert result.model == "deepseek-reasoner"
+        assert result.model == "deepseek-v4-pro"
 
     # =========================
     # RoutingResult fields

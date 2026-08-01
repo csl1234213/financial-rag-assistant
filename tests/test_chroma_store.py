@@ -64,6 +64,42 @@ class TestChromaEmbeddingStore:
         store.add_documents(docs)
         assert store.count() == 5
 
+    def test_add_documents_is_idempotent_for_worker_retry(self, store):
+        store.create_collection("default")
+        original = VectorDocument(
+            document_id="retry_doc",
+            chunk_id="tenant_1_checksum_0",
+            company="Tesla",
+            content="Original parsed content.",
+            embedding=[0.1] * 384,
+            metadata={
+                "collection": "default",
+                "tenant_id": 1,
+                "source": "retry.pdf",
+            },
+        )
+        retried = VectorDocument(
+            document_id="retry_doc",
+            chunk_id="tenant_1_checksum_0",
+            company="Tesla",
+            content="Original parsed content.",
+            embedding=[0.1] * 384,
+            metadata={
+                "collection": "default",
+                "tenant_id": 1,
+                "source": "retry.pdf",
+            },
+        )
+
+        store.add_documents([original])
+        store.add_documents([retried])
+
+        assert store.count() == 1
+        assert [
+            item.chunk_id
+            for item in store.lexical_corpus(tenant_id=1)
+        ] == ["tenant_1_checksum_0"]
+
     def test_similarity_search(self, store):
         store.create_collection("default")
         store.add_documents([
@@ -110,19 +146,34 @@ class TestChromaEmbeddingStore:
 
     def test_delete_document(self, store):
         store.create_collection("default")
-        store.add_documents([
-            VectorDocument(
-                document_id="to_delete",
-                chunk_id="to_delete_0",
-                company="Test",
-                content="This will be deleted.",
-                embedding=[0.1] * 384,
-                metadata={"collection": "default"},
-            )
-        ])
+        store.add_documents(
+            [
+                VectorDocument(
+                    document_id="to_delete",
+                    chunk_id="tenant_1_to_delete_0",
+                    company="Test",
+                    content="Tenant 1 content.",
+                    embedding=[0.1] * 384,
+                    metadata={"collection": "default", "tenant_id": 1},
+                ),
+                VectorDocument(
+                    document_id="to_delete",
+                    chunk_id="tenant_2_to_delete_0",
+                    company="Test",
+                    content="Tenant 2 content.",
+                    embedding=[0.2] * 384,
+                    metadata={"collection": "default", "tenant_id": 2},
+                ),
+            ]
+        )
+        assert store.count() == 2
+        store.delete_document("to_delete", tenant_id=1)
         assert store.count() == 1
-        store.delete_document("to_delete")
-        assert store.count() == 0
+
+        tenant_two = store.lexical_corpus(tenant_id=2)
+        assert [item.chunk_id for item in tenant_two] == [
+            "tenant_2_to_delete_0"
+        ]
 
     def test_similarity_search_empty(self, store):
         results = store.similarity_search([0.5] * 384)

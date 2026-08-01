@@ -14,6 +14,11 @@ _TEST_RUN_ROOT = Path(
 ).resolve()
 os.environ["FINANCIAL_RAG_TEST_RUN_ROOT"] = str(_TEST_RUN_ROOT)
 os.environ["APP_ENV"] = "test"
+os.environ.setdefault("OCR_ENABLED", "false")
+os.environ.setdefault(
+    "LLM_CREDENTIAL_ENCRYPTION_KEYS",
+    "test-only-llm-credential-encryption-key",
+)
 os.environ["DATABASE_URL"] = (
     f"sqlite:///{(_TEST_RUN_ROOT / 'application.db').as_posix()}"
 )
@@ -38,14 +43,23 @@ def pytest_configure(config):
 
 @pytest.fixture(autouse=True)
 def _ensure_providers_registered():
+    from llm.adapters.claude_provider import ClaudeProvider
     from llm.adapters.deepseek_provider import DeepSeekProvider
+    from llm.adapters.doubao_provider import DoubaoProvider
     from llm.adapters.gemini_provider import GeminiProvider
+    from llm.adapters.openai_provider import OpenAIProvider
     from llm.providers.provider_registry import ProviderRegistry
 
     if not ProviderRegistry.has_provider("deepseek"):
         ProviderRegistry.register("deepseek", DeepSeekProvider)
     if not ProviderRegistry.has_provider("gemini"):
         ProviderRegistry.register("gemini", GeminiProvider)
+    if not ProviderRegistry.has_provider("openai"):
+        ProviderRegistry.register("openai", OpenAIProvider)
+    if not ProviderRegistry.has_provider("anthropic"):
+        ProviderRegistry.register("anthropic", ClaudeProvider)
+    if not ProviderRegistry.has_provider("doubao"):
+        ProviderRegistry.register("doubao", DoubaoProvider)
 
 
 @pytest.fixture(autouse=True)

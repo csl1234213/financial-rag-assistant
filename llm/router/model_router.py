@@ -16,8 +16,12 @@
 import time
 
 from config.llm import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_BASE_URL,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
+    DOUBAO_API_KEY,
+    DOUBAO_BASE_URL,
     GEMINI_API_KEY,
     LLM_API_KEY,
     LLM_BASE_URL,
@@ -25,6 +29,8 @@ from config.llm import (
     LLM_STREAM,
     LLM_TEMPERATURE,
     LLM_TIMEOUT,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
 )
 
 from ..factory.provider_factory import ProviderFactory
@@ -46,6 +52,18 @@ _PROVIDER_CONFIG_OVERRIDES = {
     "gemini": {
         "api_key": GEMINI_API_KEY,
     },
+    "openai": {
+        "api_key": OPENAI_API_KEY,
+        "base_url": OPENAI_BASE_URL,
+    },
+    "anthropic": {
+        "api_key": ANTHROPIC_API_KEY,
+        "base_url": ANTHROPIC_BASE_URL,
+    },
+    "doubao": {
+        "api_key": DOUBAO_API_KEY,
+        "base_url": DOUBAO_BASE_URL,
+    },
 }
 
 
@@ -54,15 +72,32 @@ class ModelRouter:
         self,
         policy: RoutingPolicy,
         provider_configs: dict | None = None,
+        available_providers: list[str] | None = None,
     ):
         self._policy = policy
         self._provider_configs = provider_configs or _PROVIDER_CONFIG_OVERRIDES
+        self._available_providers = (
+            tuple(available_providers)
+            if available_providers is not None
+            else None
+        )
 
     def route(
         self,
         context: RoutingContext,
     ) -> dict:
-        providers = ProviderRegistry.list_providers()
+        registered_providers = ProviderRegistry.list_providers()
+        providers = (
+            [
+                provider
+                for provider in registered_providers
+                if provider in self._available_providers
+            ]
+            if self._available_providers is not None
+            else registered_providers
+        )
+        if not providers:
+            raise ValueError("No configured LLM provider is available")
 
         t0 = time.perf_counter()
         result: RoutingResult = self._policy.select(

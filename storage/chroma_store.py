@@ -106,18 +106,43 @@ class ChromaEmbeddingStore(EmbeddingStore):
 
     def add_documents(self, documents: List[VectorDocument]) -> None:
         try:
-            for doc in documents:
-                collection = self.client.get_or_create_collection(name=doc.metadata.get("collection", "default"))
-                collection.add(
-                    ids=[doc.chunk_id],
-                    documents=[doc.content],
-                    embeddings=[doc.embedding],
+            documents_by_collection: dict[str, list[VectorDocument]] = {}
+            for document in documents:
+                collection_name = str(
+                    document.metadata.get("collection", "default")
+                )
+                documents_by_collection.setdefault(
+                    collection_name,
+                    [],
+                ).append(document)
+
+            for collection_name, collection_documents in documents_by_collection.items():
+                collection = self.client.get_or_create_collection(
+                    name=collection_name
+                )
+                # Deterministic chunk IDs make worker retries safe. ``upsert``
+                # replaces a partially written prior attempt instead of
+                # failing on duplicate IDs.
+                collection.upsert(
+                    ids=[
+                        document.chunk_id
+                        for document in collection_documents
+                    ],
+                    documents=[
+                        document.content
+                        for document in collection_documents
+                    ],
+                    embeddings=[
+                        document.embedding
+                        for document in collection_documents
+                    ],
                     metadatas=[
                         {
-                            "document_id": doc.document_id,
-                            "company": doc.company,
-                            **doc.metadata,
+                            "document_id": document.document_id,
+                            "company": document.company,
+                            **document.metadata,
                         }
+                        for document in collection_documents
                     ],
                 )
         except Exception as e:
@@ -223,10 +248,23 @@ class ChromaEmbeddingStore(EmbeddingStore):
     # Utils
     # =========================
 
-    def delete_document(self, document_id: str) -> None:
+    def delete_document(self, document_id: str, *, tenant_id: int) -> None:
+        """Delete one tenant's vectors without affecting another tenant.
+
+        ``document_id`` is not assumed to be globally unique.  Requiring the
+        trusted tenant scope here makes destructive callers provide both
+        identity dimensions explicitly.
+        """
         try:
             for c in self.client.list_collections():
-                c.delete(where={"document_id": document_id})
+                c.delete(
+                    where={
+                        "$and": [
+                            {"tenant_id": {"$eq": tenant_id}},
+                            {"document_id": {"$eq": document_id}},
+                        ]
+                    }
+                )
         except Exception as e:
             raise EmbeddingStoreError(f"Delete document failed: {e}")
 

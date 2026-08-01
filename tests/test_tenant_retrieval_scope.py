@@ -4,7 +4,13 @@ from storage.vector_models import SearchResult
 
 
 class _EmbeddingModel:
-    def encode(self, _question, convert_to_tensor=False):
+    def encode(
+        self,
+        _question,
+        convert_to_tensor=False,
+        normalize_embeddings=False,
+    ):
+        del convert_to_tensor, normalize_embeddings
         return _Embedding([0.1, 0.2])
 
 

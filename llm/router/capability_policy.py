@@ -7,10 +7,13 @@
 # ============================================================
 
 from config.llm import (
+    ANTHROPIC_MODEL,
     DEEPSEEK_MODEL,
+    DOUBAO_MODEL,
     GEMINI_MODEL,
     LLM_MODEL,
     LLM_PROVIDER,
+    OPENAI_MODEL,
 )
 
 from ..providers.provider_config import ProviderConfig
@@ -23,6 +26,9 @@ from .routing_result import RoutingResult
 _DEFAULT_MODELS = {
     "deepseek": DEEPSEEK_MODEL,
     "gemini": GEMINI_MODEL,
+    "openai": OPENAI_MODEL,
+    "anthropic": ANTHROPIC_MODEL,
+    "doubao": DOUBAO_MODEL,
 }
 
 

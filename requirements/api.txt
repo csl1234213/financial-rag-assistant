@@ -2,7 +2,9 @@
 -r base.txt
 
 alembic==1.14.1
+anthropic==0.120.2
 bcrypt==4.2.0
+cryptography==49.0.0
 email-validator==2.2.0
 fastapi==0.137.1
 httptools==0.8.0

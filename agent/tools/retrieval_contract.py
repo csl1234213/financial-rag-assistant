@@ -136,7 +136,11 @@ class RetrievalEvidence:
         if not isinstance(source, str) or not source.strip():
             raise RetrievalContractError("retrieval evidence requires a source filename")
 
-        score = data.get("similarity_score", data.get("score", data.get("confidence")))
+        score = data.get("similarity_score")
+        if score is None:
+            score = data.get("score")
+        if score is None:
+            score = data.get("confidence")
         if score is not None and (isinstance(score, bool) or not isinstance(score, (int, float))):
             raise RetrievalContractError("retrieval evidence score must be numeric when provided")
 

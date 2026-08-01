@@ -73,9 +73,11 @@ class SeededHashEmbeddingModel:
         text: str,
         *,
         convert_to_tensor: bool = False,
+        normalize_embeddings: bool = False,
     ) -> _EmbeddingVector:
         if convert_to_tensor:
             raise ValueError("deterministic retrieval evaluation uses list embeddings")
+        del normalize_embeddings
 
         values = [0.0] * self.dimensions
         for token in tokenize(text):
@@ -114,7 +116,9 @@ class AdversarialInMemoryEvaluationStore(EmbeddingStore):
                     chunk_id=document.chunk_id,
                     company=document.company,
                     content=document.content,
-                    embedding=self._model.encode(document.content).tolist(),
+                    embedding=self._model.encode(
+                        f"passage: {document.content}"
+                    ).tolist(),
                     metadata={
                         **document.metadata,
                         "tenant_id": document.tenant_id,
@@ -189,11 +193,19 @@ class AdversarialInMemoryEvaluationStore(EmbeddingStore):
             )
         ]
 
-    def delete_document(self, document_id: str) -> None:
+    def delete_document(
+        self,
+        document_id: str,
+        *,
+        tenant_id: int,
+    ) -> None:
         self._documents = {
             chunk_id: document
             for chunk_id, document in self._documents.items()
-            if document.document_id != document_id
+            if not (
+                document.document_id == document_id
+                and document.metadata.get("tenant_id") == tenant_id
+            )
         }
 
     def delete_by_tenant(self, tenant_id: int) -> None:

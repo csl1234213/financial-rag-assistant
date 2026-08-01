@@ -30,8 +30,11 @@ from config import (
     LLM_TIMEOUT,
 )
 
+from .adapters.claude_provider import ClaudeProvider
 from .adapters.deepseek_provider import DeepSeekProvider
+from .adapters.doubao_provider import DoubaoProvider
 from .adapters.gemini_provider import GeminiProvider
+from .adapters.openai_provider import OpenAIProvider
 from .factory.provider_factory import ProviderFactory
 from .providers.base_provider import BaseProvider
 from .providers.provider_config import ProviderConfig
@@ -41,6 +44,9 @@ from .providers.provider_registry import ProviderRegistry
 # Register providers at import time
 ProviderRegistry.register("deepseek", DeepSeekProvider)
 ProviderRegistry.register("gemini", GeminiProvider)
+ProviderRegistry.register("openai", OpenAIProvider)
+ProviderRegistry.register("anthropic", ClaudeProvider)
+ProviderRegistry.register("doubao", DoubaoProvider)
 
 
 def _build_config() -> ProviderConfig:

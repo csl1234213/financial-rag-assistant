@@ -28,6 +28,21 @@ from tests.storage_paths import create_sqlite_test_database
 TEST_DATABASE_URL, engine = create_sqlite_test_database("test_usage_metering.db")
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+VALID_ONE_PAGE_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+    b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+    b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+    b"xref\n0 4\n"
+    b"0000000000 65535 f \n"
+    b"0000000009 00000 n \n"
+    b"0000000058 00000 n \n"
+    b"0000000115 00000 n \n"
+    b"trailer\n<< /Size 4 /Root 1 0 R >>\n"
+    b"startxref\n190\n"
+    b"%%EOF"
+)
+
 
 def override_get_db():
     db = TestingSessionLocal()
@@ -394,14 +409,7 @@ class TestUsageIntegration:
 
     def test_upload_creates_usage(self, client, tenant, db_session, auth_headers):
         import io
-        pdf_content = (
-            b"%PDF-1.4\n"
-            b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-            b"2 0 obj<</Type/Pages/Count 0>>endobj\n"
-            b"trailer<</Size 3/Root 1 0 R>>\n"
-            b"%%EOF"
-        )
-        pdf_file = io.BytesIO(pdf_content)
+        pdf_file = io.BytesIO(VALID_ONE_PAGE_PDF)
 
         response = client.post(
             "/api/v1/upload",

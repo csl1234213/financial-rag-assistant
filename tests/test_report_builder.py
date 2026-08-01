@@ -55,7 +55,45 @@ class TestReportBuilderBasic:
             citations=[],
             evidence_stats={},
         )
-        assert "## Answer" in report
+        assert "## Answer (LLM Answer)" in report
+
+    def test_report_distinguishes_llm_and_agent_analysis(self):
+        report = build_research_report(
+            question="test",
+            answer="model answer",
+            citations=[],
+            evidence_stats={},
+        )
+
+        assert "## Answer (LLM Answer)" in report
+        assert "## Agent Evidence Analysis" in report
+        assert report.index("## Answer (LLM Answer)") < report.index(
+            "## Agent Evidence Analysis"
+        )
+
+    def test_chinese_question_localizes_report_structure(self):
+        rr = ReasoningResult(
+            facts=["Tesla automotive revenue was 82.4 billion USD."],
+            risks=["Pricing pressure."],
+            conclusion="Collected one financial fact.",
+        )
+        report = build_research_report(
+            question="特斯拉 2025 年的营收增长趋势如何？",
+            answer="证据显示总营收同比下降。[Evidence 1]",
+            citations=[],
+            evidence_stats={"Tesla_Q2_2025.pdf": 2},
+            reasoning_result=rr,
+        )
+
+        assert "# 研究报告" in report
+        assert "## 问题" in report
+        assert "## 回答（LLM 模型回答）" in report
+        assert "## 智能体证据分析" in report
+        assert "## 关键事实" in report
+        assert "## 风险信号" in report
+        assert "## AI 结论" in report
+        assert "## 来源覆盖" in report
+        assert "Tesla_Q2_2025.pdf: 2 个文本块" in report
 
     def test_report_has_source_coverage_section(self):
         report = build_research_report(

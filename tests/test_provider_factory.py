@@ -29,7 +29,11 @@ class MockProvider:
 class TestProviderFactoryCreate:
     def test_create_with_config(self):
         ProviderRegistry.register("deepseek", MockProvider)
-        config = ProviderConfig(provider="deepseek", model="deepseek-chat", api_key="sk-123")
+        config = ProviderConfig(
+            provider="deepseek",
+            model="deepseek-v4-flash",
+            api_key="sk-123",
+        )
         provider = ProviderFactory.create(config)
         assert isinstance(provider, MockProvider)
 

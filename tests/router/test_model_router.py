@@ -73,7 +73,7 @@ class TestModelRouter:
         policy = MagicMock()
         policy.select.return_value = RoutingResult(
             provider="deepseek",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             reason="Default provider",
             confidence=0.7,
         )
@@ -112,7 +112,7 @@ class TestModelRouter:
         result = router.route(context)
 
         assert result["routing"].provider == "deepseek"
-        assert result["routing"].model == "deepseek-chat"
+        assert result["routing"].model == "deepseek-v4-flash"
         assert result["routing"].reason == "Default provider"
         assert result["routing"].confidence == 0.7
 
@@ -145,7 +145,7 @@ class TestModelRouter:
         policy = MagicMock()
         policy.select.return_value = RoutingResult(
             provider="deepseek",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             reason="Default provider",
             confidence=0.5,
         )
@@ -158,7 +158,7 @@ class TestModelRouter:
 
         provider = result["provider"]
         assert provider._config.provider == "deepseek"
-        assert provider._config.model == "deepseek-chat"
+        assert provider._config.model == "deepseek-v4-flash"
 
     # =========================
     # route() with custom provider_configs
@@ -168,7 +168,7 @@ class TestModelRouter:
         policy = MagicMock()
         policy.select.return_value = RoutingResult(
             provider="deepseek",
-            model="deepseek-reasoner",
+            model="deepseek-v4-pro",
             reason="Custom config",
             confidence=1.0,
         )

@@ -59,15 +59,27 @@ def build_context_from_evidence(evidences) -> tuple:
     citations: List[Dict[str, Any]] = []
 
     for i, ev in enumerate(evidences):
-        citations.append(
-            {
-                "rank": i + 1,
-                "source": ev.source,
-                "chunk_id": ev.metadata.get("chunk_id", ""),
-                "similarity": ev.confidence,
-                "preview": ev.content[:150],
-            }
-        )
+        citation = {
+            "rank": i + 1,
+            "source": ev.source,
+            "chunk_id": ev.metadata.get("chunk_id", ""),
+            "similarity": ev.confidence,
+            "preview": ev.content[:150],
+        }
+        for field in (
+            "page",
+            "section",
+            "ocr_used",
+            "parser_version",
+            "chunker_version",
+            "embedding_model",
+            "embedding_revision",
+            "content_sha256",
+        ):
+            value = ev.metadata.get(field)
+            if value is not None:
+                citation[field] = value
+        citations.append(citation)
         context += f"""
 [Evidence {i + 1}]
 Source: {ev.source}

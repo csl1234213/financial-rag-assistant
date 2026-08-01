@@ -81,7 +81,7 @@ class TestLoadEmbeddingModel:
 
         load_embedding_model(force_reload=True)
         mock_st.assert_called_once_with(
-            "all-MiniLM-L6-v2",
+            "intfloat/multilingual-e5-small",
             revision=EMBEDDING_MODEL_REVISION,
         )
 
@@ -115,7 +115,7 @@ class TestLoadEmbeddingModel:
         status = embedding.get_embedding_model_status()
 
         assert status["state"] == "not_loaded"
-        assert status["model"] == "all-MiniLM-L6-v2"
+        assert status["model"] == "intfloat/multilingual-e5-small"
         mock_st.assert_not_called()
 
 
@@ -132,8 +132,14 @@ class TestEmbedChunks:
         ]
         embed_chunks(mock_model, chunks)
         mock_model.encode.assert_called_once()
-        call_args = mock_model.encode.call_args[0]
-        assert call_args[0] == ["Apple revenue grew 10%", "Tesla delivered 1.8M vehicles"]
+        call = mock_model.encode.call_args
+        assert call.args[0] == [
+            "passage: Apple revenue grew 10%",
+            "passage: Tesla delivered 1.8M vehicles",
+        ]
+        assert call.kwargs["convert_to_tensor"] is True
+        assert call.kwargs["normalize_embeddings"] is True
+        assert call.kwargs["batch_size"] > 0
 
     @patch("embedding.SentenceTransformer")
     def test_returns_tensor(self, mock_st):
@@ -152,6 +158,20 @@ class TestEmbedChunks:
         chunks = [{"text": "a"}, {"text": "b"}]
         result = embed_chunks(mock_model, chunks)
         assert result.shape == (2, 3)
+
+    def test_query_uses_e5_prefix_and_normalization(self):
+        from embedding import embed_query
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = torch.tensor([0.1, 0.2])
+
+        embed_query(mock_model, "特斯拉营收增长")
+
+        mock_model.encode.assert_called_once_with(
+            "query: 特斯拉营收增长",
+            convert_to_tensor=False,
+            normalize_embeddings=True,
+        )
 
 
 @pytest.mark.unit

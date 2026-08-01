@@ -7,6 +7,8 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from prompt_builder import (
+    FINANCIAL_COMPARE_PROMPT_VERSION,
+    FINANCIAL_RAG_PROMPT_VERSION,
     PROMPT_RULES,
     build_compare_prompt,
     build_direct_chat_prompt,
@@ -64,6 +66,32 @@ class TestBuildPrompt:
             context="some context",
         )
         assert "[Evidence 1]" in prompt
+
+    def test_prompt_requires_question_language_without_relaxing_grounding(self):
+        prompt = build_prompt(
+            question="特斯拉的收入增长如何？",
+            context="Tesla automotive revenue was 82.4 billion USD.",
+        )
+
+        assert "same language as the QUESTION" in prompt
+        assert "ONLY using information from the Evidence section" in prompt
+        assert "Do NOT use external knowledge" in prompt
+        assert "exactly as [Evidence N]" in prompt
+
+    def test_prompt_prevents_flattened_table_period_misalignment(self):
+        prompt = build_prompt(
+            question="Analyze Tesla Q2 automotive revenue.",
+            context=(
+                "Q1-2025 Q2-2025 Q4-2025 YoY "
+                "Total automotive revenues 13,967 16,661 17,693 -11%"
+            ),
+        )
+
+        assert "align each value with its column header" in prompt
+        assert "latest displayed period" in prompt
+        assert "year-over-year and quarter-over-quarter" in prompt
+        assert "prior-year comparison" in prompt
+        assert "value is absent" in prompt
 
     def test_prompt_no_history_section_empty(self):
         prompt = build_prompt(
@@ -177,6 +205,16 @@ class TestBuildComparePrompt:
         )
         assert isinstance(prompt, str)
 
+    def test_compare_prompt_requires_question_language_and_evidence_only(self):
+        prompt = build_compare_prompt(
+            question="比较特斯拉和英伟达",
+            context="evidence",
+        )
+
+        assert "same language as the QUESTION" in prompt
+        assert "Use ONLY the provided context" in prompt
+        assert "exactly as [Evidence N]" in prompt
+
 
 @pytest.mark.unit
 class TestPromptRules:
@@ -187,6 +225,10 @@ class TestPromptRules:
         assert "financial analyst" in PROMPT_RULES
         assert "Evidence" in PROMPT_RULES
         assert "invent facts" in PROMPT_RULES
+
+    def test_grounded_prompts_use_new_immutable_versions(self):
+        assert FINANCIAL_RAG_PROMPT_VERSION == "2.2.0"
+        assert FINANCIAL_COMPARE_PROMPT_VERSION == "2.2.0"
 
 
 @pytest.mark.unit

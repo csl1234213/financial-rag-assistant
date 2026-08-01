@@ -21,7 +21,7 @@ class _MockInnerPolicy(BaseRoutingPolicy):
         self.calls.append((context, providers))
         return RoutingResult(
             provider="deepseek",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             reason="test",
             confidence=0.9,
         )

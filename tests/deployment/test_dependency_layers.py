@@ -63,6 +63,7 @@ class TestDependencyLayering:
 
         assert {
             "alembic",
+            "anthropic",
             "chromadb",
             "fastapi",
             "langgraph",

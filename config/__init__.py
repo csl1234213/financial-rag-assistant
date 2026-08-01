@@ -13,6 +13,14 @@ from agent.__version__ import BASE_VERSION
 
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "on"}
+
+
 # =========================
 # Legacy (from config.py)
 # =========================
@@ -51,8 +59,8 @@ DOCUMENT_HINTS = {
     ],
 }
 
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-DEFAULT_EMBEDDING_MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
+DEFAULT_EMBEDDING_MODEL_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 
 CACHE_DIR = os.environ.get("CACHE_DIR", "cache")
 TOP_K = 4
@@ -66,9 +74,14 @@ EMBEDDING_MODEL_REVISION = os.environ.get(
     ),
 )
 EMBEDDING_DEVICE = os.environ.get("EMBEDDING_DEVICE", "")
+EMBEDDING_BATCH_SIZE = int(os.environ.get("EMBEDDING_BATCH_SIZE", "32"))
 CACHE_VERSION = "1.8"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "1000"))
+CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
+OCR_ENABLED = _env_bool("OCR_ENABLED", True)
+OCR_LANGUAGES = os.environ.get("OCR_LANGUAGES", "eng+chi_sim")
+OCR_DPI = int(os.environ.get("OCR_DPI", "300"))
+OCR_MIN_TEXT_CHARS = int(os.environ.get("OCR_MIN_TEXT_CHARS", "80"))
 
 # =========================
 # New (V7.3 — env-driven)
@@ -114,6 +127,15 @@ DEEPSEEK_MODEL = _llm_config.DEEPSEEK_MODEL
 DEEPSEEK_BASE_URL = _llm_config.DEEPSEEK_BASE_URL
 GEMINI_API_KEY = _llm_config.GEMINI_API_KEY
 GEMINI_MODEL = _llm_config.GEMINI_MODEL
+OPENAI_API_KEY = _llm_config.OPENAI_API_KEY
+OPENAI_MODEL = _llm_config.OPENAI_MODEL
+OPENAI_BASE_URL = _llm_config.OPENAI_BASE_URL
+ANTHROPIC_API_KEY = _llm_config.ANTHROPIC_API_KEY
+ANTHROPIC_MODEL = _llm_config.ANTHROPIC_MODEL
+ANTHROPIC_BASE_URL = _llm_config.ANTHROPIC_BASE_URL
+DOUBAO_API_KEY = _llm_config.DOUBAO_API_KEY
+DOUBAO_MODEL = _llm_config.DOUBAO_MODEL
+DOUBAO_BASE_URL = _llm_config.DOUBAO_BASE_URL
 
 _ui_config = import_module(".ui", __package__)
 _ui_exports = getattr(
@@ -140,9 +162,14 @@ __all__ = [
     "EMBEDDING_MODEL",
     "EMBEDDING_MODEL_REVISION",
     "EMBEDDING_DEVICE",
+    "EMBEDDING_BATCH_SIZE",
     "CACHE_VERSION",
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
+    "OCR_ENABLED",
+    "OCR_LANGUAGES",
+    "OCR_DPI",
+    "OCR_MIN_TEXT_CHARS",
     "LLM_TEMPERATURE",
     "LLM_MAX_TOKENS",
     "APP_ENV",
@@ -167,4 +194,13 @@ __all__ = [
     "DEEPSEEK_BASE_URL",
     "GEMINI_API_KEY",
     "GEMINI_MODEL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_BASE_URL",
+    "DOUBAO_API_KEY",
+    "DOUBAO_MODEL",
+    "DOUBAO_BASE_URL",
 ]

@@ -21,6 +21,7 @@ database_module = import_module("storage.database")
 for model_module in (
     "billing.models",
     "models.document",
+    "models.llm_provider_setting",
     "models.plan",
     "models.subscription",
     "models.task",

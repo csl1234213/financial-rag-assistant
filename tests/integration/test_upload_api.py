@@ -1,8 +1,10 @@
+import hashlib
 import io
 import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import fitz
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -33,6 +35,26 @@ MINIMAL_PDF = (
     b"startxref\n190\n"
     b"%%EOF"
 )
+ZERO_PAGE_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Count 0>>endobj\n"
+    b"trailer<</Size 3/Root 1 0 R>>\n"
+    b"%%EOF"
+)
+
+
+def _encrypted_pdf() -> bytes:
+    document = fitz.open()
+    try:
+        document.new_page()
+        return document.tobytes(
+            encryption=fitz.PDF_ENCRYPT_AES_256,
+            owner_pw="owner-password",
+            user_pw="user-password",
+        )
+    finally:
+        document.close()
 
 
 def _override_get_db():
@@ -129,14 +151,98 @@ class TestUploadAPI:
             assert document is not None
             assert document.tenant_id == user.tenant_id
             assert document.status == "processing"
+            assert document.content_sha256 == hashlib.sha256(MINIMAL_PDF).hexdigest()
+            assert document.byte_size == len(MINIMAL_PDF)
+            assert document.uploaded_by_user_id == user.id
+            assert document.indexed_chunk_count == 0
             assert task.tenant_id == user.tenant_id
             assert task.payload["document_id"] == document.id
+            assert task.payload["content_sha256"] == document.content_sha256
             persisted_file = Path(task.payload["file_path"])
             assert persisted_file.is_relative_to(upload_dir)
             assert persisted_file.name == "Tesla_Q2_2025.pdf"
             assert persisted_file.read_bytes() == MINIMAL_PDF
         finally:
             db.close()
+
+    def test_duplicate_content_in_same_tenant_returns_409(
+        self,
+        client,
+        upload_dir,
+    ):
+        first = client.post(
+            "/api/v1/upload",
+            files={
+                "file": (
+                    "Tesla_Q2_2025.pdf",
+                    io.BytesIO(MINIMAL_PDF),
+                    "application/pdf",
+                )
+            },
+        )
+        duplicate = client.post(
+            "/api/v1/upload",
+            files={
+                "file": (
+                    "renamed-copy.pdf",
+                    io.BytesIO(MINIMAL_PDF),
+                    "application/pdf",
+                )
+            },
+        )
+
+        assert first.status_code == 200
+        assert duplicate.status_code == 409
+        assert duplicate.json() == {
+            "detail": "This document already exists in your workspace."
+        }
+
+        db = TestingSessionLocal()
+        try:
+            assert db.query(Document).count() == 1
+            assert db.query(Task).count() == 1
+        finally:
+            db.close()
+        assert len(list(upload_dir.rglob("*.pdf"))) == 1
+
+    def test_same_content_in_another_tenant_is_not_disclosed(
+        self,
+        client,
+        upload_dir,
+    ):
+        db = TestingSessionLocal()
+        try:
+            other_tenant = Tenant(name="Other Tenant", slug="other-tenant")
+            db.add(other_tenant)
+            db.flush()
+            db.add(
+                Document(
+                    filename="private.pdf",
+                    company="Private",
+                    period="Unknown",
+                    status="indexed",
+                    tenant_id=other_tenant.id,
+                    content_sha256=hashlib.sha256(MINIMAL_PDF).hexdigest(),
+                    byte_size=len(MINIMAL_PDF),
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = client.post(
+            "/api/v1/upload",
+            files={
+                "file": (
+                    "tenant-copy.pdf",
+                    io.BytesIO(MINIMAL_PDF),
+                    "application/pdf",
+                )
+            },
+        )
+
+        assert response.status_code == 200
+        assert len(list(upload_dir.rglob("*.pdf"))) == 1
 
     def test_upload_non_pdf_returns_400(self, client, upload_dir):
         response = client.post(
@@ -159,6 +265,35 @@ class TestUploadAPI:
 
         assert response.status_code == 400
         assert response.json()["detail"] == "Uploaded content is not a valid PDF document"
+
+    @pytest.mark.parametrize(
+        ("filename", "content"),
+        [
+            ("zero-pages.pdf", ZERO_PAGE_PDF),
+            ("damaged.pdf", b"%PDF-1.4\nthis is damaged\n%%EOF"),
+            ("encrypted.pdf", _encrypted_pdf()),
+        ],
+    )
+    def test_unusable_pdf_does_not_create_document_or_task(
+        self,
+        client,
+        upload_dir,
+        filename,
+        content,
+    ):
+        response = client.post(
+            "/api/v1/upload",
+            files={"file": (filename, io.BytesIO(content), "application/pdf")},
+        )
+
+        assert response.status_code == 400
+        db = TestingSessionLocal()
+        try:
+            assert db.query(Document).count() == 0
+            assert db.query(Task).count() == 0
+        finally:
+            db.close()
+        assert list(upload_dir.rglob("*")) == []
 
     def test_upload_enforces_size_limit(self, client, upload_dir, monkeypatch):
         monkeypatch.setattr("api.routers.upload.MAX_UPLOAD_BYTES", 10)

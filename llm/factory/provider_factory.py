@@ -5,7 +5,7 @@
 # That knowledge lives in the Registry.
 #
 # Usage:
-#   config = ProviderConfig(provider="deepseek", model="deepseek-chat", ...)
+#   config = ProviderConfig(provider="deepseek", model="deepseek-v4-flash", ...)
 #   provider = ProviderFactory.create(config)
 #   response = provider.chat(request)
 # ============================================================

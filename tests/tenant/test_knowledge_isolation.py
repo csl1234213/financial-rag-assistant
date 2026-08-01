@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -5,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from api.app import app
 from models.document import Document
 from models.tenant import Tenant
+from models.user import User
 from storage.database import Base, get_db
 from tests.storage_paths import create_sqlite_test_database
 
@@ -58,6 +61,19 @@ REGISTER_URL = "/api/v1/auth/register"
 AUTH_ME_URL = "/api/v1/auth/me"
 TENANT_ME_URL = "/api/v1/tenant/me"
 KNOWLEDGE_URL = "/api/v1/knowledge"
+
+
+class RecordingVectorStore:
+    calls: list[tuple[str, int]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+    def delete_document(self, document_id: str, *, tenant_id: int) -> None:
+        self.calls.append((document_id, tenant_id))
 
 
 def _register_and_get_token(client: TestClient, email: str = "test@example.com") -> str:
@@ -166,6 +182,18 @@ class TestTenantDocumentIsolation:
         assert response.status_code == 200
         data = response.json()
         assert "visible_doc.pdf" in data["documents"]
+        assert len(data["items"]) == 1
+        item = data["items"][0]
+        assert item["id"] == doc.id
+        assert item["filename"] == "visible_doc.pdf"
+        assert item["company"] == "Tesla"
+        assert item["period"] == "Q2_2025"
+        assert item["status"] == "indexed"
+        assert item["chunk_count"] == 0
+        assert item["byte_size"] is None
+        assert item["content_sha256"] is None
+        assert item["can_delete"] is False
+        assert isinstance(item["uploaded_at"], str)
 
     def test_knowledge_statistics_tenant_scoped(self, client, db_session):
         token = _register_and_get_token(client, "stats-test@example.com")
@@ -187,3 +215,232 @@ class TestTenantDocumentIsolation:
         assert response.status_code == 200
         data = response.json()
         assert data["documents"] >= 1
+
+    def test_delete_document_is_tenant_scoped(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+        tmp_path: Path,
+    ):
+        token = _register_and_get_token(client, "delete-scope@example.com")
+        default_tenant = (
+            db_session.query(Tenant)
+            .filter(Tenant.slug == "default")
+            .one()
+        )
+        other_tenant = Tenant(name="Other Tenant", slug="delete-other")
+        db_session.add(other_tenant)
+        db_session.flush()
+        foreign_document = Document(
+            filename="foreign.pdf",
+            company="NVIDIA",
+            period="Q1_2027",
+            status="indexed",
+            tenant_id=other_tenant.id,
+        )
+        db_session.add(foreign_document)
+        db_session.commit()
+
+        RecordingVectorStore.calls = []
+        monkeypatch.setattr(
+            "api.routers.knowledge.ChromaEmbeddingStore",
+            RecordingVectorStore,
+        )
+        monkeypatch.setattr(
+            "api.routers.knowledge.UPLOAD_DIR",
+            tmp_path,
+        )
+
+        response = client.delete(
+            f"{KNOWLEDGE_URL}/{foreign_document.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Document not found"}
+        assert RecordingVectorStore.calls == []
+        db_session.expire_all()
+        assert db_session.get(Document, foreign_document.id) is not None
+        assert default_tenant.id != other_tenant.id
+
+    def test_delete_document_removes_exact_vectors_and_upload_directory(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+        tmp_path: Path,
+    ):
+        token = _register_and_get_token(client, "delete-own@example.com")
+        owner = (
+            db_session.query(User)
+            .filter(User.email == "delete-own@example.com")
+            .one()
+        )
+        tenant = (
+            db_session.query(Tenant)
+            .filter(Tenant.slug == "default")
+            .one()
+        )
+        document = Document(
+            filename="owned.pdf",
+            company="Tesla",
+            period="Q2_2025",
+            status="indexed",
+            tenant_id=tenant.id,
+            content_sha256="a" * 64,
+            byte_size=16,
+            indexed_chunk_count=2,
+            uploaded_by_user_id=owner.id,
+        )
+        db_session.add(document)
+        db_session.commit()
+        db_session.refresh(document)
+        document_id = document.id
+
+        upload_directory = (
+            tmp_path / str(tenant.id) / f"{document_id}-test-upload"
+        )
+        upload_directory.mkdir(parents=True)
+        (upload_directory / document.filename).write_bytes(b"test-pdf-content")
+        unrelated_directory = (
+            tmp_path / str(tenant.id) / "999-test-upload"
+        )
+        unrelated_directory.mkdir()
+        (unrelated_directory / "keep.pdf").write_bytes(b"keep")
+
+        RecordingVectorStore.calls = []
+        monkeypatch.setattr(
+            "api.routers.knowledge.ChromaEmbeddingStore",
+            RecordingVectorStore,
+        )
+        monkeypatch.setattr(
+            "api.routers.knowledge.UPLOAD_DIR",
+            tmp_path,
+        )
+
+        response = client.delete(
+            f"{KNOWLEDGE_URL}/{document_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "deleted": True,
+            "document_id": document_id,
+        }
+        assert RecordingVectorStore.calls == [
+            (f"tenant_{tenant.id}_document_{document_id}", tenant.id)
+        ]
+        assert not upload_directory.exists()
+        assert unrelated_directory.is_dir()
+        db_session.expire_all()
+        assert db_session.get(Document, document_id) is None
+
+    def test_processing_document_cannot_be_deleted(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+        tmp_path: Path,
+    ):
+        token = _register_and_get_token(client, "delete-active@example.com")
+        owner = (
+            db_session.query(User)
+            .filter(User.email == "delete-active@example.com")
+            .one()
+        )
+        tenant = (
+            db_session.query(Tenant)
+            .filter(Tenant.slug == "default")
+            .one()
+        )
+        document = Document(
+            filename="active.pdf",
+            company="Tesla",
+            period="Q2_2025",
+            status="processing",
+            tenant_id=tenant.id,
+            uploaded_by_user_id=owner.id,
+        )
+        db_session.add(document)
+        db_session.commit()
+
+        RecordingVectorStore.calls = []
+        monkeypatch.setattr(
+            "api.routers.knowledge.ChromaEmbeddingStore",
+            RecordingVectorStore,
+        )
+        monkeypatch.setattr(
+            "api.routers.knowledge.UPLOAD_DIR",
+            tmp_path,
+        )
+
+        response = client.delete(
+            f"{KNOWLEDGE_URL}/{document.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 409
+        assert RecordingVectorStore.calls == []
+        db_session.expire_all()
+        assert db_session.get(Document, document.id) is not None
+
+    @pytest.mark.parametrize("legacy_owner", [False, True])
+    def test_user_cannot_delete_unowned_or_legacy_document(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+        tmp_path: Path,
+        legacy_owner: bool,
+    ):
+        token = _register_and_get_token(
+            client,
+            f"delete-denied-{legacy_owner}@example.com",
+        )
+        tenant = (
+            db_session.query(Tenant)
+            .filter(Tenant.slug == "default")
+            .one()
+        )
+        other_user = User(
+            email=f"other-owner-{legacy_owner}@example.com",
+            password_hash="not-used",
+            tenant_id=tenant.id,
+        )
+        db_session.add(other_user)
+        db_session.flush()
+        document = Document(
+            filename="legacy.pdf" if legacy_owner else "other-user.pdf",
+            company="Tesla",
+            period="Q2_2025",
+            status="indexed",
+            tenant_id=tenant.id,
+            uploaded_by_user_id=other_user.id if not legacy_owner else None,
+        )
+        db_session.add(document)
+        db_session.commit()
+
+        RecordingVectorStore.calls = []
+        monkeypatch.setattr(
+            "api.routers.knowledge.ChromaEmbeddingStore",
+            RecordingVectorStore,
+        )
+        monkeypatch.setattr(
+            "api.routers.knowledge.UPLOAD_DIR",
+            tmp_path,
+        )
+
+        response = client.delete(
+            f"{KNOWLEDGE_URL}/{document.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {
+            "detail": "You do not have permission to delete this document."
+        }
+        assert RecordingVectorStore.calls == []
+        db_session.expire_all()
+        assert db_session.get(Document, document.id) is not None

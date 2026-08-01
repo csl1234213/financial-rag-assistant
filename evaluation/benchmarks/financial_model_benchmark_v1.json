@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "protocol_id": "financial-model-benchmark-v1",
   "model_id": "candidate-model-to-configure",
-  "prompt_version": "financial-rag-2.0.0",
+  "prompt_version": "financial-rag-2.2.0",
   "description": "Offline-safe baseline protocol for grounded financial assistant response behavior. It contains no market-sensitive facts and is not an investment benchmark.",
   "metadata": {
     "purpose": "model_comparison",

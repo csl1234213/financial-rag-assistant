@@ -11,6 +11,11 @@ from services.agent_runtime.checkpointing import (
     scoped_checkpoint_thread_id,
 )
 from services.agent_runtime.factory import get_agent_graph, is_agent_available
+from services.llm_settings_service import (
+    CredentialEncryptionError,
+    RuntimeLLMSettings,
+    get_runtime_llm_settings,
+)
 from storage.agent.repository import AgentRepository
 from storage.database import SessionLocal
 
@@ -31,7 +36,24 @@ def run_agent(
         if tenant_id is not None
         else []
     )
-    cache_key = _cache_key(question, history, company)
+    try:
+        llm_settings = _load_runtime_llm_settings(tenant_id, user_id)
+    except CredentialEncryptionError as exc:
+        logger.error(
+            "Unable to resolve user LLM settings for tenant=%s user=%s: %s",
+            tenant_id,
+            user_id,
+            exc,
+        )
+        return _fallback_response(question, thread_id, str(exc))
+    cache_key = _cache_key(
+        question,
+        history,
+        company,
+        settings_revision=(
+            llm_settings.revision if llm_settings is not None else None
+        ),
+    )
 
     trace = start_trace(
         thread_id=thread_id,
@@ -99,6 +121,7 @@ def run_agent(
                         trace=trace,
                         checkpointer=checkpointer,
                         checkpoint_thread_id=checkpoint_thread_id,
+                        llm_settings=llm_settings,
                     )
 
             duration = round(time.time() - t0, 3)
@@ -232,6 +255,27 @@ def _load_history(
         db.close()
 
 
+def _load_runtime_llm_settings(
+    tenant_id: Optional[int],
+    user_id: Optional[int],
+) -> RuntimeLLMSettings | None:
+    """Resolve BYOK settings once per authenticated execution request."""
+
+    if tenant_id is None or user_id is None:
+        return None
+
+    db = SessionLocal()
+    try:
+        settings = get_runtime_llm_settings(
+            db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        return settings if settings.provider_configs else None
+    finally:
+        db.close()
+
+
 def _record_message(
     tenant_id: int,
     user_id: Optional[int],
@@ -258,9 +302,16 @@ def _cache_key(
     question: str,
     history: list[Dict[str, Any]],
     company: Optional[str],
+    *,
+    settings_revision: str | None = None,
 ) -> str:
     return json.dumps(
-        {"question": question, "company": company, "history": history},
+        {
+            "question": question,
+            "company": company,
+            "history": history,
+            "llm_settings_revision": settings_revision,
+        },
         ensure_ascii=False,
         sort_keys=True,
         default=str,
@@ -305,13 +356,26 @@ def _save_to_cache(
 
 
 def _fallback_response(question: str, thread_id: str, error: str = "", trace_id: str = "") -> Dict[str, Any]:
-    # ``error`` is intentionally accepted for backwards compatibility but is
-    # never reflected to clients. The full exception remains in structured
-    # logs and the trace identified by ``trace_id``.
-    del error
+    # Never reflect raw exceptions to clients. A narrowly classified provider
+    # authentication failure can still return an actionable, secret-free
+    # message while full details remain in structured logs and the trace.
+    if (
+        "DEEPSEEK_API_KEY not set" in error
+        or "LLM credential encryption" in error
+        or "Stored LLM credential" in error
+    ):
+        answer = (
+            "[Provider Configuration Error] AI provider credentials are not "
+            "configured on the backend. Contact the deployment administrator "
+            "and retry after provider authentication is enabled."
+        )
+    else:
+        answer = (
+            f"[Agent Runtime Fallback] Unable to process: '{question}'. "
+            "Please retry or inspect the runtime trace."
+        )
     return {
-        "answer": f"[Agent Runtime Fallback] Unable to process: '{question}'. "
-                  "Please retry or inspect the runtime trace.",
+        "answer": answer,
         "thread_id": thread_id,
         "tools_used": [],
         "sources": [],

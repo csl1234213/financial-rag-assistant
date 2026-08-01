@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from agent.reasoning_models import Evidence
 from agent.tools.tool_registry import ToolRegistry
+from api.schemas.response import Citation
+from core.context_builder import build_context_from_evidence
 from core.retrieval_tool_adapter import TenantRetrievalToolExecutor
 
 
@@ -47,7 +49,10 @@ def test_runtime_retrieval_executes_registered_tool_with_trusted_tenant_scope():
     assert context.document_ids == ["tesla-q2"]
     assert context.filters == {"year": 2025}
     assert evidence[0].source == "Tesla_Q2_2025.pdf"
+    assert evidence[0].confidence == 0.93
     assert evidence[0].metadata["chunk_id"] == "tesla-q2-04"
+    _, citations = build_context_from_evidence(evidence)
+    assert Citation.model_validate(citations[0]).similarity == 0.93
 
 
 def test_runtime_retrieval_restores_builtin_registration_after_registry_reset():

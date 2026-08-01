@@ -70,7 +70,7 @@ class DeepSeekProvider(BaseProvider):
             supports_system_prompt=True,
             supports_tools=False,
             supports_multimodal=False,
-            max_context_tokens=128000,
+            max_context_tokens=1_000_000,
         )
 
     def _get_client(self) -> OpenAI:
@@ -95,12 +95,21 @@ class DeepSeekProvider(BaseProvider):
 
         for attempt in range(self._max_retry):
             try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                if model in self.list_models():
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        reasoning_effort="high",
+                        extra_body={"thinking": {"type": "enabled"}},
+                    )
+                else:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
 
                 choice = response.choices[0]
                 usage = response.usage
@@ -167,7 +176,6 @@ class DeepSeekProvider(BaseProvider):
 
     def list_models(self) -> List[str]:
         return [
-            "deepseek-chat",
-            "deepseek-reasoner",
-            "deepseek-coder",
+            "deepseek-v4-flash",
+            "deepseek-v4-pro",
         ]

@@ -18,6 +18,7 @@ from sentence_transformers import SentenceTransformer
 
 from config import (
     CACHE_DIR,
+    EMBEDDING_BATCH_SIZE,
     EMBEDDING_DEVICE,
     EMBEDDING_MODEL,
     EMBEDDING_MODEL_REVISION,
@@ -28,6 +29,9 @@ logger = logging.getLogger(__name__)
 _model_lock = threading.Lock()
 _model: SentenceTransformer | None = None
 _model_error_type: str | None = None
+
+PASSAGE_PREFIX = "passage: "
+QUERY_PREFIX = "query: "
 
 
 def get_cache_path(pdf_folder: str | os.PathLike[str]) -> str:
@@ -147,10 +151,67 @@ def embed_chunks(
     """Encode chunk text into a tensor suitable for retrieval."""
 
     texts = [chunk["text"] for chunk in chunks]
-    embeddings = model.encode(texts, convert_to_tensor=True)
+    embeddings = embed_passages(
+        model,
+        texts,
+        convert_to_tensor=True,
+    )
     logger.info(
         "Generated embeddings count=%s dimension=%s",
         len(embeddings),
-        embeddings.shape[1] if len(embeddings) else 0,
+        len(embeddings[0]) if len(embeddings) else 0,
     )
     return embeddings
+
+
+def embed_passages(
+    model: SentenceTransformer,
+    texts: list[str],
+    *,
+    convert_to_tensor: bool = False,
+) -> Any:
+    """Batch-encode E5 passage inputs as normalized vectors."""
+
+    if not texts:
+        return []
+    prefixed = [_with_prefix(text, PASSAGE_PREFIX) for text in texts]
+    return model.encode(
+        prefixed,
+        batch_size=EMBEDDING_BATCH_SIZE,
+        convert_to_tensor=convert_to_tensor,
+        normalize_embeddings=True,
+    )
+
+
+def embed_query(
+    model: SentenceTransformer,
+    question: str,
+    *,
+    convert_to_tensor: bool = False,
+) -> Any:
+    """Encode one E5 query input as a normalized vector."""
+
+    return model.encode(
+        _with_prefix(question, QUERY_PREFIX),
+        convert_to_tensor=convert_to_tensor,
+        normalize_embeddings=True,
+    )
+
+
+def embedding_rows_to_lists(embeddings: Any) -> list[list[float]]:
+    """Convert a batched tensor/array result to plain vector lists."""
+
+    rows: list[list[float]] = []
+    for embedding in embeddings:
+        if hasattr(embedding, "tolist"):
+            rows.append(embedding.tolist())
+        else:
+            rows.append(list(embedding))
+    return rows
+
+
+def _with_prefix(text: str, prefix: str) -> str:
+    normalized = text.strip()
+    if normalized.casefold().startswith(prefix):
+        return normalized
+    return f"{prefix}{normalized}"

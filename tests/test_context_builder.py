@@ -168,3 +168,26 @@ class TestBuildContextFromEvidence:
         context, citations = build_context_from_evidence([ev])
 
         assert len(citations[0]["preview"]) == 150
+
+    def test_build_from_evidence_preserves_document_provenance(self):
+        ev = Evidence(
+            content="OCR recovered revenue evidence.",
+            source="tesla-scan.pdf",
+            confidence=0.88,
+            metadata={
+                "chunk_id": "tesla-scan-1",
+                "page": 4,
+                "section": "Revenue",
+                "ocr_used": True,
+                "parser_version": "pymupdf-blocks-ocr-v1",
+                "chunker_version": "page-block-section-v2",
+            },
+        )
+
+        _, citations = build_context_from_evidence([ev])
+
+        assert citations[0]["page"] == 4
+        assert citations[0]["section"] == "Revenue"
+        assert citations[0]["ocr_used"] is True
+        assert citations[0]["parser_version"] == "pymupdf-blocks-ocr-v1"
+        assert citations[0]["chunker_version"] == "page-block-section-v2"

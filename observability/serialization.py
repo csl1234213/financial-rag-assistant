@@ -86,7 +86,11 @@ def to_json_safe(value: Any, *, _seen: set[int] | None = None) -> Any:
         _seen.add(identity)
         try:
             return {
-                field.name: to_json_safe(getattr(value, field.name), _seen=_seen)
+                field.name: (
+                    REDACTED_VALUE
+                    if field.name.lower() in _SENSITIVE_FIELD_NAMES
+                    else to_json_safe(getattr(value, field.name), _seen=_seen)
+                )
                 for field in dataclasses.fields(value)
             }
         finally:

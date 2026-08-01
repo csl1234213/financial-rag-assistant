@@ -89,7 +89,6 @@ class GeminiProvider(BaseProvider):
     def chat(self, request: ChatRequest) -> ChatResponse:
         client = self._get_client()
         model = self._model
-        temperature = request.temperature
         max_tokens = request.max_tokens or self._max_tokens
 
         # Build prompt: combine system prompt and messages
@@ -104,7 +103,6 @@ class GeminiProvider(BaseProvider):
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        temperature=temperature,
                         max_output_tokens=max_tokens,
                     ),
                 )
@@ -185,8 +183,8 @@ class GeminiProvider(BaseProvider):
 
     def list_models(self) -> List[str]:
         return [
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-            "gemini-2.0-pro",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
         ]

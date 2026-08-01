@@ -26,7 +26,7 @@ class TestProviderE2E:
         )
 
         assert routing["provider"] == "deepseek"
-        assert routing["model"] == "deepseek-chat"
+        assert routing["model"] == "deepseek-v4-flash"
 
     def test_routing_has_confidence(self):
         report, citations, context, mode, intent, evidence, plan, routing, planning, execution, workflow = run_rag(

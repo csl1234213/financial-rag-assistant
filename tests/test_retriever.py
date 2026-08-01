@@ -13,7 +13,13 @@ from storage.vector_models import SearchResult
 
 
 class FakeModel:
-    def encode(self, text, convert_to_tensor=False):
+    def encode(
+        self,
+        text,
+        convert_to_tensor=False,
+        normalize_embeddings=False,
+    ):
+        del text, normalize_embeddings
         import numpy as np
         arr = np.array([0.1] * 384)
         if convert_to_tensor:

@@ -50,9 +50,19 @@ class MockEmbeddingStore(EmbeddingStore):
             for i, doc in enumerate(documents[:top_k])
         ]
 
-    def delete_document(self, document_id: str) -> None:
+    def delete_document(
+        self,
+        document_id: str,
+        *,
+        tenant_id: int,
+    ) -> None:
         self._documents = [
-            d for d in self._documents if d.document_id != document_id
+            document
+            for document in self._documents
+            if not (
+                document.document_id == document_id
+                and document.metadata.get("tenant_id") == tenant_id
+            )
         ]
 
     def delete_by_tenant(self, tenant_id: int) -> None:
@@ -152,10 +162,11 @@ class TestEmbeddingStoreInterface:
                 company="Apple",
                 content="Revenue grew 10%.",
                 embedding=[0.1, 0.2, 0.3],
+                metadata={"tenant_id": 1},
             ),
         ])
         assert store.count() == 1
-        store.delete_document("doc_1")
+        store.delete_document("doc_1", tenant_id=1)
         assert store.count() == 0
 
     def test_delete_by_tenant(self):

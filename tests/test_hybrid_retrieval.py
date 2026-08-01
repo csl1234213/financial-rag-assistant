@@ -19,7 +19,13 @@ class _Embedding(list):
 
 
 class _EmbeddingModel:
-    def encode(self, _question, convert_to_tensor=False):
+    def encode(
+        self,
+        _question,
+        convert_to_tensor=False,
+        normalize_embeddings=False,
+    ):
+        del convert_to_tensor, normalize_embeddings
         return _Embedding([0.1, 0.2])
 
 
@@ -186,6 +192,41 @@ def test_hybrid_deduplicates_stably_across_channels():
     ]
 
 
+def test_hybrid_deduplicates_same_document_normalized_content():
+    first = _result(
+        "tesla-q2",
+        "tesla-revenue-1",
+        0.10,
+        "Tesla revenue increased year over year.",
+    )
+    repeated = _result(
+        "tesla-q2",
+        "tesla-revenue-2",
+        0.11,
+        "  TESLA   REVENUE increased year over year. ",
+    )
+    store = _HybridStore(
+        vectors={7: [first, repeated]},
+        corpora={7: []},
+    )
+
+    results = HybridRetriever(
+        _EmbeddingModel(),
+        config=HybridRetrievalConfig(enabled=False),
+    ).retrieve(
+        RetrievalContext(
+            question="Tesla revenue",
+            tenant_id=7,
+            top_k=5,
+        ),
+        store,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "tesla-revenue-1",
+    ]
+
+
 def test_hybrid_applies_tenant_company_document_and_metadata_filters():
     allowed = _result(
         "allowed",
@@ -277,6 +318,87 @@ def test_hybrid_queries_only_private_and_explicit_public_lexical_scopes():
     assert {result.chunk_id for result in results} == {"private-1", "public-1"}
     assert [tenant_id for tenant_id, _ in store.vector_calls] == [7, 0]
     assert store.lexical_calls == [7, 0]
+
+
+def test_vector_candidates_are_globally_ranked_across_private_and_public_scopes():
+    private = _result(
+        "private",
+        "private-unrelated",
+        0.95,
+        "Unrelated private evidence.",
+        score_semantics="distance",
+    )
+    public = _result(
+        "public",
+        "public-relevant",
+        0.08,
+        "Relevant public Tesla revenue evidence.",
+        tenant_id=0,
+        score_semantics="distance",
+    )
+    store = _HybridStore(
+        vectors={7: [private], 0: [public]},
+        corpora={7: [], 0: []},
+    )
+    retriever = HybridRetriever(
+        _EmbeddingModel(),
+        config=HybridRetrievalConfig(enabled=False),
+    )
+
+    results = retriever.retrieve(
+        RetrievalContext(
+            question="特斯拉营收增长",
+            tenant_id=7,
+            include_public=True,
+            top_k=2,
+        ),
+        store,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "public-relevant",
+        "private-unrelated",
+    ]
+
+
+def test_vector_global_ranking_stably_normalizes_mixed_score_semantics():
+    distance = _result(
+        "distance",
+        "distance-result",
+        0.25,
+        "Distance result.",
+        score_semantics="distance",
+    )
+    similarity = _result(
+        "similarity",
+        "similarity-result",
+        0.90,
+        "Similarity result.",
+        tenant_id=0,
+        score_semantics="similarity",
+    )
+    store = _HybridStore(
+        vectors={7: [distance], 0: [similarity]},
+        corpora={7: [], 0: []},
+    )
+
+    results = HybridRetriever(
+        _EmbeddingModel(),
+        config=HybridRetrievalConfig(enabled=False),
+    ).retrieve(
+        RetrievalContext(
+            question="Tesla",
+            tenant_id=7,
+            include_public=True,
+            top_k=2,
+        ),
+        store,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "similarity-result",
+        "distance-result",
+    ]
 
 
 def test_missing_lexical_capability_preserves_vector_only_result():
@@ -424,6 +546,7 @@ def test_runtime_retrieval_tool_executes_hybrid_pipeline():
 
     assert evidence[0].metadata["retrieval_strategy"] == "hybrid_rrf"
     assert evidence[0].metadata["bm25_rank"] == 1
+    assert evidence[0].confidence > 0
     assert store.lexical_calls == [7]
 
 
