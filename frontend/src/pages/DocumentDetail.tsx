@@ -4,6 +4,7 @@ import { DocumentHeader } from '../components/document/DocumentHeader';
 import { DocumentStats } from '../components/document/DocumentStats';
 import { ChunkList } from '../components/document/ChunkList';
 import { getDocument, getDocumentChunks } from '../api/document';
+import { useLanguage } from '../i18n/LanguageContext';
 import type { DocumentDetail as DocumentDetailType, DocumentChunk } from '../types/knowledge';
 
 interface DocumentDetailProps {
@@ -12,6 +13,7 @@ interface DocumentDetailProps {
 }
 
 export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
+  const { t } = useLanguage();
   const [document, setDocument] = useState<DocumentDetailType | null>(null);
   const [chunks, setChunks] = useState<DocumentChunk[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,12 +27,12 @@ export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
       const doc = await getDocument(documentId);
       setDocument(doc);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load document.';
+      const message = err instanceof Error ? err.message : t.document.loadFailed;
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [documentId]);
+  }, [documentId, t.document.loadFailed]);
 
   const loadChunks = useCallback(async () => {
     setChunksLoading(true);
@@ -52,8 +54,8 @@ export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
   return (
     <div className="app-layout">
       <Header
-        title="Financial RAG Assistant"
-        subtitle="Document Detail"
+        title={t.header.title}
+        subtitle={t.header.documentSubtitle}
         connected
       />
 
@@ -74,7 +76,7 @@ export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
               &#x26A0;
             </span>
             <div className="doc-detail-layout__error-body">
-              <p className="doc-detail-layout__error-title">Failed to Load Document</p>
+              <p className="doc-detail-layout__error-title">{t.document.loadFailedTitle}</p>
               <p className="doc-detail-layout__error-message">{error}</p>
             </div>
             <button
@@ -82,7 +84,7 @@ export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
               className="doc-detail-layout__error-back"
               onClick={onBack}
             >
-              Back to Documents
+              {t.document.backToDocuments}
             </button>
           </div>
         )}
@@ -94,7 +96,7 @@ export function DocumentDetail({ documentId, onBack }: DocumentDetailProps) {
 
             <section className="doc-chunk-section" aria-labelledby="chunk-explorer-title">
               <h2 id="chunk-explorer-title" className="doc-chunk-section__title">
-                Chunk Explorer
+                {t.document.chunkExplorer}
               </h2>
               <ChunkList chunks={chunks} loading={chunksLoading} />
             </section>

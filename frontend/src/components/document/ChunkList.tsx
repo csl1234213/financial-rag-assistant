@@ -1,4 +1,6 @@
 import { ChunkCard } from './ChunkCard';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { Icon } from '../ui/Icon';
 import type { DocumentChunk } from '../../types/knowledge';
 
 interface ChunkListProps {
@@ -7,6 +9,8 @@ interface ChunkListProps {
 }
 
 export function ChunkList({ chunks, loading }: ChunkListProps) {
+  const { t } = useLanguage();
+
   if (loading) {
     return (
       <div className="chunk-list chunk-list--loading">
@@ -27,10 +31,12 @@ export function ChunkList({ chunks, loading }: ChunkListProps) {
   if (chunks.length === 0) {
     return (
       <div className="chunk-list chunk-list--empty">
-        <span className="chunk-list__empty-icon" aria-hidden="true">&#x1F4C4;</span>
-        <p className="chunk-list__empty-title">No chunks available</p>
+        <span className="chunk-list__empty-icon" aria-hidden="true">
+          <Icon name="document" />
+        </span>
+        <p className="chunk-list__empty-title">{t.document.noChunks}</p>
         <p className="chunk-list__empty-hint">
-          This document has not been chunked yet or the chunks are unavailable.
+          {t.document.noChunksHint}
         </p>
       </div>
     );

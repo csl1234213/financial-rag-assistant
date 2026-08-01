@@ -3,6 +3,11 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
+  labels?: {
+    title: string;
+    unexpected: string;
+    returnToChat: string;
+  };
 }
 
 interface ErrorBoundaryState {
@@ -36,9 +41,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <span className="error-boundary__icon" aria-hidden="true">
               &#x26A0;
             </span>
-            <h2 className="error-boundary__title">Something went wrong</h2>
+            <h2 className="error-boundary__title">
+              {this.props.labels?.title ?? 'Something went wrong'}
+            </h2>
             <p className="error-boundary__message">
-              {this.state.error?.message ?? 'An unexpected error occurred.'}
+              {this.state.error?.message
+                ?? this.props.labels?.unexpected
+                ?? 'An unexpected error occurred.'}
             </p>
             <button
               type="button"
@@ -48,7 +57,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 window.location.hash = '';
               }}
             >
-              Return to Chat
+              {this.props.labels?.returnToChat ?? 'Return to Chat'}
             </button>
           </div>
         </div>

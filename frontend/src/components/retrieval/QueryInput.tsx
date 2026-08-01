@@ -1,4 +1,6 @@
 import { useState, useCallback, type FormEvent } from 'react';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { Icon } from '../ui/Icon';
 
 interface QueryInputProps {
   onSubmit: (query: string) => void;
@@ -6,6 +8,7 @@ interface QueryInputProps {
 }
 
 export function QueryInput({ onSubmit, loading }: QueryInputProps) {
+  const { t } = useLanguage();
   const [query, setQuery] = useState('');
 
   const handleSubmit = useCallback(
@@ -22,16 +25,16 @@ export function QueryInput({ onSubmit, loading }: QueryInputProps) {
     <form className="retrieval-query" onSubmit={handleSubmit}>
       <div className="retrieval-query__input-row">
         <span className="retrieval-query__icon" aria-hidden="true">
-          &#x1F50D;
+          <Icon name="search" />
         </span>
         <input
           type="text"
           className="retrieval-query__input"
-          placeholder='e.g. "Tesla revenue growth in 2025"'
+          placeholder={t.retrieval.queryPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           disabled={loading}
-          aria-label="Retrieval query"
+          aria-label={t.retrieval.queryLabel}
         />
         <button
           type="submit"
@@ -41,20 +44,20 @@ export function QueryInput({ onSubmit, loading }: QueryInputProps) {
           {loading ? (
             <>
               <span className="retrieval-query__button-spinner" aria-hidden="true" />
-              Searching...
+              {t.retrieval.searching}
             </>
           ) : (
             <>
               <span className="retrieval-query__button-icon" aria-hidden="true">
                 &#x2192;
               </span>
-              Search
+              {t.retrieval.search}
             </>
           )}
         </button>
       </div>
       <p className="retrieval-query__hint">
-        Top 5 most relevant chunks will be retrieved from the knowledge base.
+        {t.retrieval.queryHint}
       </p>
     </form>
   );

@@ -1,3 +1,5 @@
+import { useLanguage } from '../../i18n/LanguageContext';
+
 interface KnowledgeHeaderProps {
   documentCount: number;
   indexedCount: number;
@@ -15,49 +17,51 @@ export function KnowledgeHeader({
   onRefresh,
   refreshing = false,
 }: KnowledgeHeaderProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="knowledge-header">
       <div className="knowledge-header__titles">
         <div className="knowledge-header__title-row">
-          <h1 className="knowledge-header__title">Knowledge Workspace</h1>
+          <h1 className="knowledge-header__title">{t.knowledge.title}</h1>
           {onRefresh && (
             <button
               type="button"
               className={`knowledge-header__refresh ${refreshing ? 'knowledge-header__refresh--spinning' : ''}`}
               onClick={onRefresh}
               disabled={refreshing}
-              title="Refresh knowledge base"
-              aria-label="Refresh knowledge base"
+              title={t.knowledge.refreshTitle}
+              aria-label={t.knowledge.refreshTitle}
             >
               <span className="knowledge-header__refresh-icon" aria-hidden="true">
                 &#x21BB;
               </span>
-              {refreshing ? 'Refreshing...' : 'Refresh'}
+              {refreshing ? t.knowledge.refreshing : t.knowledge.refresh}
             </button>
           )}
         </div>
-        <p className="knowledge-header__subtitle">Financial Document Center</p>
+        <p className="knowledge-header__subtitle">{t.knowledge.subtitle}</p>
       </div>
 
       <div className="knowledge-header__stats">
         <div className="knowledge-header__stat">
           <span className="knowledge-header__stat-value">{documentCount}</span>
-          <span className="knowledge-header__stat-label">Total</span>
+          <span className="knowledge-header__stat-label">{t.knowledge.total}</span>
         </div>
         <div className="knowledge-header__stat knowledge-header__stat--indexed">
           <span className="knowledge-header__stat-value">{indexedCount}</span>
-          <span className="knowledge-header__stat-label">Indexed</span>
+          <span className="knowledge-header__stat-label">{t.knowledge.indexed}</span>
         </div>
         {processingCount > 0 && (
           <div className="knowledge-header__stat knowledge-header__stat--processing">
             <span className="knowledge-header__stat-value">{processingCount}</span>
-            <span className="knowledge-header__stat-label">Processing</span>
+            <span className="knowledge-header__stat-label">{t.knowledge.processing}</span>
           </div>
         )}
         {failedCount > 0 && (
           <div className="knowledge-header__stat knowledge-header__stat--failed">
             <span className="knowledge-header__stat-value">{failedCount}</span>
-            <span className="knowledge-header__stat-label">Failed</span>
+            <span className="knowledge-header__stat-label">{t.knowledge.failed}</span>
           </div>
         )}
       </div>

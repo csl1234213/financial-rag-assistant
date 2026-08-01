@@ -10,10 +10,11 @@ const chatEndpoint = '/v1/chat';
 export async function sendChatMessage(
   question: string,
   company?: string,
+  threadId?: string,
 ): Promise<ChatResponse> {
   const payload = await postJson<unknown>(
     chatEndpoint,
-    createChatRequest(question, company),
+    createChatRequest(question, company, threadId),
   );
   return parseChatResponse(payload);
 }

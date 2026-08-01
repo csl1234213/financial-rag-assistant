@@ -1,4 +1,5 @@
 import { buildApiUrl, normalizeApiBaseUrl } from './url';
+import { getAccessToken } from './session';
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -90,20 +91,12 @@ export function toApiUrl(path: string): string {
   return buildApiUrl(apiBaseUrl, path);
 }
 
-export async function postJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
-  let response: Response;
+export function getAuthorizationHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
-  try {
-    response = await fetch(toApiUrl(path), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Network request failed.';
-    throw new ApiClientError(message);
-  }
-
+async function parseResponse<TResponse>(response: Response): Promise<TResponse> {
   const payload = parseJson(await response.text());
 
   if (!response.ok) {
@@ -119,4 +112,75 @@ export async function postJson<TResponse>(path: string, body: unknown): Promise<
   }
 
   return payload as TResponse;
+}
+
+export async function getJson<TResponse>(path: string): Promise<TResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(toApiUrl(path), {
+      headers: getAuthorizationHeaders(),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Network request failed.';
+    throw new ApiClientError(message);
+  }
+
+  return parseResponse<TResponse>(response);
+}
+
+export async function postJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(toApiUrl(path), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthorizationHeaders(),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Network request failed.';
+    throw new ApiClientError(message);
+  }
+
+  return parseResponse<TResponse>(response);
+}
+
+export async function putJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(toApiUrl(path), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthorizationHeaders(),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Network request failed.';
+    throw new ApiClientError(message);
+  }
+
+  return parseResponse<TResponse>(response);
+}
+
+export async function deleteJson<TResponse>(path: string): Promise<TResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(toApiUrl(path), {
+      method: 'DELETE',
+      headers: getAuthorizationHeaders(),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Network request failed.';
+    throw new ApiClientError(message);
+  }
+
+  return parseResponse<TResponse>(response);
 }

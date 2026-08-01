@@ -1,20 +1,10 @@
+import { useLanguage } from '../../i18n/LanguageContext';
+import { Icon } from '../ui/Icon';
 import type { DocumentDetail } from '../../types/knowledge';
 
 interface DocumentStatsProps {
   document: DocumentDetail;
 }
-
-const embeddingStatusLabels: Record<string, string> = {
-  completed: 'Completed',
-  pending: 'Pending',
-  failed: 'Failed',
-};
-
-const vectorStatusLabels: Record<string, string> = {
-  stored: 'Stored',
-  pending: 'Pending',
-  failed: 'Failed',
-};
 
 const embeddingStatusIcons: Record<string, string> = {
   completed: '\u2713',
@@ -29,20 +19,22 @@ const vectorStatusIcons: Record<string, string> = {
 };
 
 export function DocumentStats({ document }: DocumentStatsProps) {
+  const { t } = useLanguage();
+
   return (
     <section className="doc-stats" aria-labelledby="doc-stats-title">
       <h2 id="doc-stats-title" className="doc-stats__title">
-        Document Statistics
+        {t.document.statistics}
       </h2>
 
       <div className="doc-stats__grid">
         <div className="doc-stats__card">
           <span className="doc-stats__card-icon" aria-hidden="true">
-            &#x1F4CB;
+            <Icon name="clipboard" />
           </span>
           <div className="doc-stats__card-body">
             <span className="doc-stats__card-value">{document.chunkCount}</span>
-            <span className="doc-stats__card-label">Chunks</span>
+            <span className="doc-stats__card-label">{t.document.chunks}</span>
           </div>
         </div>
 
@@ -52,9 +44,9 @@ export function DocumentStats({ document }: DocumentStatsProps) {
           </span>
           <div className="doc-stats__card-body">
             <span className="doc-stats__card-value doc-stats__card-value--status">
-              {embeddingStatusLabels[document.embeddingStatus]}
+              {t.document.embedding[document.embeddingStatus]}
             </span>
-            <span className="doc-stats__card-label">Embedding Status</span>
+            <span className="doc-stats__card-label">{t.document.embeddingStatus}</span>
           </div>
         </div>
 
@@ -64,9 +56,9 @@ export function DocumentStats({ document }: DocumentStatsProps) {
           </span>
           <div className="doc-stats__card-body">
             <span className="doc-stats__card-value doc-stats__card-value--status">
-              {vectorStatusLabels[document.vectorStatus]}
+              {t.document.vector[document.vectorStatus]}
             </span>
-            <span className="doc-stats__card-label">Vector Status</span>
+            <span className="doc-stats__card-label">{t.document.vectorStatus}</span>
           </div>
         </div>
       </div>

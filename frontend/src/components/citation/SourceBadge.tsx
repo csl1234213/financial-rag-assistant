@@ -1,3 +1,5 @@
+import { useLanguage } from '../../i18n/LanguageContext';
+
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 interface SourceBadgeProps {
@@ -10,12 +12,6 @@ function getConfidenceLevel(similarity: number): ConfidenceLevel {
   return 'low';
 }
 
-const confidenceLabels: Record<ConfidenceLevel, string> = {
-  high: 'High Confidence',
-  medium: 'Med Confidence',
-  low: 'Low Confidence',
-};
-
 const confidenceIcons: Record<ConfidenceLevel, string> = {
   high: '\u25B2',
   medium: '\u25A0',
@@ -23,9 +19,11 @@ const confidenceIcons: Record<ConfidenceLevel, string> = {
 };
 
 export function SourceBadge({ similarity }: SourceBadgeProps) {
+  const { t } = useLanguage();
+
   if (similarity === null) {
     return (
-      <span className="source-badge" title="Similarity score unavailable">
+      <span className="source-badge" title={t.citations.similarityUnavailable}>
         N/A
       </span>
     );
@@ -35,7 +33,10 @@ export function SourceBadge({ similarity }: SourceBadgeProps) {
   const pct = `${(similarity * 100).toFixed(1)}%`;
 
   return (
-    <span className={`source-badge source-badge--${level}`} title={`${confidenceLabels[level]}: ${pct}`}>
+    <span
+      className={`source-badge source-badge--${level}`}
+      title={`${t.citations.confidence[level]}: ${pct}`}
+    >
       <span className="source-badge__icon" aria-hidden="true">
         {confidenceIcons[level]}
       </span>

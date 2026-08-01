@@ -101,6 +101,7 @@ const copy = {
 
 export function Copilot() {
   const [language, setLanguage] = useState<Language>('en');
+  const [threadId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentResponse, setCurrentResponse] = useState<ChatResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,7 +123,7 @@ export function Copilot() {
     setLoading(true);
 
     try {
-      const response = await sendChatMessage(message);
+      const response = await sendChatMessage(message, undefined, threadId);
 
       setCurrentResponse(response);
       setMessages((currentMessages) => [

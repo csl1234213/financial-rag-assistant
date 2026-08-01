@@ -1,3 +1,4 @@
+import { useLanguage } from '../../i18n/LanguageContext';
 import type { DocumentStatus } from '../../types/knowledge';
 
 interface DocumentCardProps {
@@ -8,14 +9,13 @@ interface DocumentCardProps {
   status: DocumentStatus;
   size?: string;
   uploadedAt: string;
+  period?: string;
+  chunkCount?: number;
+  contentSha256?: string;
   onClick?: (id: string) => void;
+  onDelete?: () => void;
+  deleting?: boolean;
 }
-
-const statusLabels: Record<DocumentStatus, string> = {
-  indexed: 'Indexed',
-  processing: 'Processing',
-  failed: 'Failed',
-};
 
 const statusIcons: Record<DocumentStatus, string> = {
   indexed: '\u2713',
@@ -23,8 +23,8 @@ const statusIcons: Record<DocumentStatus, string> = {
   failed: '\u2717',
 };
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+function formatDate(iso: string, language: 'en' | 'zh-CN'): string {
+  return new Date(iso).toLocaleDateString(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -39,20 +39,32 @@ export function DocumentCard({
   status,
   size,
   uploadedAt,
+  period,
+  chunkCount,
+  contentSha256,
   onClick,
+  onDelete,
+  deleting = false,
 }: DocumentCardProps) {
+  const { language, t } = useLanguage();
+  const interactiveProps = onClick
+    ? {
+        onClick: () => onClick(id),
+        role: 'button',
+        tabIndex: 0,
+        onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick(id);
+          }
+        },
+      }
+    : {};
+
   return (
     <article
       className="doc-card"
-      onClick={() => onClick?.(id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick?.(id);
-        }
-      }}
+      {...interactiveProps}
     >
       <div className="doc-card__icon">
         <span className="doc-card__icon-text">PDF</span>
@@ -61,38 +73,86 @@ export function DocumentCard({
       <div className="doc-card__info">
         <div className="doc-card__header">
           <span className="doc-card__filename">{filename}</span>
-          <span className={`doc-card__status doc-card__status--${status}`}>
-            <span className="doc-card__status-icon" aria-hidden="true">
-              {statusIcons[status]}
+          <span className="doc-card__actions">
+            <span className={`doc-card__status doc-card__status--${status}`}>
+              <span className="doc-card__status-icon" aria-hidden="true">
+                {statusIcons[status]}
+              </span>
+              {t.knowledge.status[status]}
             </span>
-            {statusLabels[status]}
+            {onDelete && (
+              <button
+                type="button"
+                className="doc-card__delete"
+                disabled={deleting || status === 'processing'}
+                aria-label={t.knowledge.deleteDocument(filename)}
+                title={t.knowledge.deleteDocument(filename)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete();
+                }}
+              >
+                {deleting ? t.knowledge.deleting : t.knowledge.delete}
+              </button>
+            )}
           </span>
         </div>
 
         <div className="doc-card__meta">
           <span className="doc-card__meta-item">
-            <span className="doc-card__meta-label">Company</span>
+            <span className="doc-card__meta-label">{t.knowledge.company}</span>
             <span className="doc-card__meta-value">{company}</span>
           </span>
-          <span className="doc-card__meta-divider" />
-          <span className="doc-card__meta-item">
-            <span className="doc-card__meta-label">Pages</span>
-            <span className="doc-card__meta-value">{pages}</span>
-          </span>
+          {period && (
+            <>
+              <span className="doc-card__meta-divider" />
+              <span className="doc-card__meta-item">
+                <span className="doc-card__meta-label">{t.knowledge.period}</span>
+                <span className="doc-card__meta-value">{period}</span>
+              </span>
+            </>
+          )}
+          {chunkCount !== undefined && (
+            <>
+              <span className="doc-card__meta-divider" />
+              <span className="doc-card__meta-item">
+                <span className="doc-card__meta-label">{t.knowledge.chunks}</span>
+                <span className="doc-card__meta-value">{chunkCount}</span>
+              </span>
+            </>
+          )}
+          {pages > 0 && (
+            <>
+              <span className="doc-card__meta-divider" />
+              <span className="doc-card__meta-item">
+                <span className="doc-card__meta-label">{t.knowledge.pages}</span>
+                <span className="doc-card__meta-value">{pages}</span>
+              </span>
+            </>
+          )}
           {size && (
             <>
               <span className="doc-card__meta-divider" />
               <span className="doc-card__meta-item">
-                <span className="doc-card__meta-label">Size</span>
+                <span className="doc-card__meta-label">{t.knowledge.size}</span>
                 <span className="doc-card__meta-value">{size}</span>
               </span>
             </>
           )}
         </div>
 
-        <div className="doc-card__footer">
-          <span className="doc-card__date">Uploaded {formatDate(uploadedAt)}</span>
-        </div>
+        {uploadedAt && (
+          <div className="doc-card__footer">
+            <span className="doc-card__date">
+              {t.knowledge.uploaded} {formatDate(uploadedAt, language)}
+            </span>
+          </div>
+        )}
+        {contentSha256 && (
+          <div className="doc-card__checksum" title={contentSha256}>
+            {t.knowledge.checksum}: {contentSha256.slice(0, 12)}
+          </div>
+        )}
       </div>
     </article>
   );

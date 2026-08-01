@@ -3,10 +3,13 @@ import { Header } from '../components/layout/Header';
 import { QueryInput } from '../components/retrieval/QueryInput';
 import { RetrievalResult } from '../components/retrieval/RetrievalResult';
 import { RetrievalMetricsPanel } from '../components/retrieval/RetrievalMetrics';
+import { Icon } from '../components/ui/Icon';
 import { queryRetrieval } from '../api/retrieval';
+import { useLanguage } from '../i18n/LanguageContext';
 import type { RetrievalResponse } from '../types/api';
 
 export function Retrieval() {
+  const { t } = useLanguage();
   const [results, setResults] = useState<RetrievalResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,18 +22,18 @@ export function Retrieval() {
       const response = await queryRetrieval(query);
       setResults(response);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Retrieval query failed.';
+      const message = err instanceof Error ? err.message : t.retrieval.queryFailed;
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.retrieval.queryFailed]);
 
   return (
     <div className="app-layout">
       <Header
-        title="Financial RAG Assistant"
-        subtitle="Retrieval Playground"
+        title={t.header.title}
+        subtitle={t.header.retrievalSubtitle}
         connected
       />
 
@@ -72,9 +75,9 @@ export function Retrieval() {
 
             <section className="retrieval-results-section" aria-labelledby="retrieval-results-title">
               <h2 id="retrieval-results-title" className="retrieval-results-section__title">
-                Retrieved Chunks
+                {t.retrieval.resultsTitle}
                 <span className="retrieval-results-section__count">
-                  {results.chunks.length} results
+                  {t.retrieval.resultCount(results.chunks.length)}
                 </span>
               </h2>
 
@@ -90,12 +93,11 @@ export function Retrieval() {
         {!results && !loading && !error && (
           <div className="retrieval-empty">
             <span className="retrieval-empty__icon" aria-hidden="true">
-              &#x1F50D;
+              <Icon name="search" />
             </span>
-            <p className="retrieval-empty__title">Retrieval Playground</p>
+            <p className="retrieval-empty__title">{t.retrieval.emptyTitle}</p>
             <p className="retrieval-empty__hint">
-              Enter a natural language query above to search the knowledge base.
-              Results will show the most relevant chunks ranked by similarity score.
+              {t.retrieval.emptyHint}
             </p>
           </div>
         )}

@@ -1,3 +1,4 @@
+import { useLanguage } from '../../i18n/LanguageContext';
 import type { DocumentChunk } from '../../types/knowledge';
 
 interface ChunkCardProps {
@@ -15,13 +16,14 @@ function getScoreColor(score: number): string {
 }
 
 export function ChunkCard({ chunk }: ChunkCardProps) {
+  const { t } = useLanguage();
   const scoreLevel = chunk.score !== undefined ? getScoreColor(chunk.score) : undefined;
   const metadataEntries = Object.entries(chunk.metadata);
 
   return (
     <article className="chunk-card">
       <div className="chunk-card__header">
-        <span className="chunk-card__index">Chunk #{chunk.index}</span>
+        <span className="chunk-card__index">{t.document.chunk(chunk.index)}</span>
         {chunk.score !== undefined && (
           <span className={`chunk-card__score chunk-card__score--${scoreLevel}`}>
             {formatScore(chunk.score)}

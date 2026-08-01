@@ -1,10 +1,20 @@
-import { ApiClientError, toApiUrl } from './client';
+import {
+  ApiClientError,
+  deleteJson,
+  getAuthorizationHeaders,
+  getJson,
+  toApiUrl,
+} from './client';
+import {
+  isKnowledgeRecord,
+  mapKnowledgeDocument,
+} from './knowledgeContract';
 import { MOCK_DOCUMENTS } from '../types/knowledge';
 import type { KnowledgeDocument } from '../types/knowledge';
 
 const knowledgeEndpoint = '/v1/knowledge';
-const knowledgeUploadEndpoint = '/v1/knowledge/upload';
-const knowledgeRefreshEndpoint = '/v1/knowledge/refresh';
+const knowledgeUploadEndpoint = '/v1/upload';
+const taskEndpoint = (taskId: string) => `/v1/tasks/${taskId}`;
 
 function parseJson(text: string): unknown | undefined {
   if (!text) return undefined;
@@ -16,7 +26,7 @@ function parseJson(text: string): unknown | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return isKnowledgeRecord(value);
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -29,40 +39,75 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 
 const isMockEnabled = import.meta.env.VITE_ENABLE_MOCK === 'true';
 
+interface UploadResponse {
+  message: string;
+  file: string;
+  document_id: number;
+  task_id: string;
+  status: string;
+}
+
+interface TaskResponse {
+  id: string;
+  status: 'pending' | 'running' | 'success' | 'failed';
+  progress: number;
+  error: string | null;
+}
+
+interface DeleteDocumentResponse {
+  deleted: boolean;
+  document_id: number;
+}
+
 export async function getDocuments(): Promise<KnowledgeDocument[]> {
   try {
-    const response = await fetch(toApiUrl(knowledgeEndpoint));
-    const payload = parseJson(await response.text());
-
-    if (!response.ok) {
-      throw new ApiClientError(
-        getErrorMessage(payload, `Failed to fetch documents (${response.status}).`),
-        response.status,
-        payload,
-      );
+    const raw = await getJson<unknown>(knowledgeEndpoint);
+    if (isRecord(raw) && Array.isArray(raw.items)) {
+      return raw.items
+        .map(mapKnowledgeDocument)
+        .filter((document): document is KnowledgeDocument => document !== null);
     }
-
-    if (payload === undefined) {
-      throw new ApiClientError('The API returned an invalid JSON response.', response.status);
-    }
-
-    const raw = payload as unknown;
     if (isRecord(raw) && Array.isArray(raw.documents)) {
-      return raw.documents as KnowledgeDocument[];
+      return raw.documents
+        .map(mapKnowledgeDocument)
+        .filter((document): document is KnowledgeDocument => document !== null);
     }
     if (Array.isArray(raw)) {
-      return raw as KnowledgeDocument[];
+      return raw
+        .map(mapKnowledgeDocument)
+        .filter((document): document is KnowledgeDocument => document !== null);
     }
     return [];
   } catch (err) {
-    if (isMockEnabled) {
+    if (isMockEnabled && (!(err instanceof ApiClientError) || err.status !== 401)) {
       return MOCK_DOCUMENTS;
     }
     throw err;
   }
 }
 
-export async function uploadDocument(file: File): Promise<KnowledgeDocument> {
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function waitForTask(taskId: string): Promise<void> {
+  const deadline = Date.now() + 120_000;
+
+  while (Date.now() < deadline) {
+    const task = await getJson<TaskResponse>(taskEndpoint(taskId));
+    if (task.status === 'success') {
+      return;
+    }
+    if (task.status === 'failed') {
+      throw new ApiClientError(task.error || 'Document processing failed.');
+    }
+    await wait(1_500);
+  }
+
+  throw new ApiClientError('Document processing timed out after 120 seconds.');
+}
+
+export async function uploadDocument(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
@@ -70,6 +115,7 @@ export async function uploadDocument(file: File): Promise<KnowledgeDocument> {
   try {
     response = await fetch(toApiUrl(knowledgeUploadEndpoint), {
       method: 'POST',
+      headers: getAuthorizationHeaders(),
       body: formData,
     });
   } catch (error: unknown) {
@@ -91,41 +137,24 @@ export async function uploadDocument(file: File): Promise<KnowledgeDocument> {
     throw new ApiClientError('The API returned an invalid JSON response.', response.status);
   }
 
-  return payload as KnowledgeDocument;
+  if (!isRecord(payload) || typeof payload.task_id !== 'string') {
+    throw new ApiClientError('The upload response did not include a task id.', response.status, payload);
+  }
+
+  const uploadResponse = payload as unknown as UploadResponse;
+  await waitForTask(uploadResponse.task_id);
+  return uploadResponse;
 }
 
 export async function refreshKnowledge(): Promise<KnowledgeDocument[]> {
-  let response: Response;
-  try {
-    response = await fetch(toApiUrl(knowledgeRefreshEndpoint), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Network request failed.';
-    throw new ApiClientError(message);
-  }
+  return getDocuments();
+}
 
-  const payload = parseJson(await response.text());
-
-  if (!response.ok) {
-    throw new ApiClientError(
-      getErrorMessage(payload, `Refresh failed with status ${response.status}.`),
-      response.status,
-      payload,
-    );
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await deleteJson<DeleteDocumentResponse>(
+    `${knowledgeEndpoint}/${encodeURIComponent(documentId)}`,
+  );
+  if (!response.deleted) {
+    throw new ApiClientError('The API did not confirm document deletion.');
   }
-
-  if (payload === undefined) {
-    throw new ApiClientError('The API returned an invalid JSON response.', response.status);
-  }
-
-  const raw = payload as unknown;
-  if (isRecord(raw) && Array.isArray(raw.documents)) {
-    return raw.documents as KnowledgeDocument[];
-  }
-  if (Array.isArray(raw)) {
-    return raw as KnowledgeDocument[];
-  }
-  return [];
 }

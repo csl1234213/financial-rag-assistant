@@ -3,13 +3,24 @@ import { Header } from '../components/layout/Header';
 import { KnowledgeHeader } from '../components/knowledge/KnowledgeHeader';
 import { KnowledgeList } from '../components/knowledge/KnowledgeList';
 import { UploadPanel } from '../components/knowledge/UploadPanel';
-import { getDocuments, refreshKnowledge, uploadDocument } from '../api/knowledge';
+import {
+  deleteDocument,
+  getDocuments,
+  refreshKnowledge,
+  uploadDocument,
+} from '../api/knowledge';
+import { ApiClientError } from '../api/client';
+import { useLanguage } from '../i18n/LanguageContext';
+import { Icon } from '../components/ui/Icon';
 import type { KnowledgeDocument } from '../types/knowledge';
 
 export function Knowledge() {
+  const { t } = useLanguage();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const loadDocuments = useCallback(async () => {
@@ -19,12 +30,12 @@ export function Knowledge() {
       const docs = await getDocuments();
       setDocuments(docs);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Connection Error';
+      const message = err instanceof Error ? err.message : t.knowledge.connectionError;
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.knowledge.connectionError]);
 
   useEffect(() => {
     loadDocuments();
@@ -37,17 +48,68 @@ export function Knowledge() {
       const docs = await refreshKnowledge();
       setDocuments(docs);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Connection Error';
+      const message = err instanceof Error ? err.message : t.knowledge.connectionError;
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.knowledge.connectionError]);
 
   const handleUpload = useCallback(async (file: File) => {
-    await uploadDocument(file);
-    await loadDocuments();
-  }, [loadDocuments]);
+    setNotice(null);
+    try {
+      await uploadDocument(file);
+      await loadDocuments();
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError) {
+        if (err.status === 400) {
+          throw new Error(t.upload.invalidDocument);
+        }
+        if (err.status === 409) {
+          throw new Error(t.upload.duplicateDocument);
+        }
+        if (err.status === 413) {
+          throw new Error(t.upload.fileTooLarge);
+        }
+        if (err.status === 429) {
+          throw new Error(t.upload.uploadLimitExceeded);
+        }
+      }
+      throw err;
+    }
+  }, [
+    loadDocuments,
+    t.upload.duplicateDocument,
+    t.upload.fileTooLarge,
+    t.upload.invalidDocument,
+    t.upload.uploadLimitExceeded,
+  ]);
+
+  const handleDelete = useCallback(async (document: KnowledgeDocument) => {
+    if (!window.confirm(t.knowledge.deleteConfirm(document.filename))) {
+      return;
+    }
+
+    setDeletingDocumentId(document.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await deleteDocument(document.id);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      setNotice(t.knowledge.deleteSuccess(document.filename));
+    } catch (err: unknown) {
+      const message = err instanceof Error
+        ? err.message
+        : t.knowledge.deleteFailed;
+      setError(message);
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }, [
+    t.knowledge.deleteConfirm,
+    t.knowledge.deleteFailed,
+    t.knowledge.deleteSuccess,
+  ]);
 
   const filteredDocs = useMemo(() => {
     if (!searchQuery.trim()) return documents;
@@ -66,8 +128,8 @@ export function Knowledge() {
   return (
     <div className="app-layout">
       <Header
-        title="Financial RAG Assistant"
-        subtitle="Knowledge Workspace"
+        title={t.header.title}
+        subtitle={t.header.knowledgeSubtitle}
         connected
       />
 
@@ -84,15 +146,15 @@ export function Knowledge() {
 
           <div className="knowledge-search">
             <span className="knowledge-search__icon" aria-hidden="true">
-              &#x1F50D;
+              <Icon name="search" />
             </span>
             <input
               type="text"
               className="knowledge-search__input"
-              placeholder="Search documents by name or company..."
+              placeholder={t.knowledge.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search documents"
+              aria-label={t.knowledge.searchLabel}
             />
           </div>
         </div>
@@ -101,7 +163,7 @@ export function Knowledge() {
           <main className="knowledge-main">
             <section className="knowledge-section" aria-labelledby="documents-title">
               <h2 id="documents-title" className="knowledge-section__title">
-                Documents
+                {t.knowledge.documents}
               </h2>
               {error && (
                 <div className="knowledge-error" role="alert">
@@ -109,9 +171,17 @@ export function Knowledge() {
                   {error}
                 </div>
               )}
-              <KnowledgeList documents={filteredDocs} onDocumentClick={(id) => {
-                window.location.hash = `knowledge/document/${id}`;
-              }} />
+              {notice && (
+                <div className="knowledge-success" role="status">
+                  <span aria-hidden="true">&#x2713;</span>
+                  {notice}
+                </div>
+              )}
+              <KnowledgeList
+                documents={filteredDocs}
+                onDocumentDelete={handleDelete}
+                deletingDocumentId={deletingDocumentId}
+              />
             </section>
           </main>
 

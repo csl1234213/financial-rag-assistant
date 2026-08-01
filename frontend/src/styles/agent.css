@@ -113,6 +113,12 @@
   background: transparent;
 }
 
+.agent-step__dot--failed {
+  border-color: var(--accent-red);
+  background: var(--accent-red);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.4);
+}
+
 .agent-step__line {
   width: 2px;
   flex: 1;
@@ -204,4 +210,185 @@
   color: var(--text-muted);
   background: rgba(110, 118, 129, 0.1);
   border: 1px solid var(--border-default);
+}
+
+.status-badge--failed {
+  color: var(--accent-red);
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.2);
+}
+
+/* ============================================================
+   Comfortable Agent Trace Reading
+   ============================================================ */
+
+.agent-timeline-panel {
+  min-width: 0;
+  padding: 20px;
+  border-radius: 14px;
+}
+
+.agent-timeline-panel__title {
+  margin-bottom: 20px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+details.agent-timeline-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 42px;
+  color: var(--text-primary);
+  list-style: none;
+}
+
+details.agent-timeline-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.agent-timeline-panel > summary .agent-timeline-panel__title {
+  min-width: 0;
+  font-size: 1.06rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+details.agent-timeline-panel > summary .agent-timeline-panel__summary-value {
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+
+details.agent-timeline-panel > summary::after {
+  content: "\25BE";
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  transition: transform 0.18s ease;
+}
+
+details.agent-timeline-panel[open] > summary {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+details.agent-timeline-panel[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+details.agent-timeline-panel > summary:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 5px;
+}
+
+.agent-timeline-panel__body {
+  margin-top: 16px;
+}
+
+.agent-timeline-panel__empty {
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.agent-timeline-panel__summary {
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.agent-timeline-panel__summary-label {
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.agent-timeline-panel__summary-value {
+  min-width: 0;
+  padding: 4px 11px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.agent-step {
+  gap: 14px;
+}
+
+.agent-step__connector {
+  width: 22px;
+  padding-top: 4px;
+}
+
+.agent-step__dot {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-step__line {
+  min-height: 30px;
+  margin: 6px 0;
+}
+
+.agent-step__content {
+  padding-bottom: 24px;
+}
+
+.agent-step__header {
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.agent-step__name {
+  min-width: 0;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.agent-step__description {
+  font-size: 0.86rem;
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.agent-step__duration {
+  margin-top: 7px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.status-badge {
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.status-badge__icon {
+  font-size: 0.64rem;
+}
+
+@media (max-width: 680px) {
+  .agent-timeline-panel {
+    padding: 16px;
+  }
+
+  .agent-step__header {
+    flex-wrap: wrap;
+  }
+
+  details.agent-timeline-panel > summary {
+    flex-wrap: wrap;
+  }
+
+  details.agent-timeline-panel > summary .agent-timeline-panel__summary-value {
+    margin-left: 0;
+  }
+
+  details.agent-timeline-panel > summary::after {
+    margin-left: auto;
+  }
 }

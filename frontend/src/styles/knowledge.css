@@ -231,6 +231,20 @@
   flex-shrink: 0;
 }
 
+.knowledge-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(63, 185, 80, 0.25);
+  border-radius: var(--radius-sm);
+  background: rgba(63, 185, 80, 0.08);
+  color: var(--accent-green);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 /* ============================================================
    Knowledge List
    ============================================================ */
@@ -324,12 +338,42 @@
 }
 
 .doc-card__filename {
+  flex: 1;
+  min-width: 0;
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.doc-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.doc-card__delete {
+  padding: 3px 9px;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 81, 73, 0.08);
+  color: var(--accent-red);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doc-card__delete:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.16);
+  border-color: var(--accent-red);
+}
+
+.doc-card__delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .doc-card__status {
@@ -412,6 +456,13 @@
   font-size: 0.68rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+.doc-card__checksum {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
 }
 
 /* ============================================================
@@ -602,6 +653,15 @@
 
   .knowledge-sidebar {
     padding: 14px;
+  }
+
+  .doc-card__header {
+    align-items: flex-start;
+  }
+
+  .doc-card__actions {
+    flex-direction: column;
+    align-items: flex-end;
   }
 }
 

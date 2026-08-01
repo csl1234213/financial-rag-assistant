@@ -1,4 +1,6 @@
 import { useState, useRef, type DragEvent } from 'react';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { validatePdfUpload } from '../../api/knowledgeContract';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -6,21 +8,8 @@ interface UploadPanelProps {
   onUploadSuccess?: (file: File) => Promise<void>;
 }
 
-const uploadLabels: Record<UploadStatus, string> = {
-  idle: 'Drag & drop a PDF here, or click to browse',
-  uploading: 'Uploading...',
-  success: 'Upload complete!',
-  error: 'Upload failed. Please try again.',
-};
-
-const uploadButtonLabels: Record<UploadStatus, string> = {
-  idle: 'Choose File',
-  uploading: 'Uploading\u2026',
-  success: 'Upload Another',
-  error: 'Retry',
-};
-
 export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
+  const { t } = useLanguage();
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -29,8 +18,20 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
 
   const doUpload = async (file: File) => {
     setSelectedFile(file.name);
-    setUploadStatus('uploading');
     setUploadError(null);
+
+    const validationIssue = validatePdfUpload(file);
+    if (validationIssue) {
+      setUploadStatus('error');
+      setUploadError(
+        validationIssue === 'too-large'
+          ? t.upload.fileTooLarge
+          : t.upload.invalidFileType,
+      );
+      return;
+    }
+
+    setUploadStatus('uploading');
 
     if (onUploadSuccess) {
       try {
@@ -38,7 +39,7 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
         setUploadStatus('success');
       } catch (err: unknown) {
         setUploadStatus('error');
-        const message = err instanceof Error ? err.message : 'Upload failed.';
+        const message = err instanceof Error ? err.message : t.upload.fallbackError;
         setUploadError(message);
       }
     } else {
@@ -88,7 +89,7 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
   return (
     <section className="upload-panel" aria-labelledby="upload-title">
       <h2 id="upload-title" className="upload-panel__title">
-        Upload Document
+        {t.upload.title}
       </h2>
 
       <div
@@ -104,7 +105,7 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
             handleFileSelect();
           }
         }}
-        aria-label="Upload PDF document"
+        aria-label={t.upload.ariaLabel}
       >
         <input
           ref={fileInputRef}
@@ -120,11 +121,18 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
         </span>
 
         <p className="upload-panel__dropzone-text">
-          {selectedFile && uploadStatus !== 'idle' ? selectedFile : uploadLabels[uploadStatus]}
+          {selectedFile && uploadStatus !== 'idle'
+            ? selectedFile
+            : {
+                idle: t.upload.idle,
+                uploading: t.upload.uploading,
+                success: t.upload.success,
+                error: t.upload.error,
+              }[uploadStatus]}
         </p>
 
         {uploadStatus === 'idle' && (
-          <span className="upload-panel__dropzone-hint">PDF files only, up to 50 MB</span>
+          <span className="upload-panel__dropzone-hint">{t.upload.hint}</span>
         )}
       </div>
 
@@ -142,25 +150,25 @@ export function UploadPanel({ onUploadSuccess }: UploadPanelProps) {
             className="upload-panel__button"
             onClick={handleFileSelect}
           >
-            {uploadButtonLabels.idle}
+            {t.upload.chooseFile}
           </button>
         )}
 
         {uploadStatus === 'uploading' && (
           <button type="button" className="upload-panel__button upload-panel__button--disabled" disabled>
-            {uploadButtonLabels.uploading}
+            {t.upload.uploading}
           </button>
         )}
 
         {uploadStatus === 'success' && (
           <button type="button" className="upload-panel__button" onClick={handleReset}>
-            {uploadButtonLabels.success}
+            {t.upload.uploadAnother}
           </button>
         )}
 
         {uploadStatus === 'error' && (
           <button type="button" className="upload-panel__button" onClick={handleReset}>
-            {uploadButtonLabels.error}
+            {t.upload.retry}
           </button>
         )}
       </div>

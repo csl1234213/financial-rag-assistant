@@ -11,6 +11,7 @@ import type {
 export interface ChatRequest {
   question: string;
   company?: string;
+  thread_id?: string;
 }
 
 export class ChatContractError extends Error {
@@ -110,6 +111,7 @@ function parseNullableRecord<T>(
 export function createChatRequest(
   question: string,
   company?: string,
+  threadId?: string,
 ): ChatRequest {
   const normalizedQuestion = question.trim();
   if (!normalizedQuestion) {
@@ -120,6 +122,10 @@ export function createChatRequest(
   const normalizedCompany = company?.trim();
   if (normalizedCompany) {
     request.company = normalizedCompany;
+  }
+  const normalizedThreadId = threadId?.trim();
+  if (normalizedThreadId) {
+    request.thread_id = normalizedThreadId;
   }
   return request;
 }

@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { AgentStep } from './AgentStep';
 import type { AgentStepData } from './AgentStep';
+import { useLanguage } from '../../i18n/LanguageContext';
+import type { Translation } from '../../i18n/translations';
 import type { ChatResponse } from '../../types/api';
 
 interface AgentTimelineProps {
@@ -9,51 +12,75 @@ interface AgentTimelineProps {
   emptyMessage?: string;
 }
 
-function buildTimeline(response: ChatResponse | null, loading: boolean): AgentStepData[] {
+function buildTimeline(
+  response: ChatResponse | null,
+  loading: boolean,
+  labels: Translation['agent'],
+): AgentStepData[] {
   if (response) {
-    const strategy = response.execution?.strategy || 'rag';
-    const provider = response.routing?.provider || 'unknown';
-    const workflowType = response.workflow?.type || 'rag';
-    const intent = response.reasoning?.intent || 'SINGLE_COMPANY';
+    const hasExecutionContract = Boolean(
+      response.execution && response.workflow && response.routing,
+    );
+    if (!hasExecutionContract) {
+      return [
+        {
+          id: 'runtime',
+          name: labels.runtime,
+          description: labels.runtimeFailed,
+          status: 'failed',
+        },
+        {
+          id: 'provider',
+          name: labels.provider,
+          description: labels.providerFailed,
+          status: 'failed',
+        },
+      ];
+    }
+
+    const strategy = response.execution?.strategy ?? '';
+    const provider = response.routing?.provider ?? '';
+    const workflowType = response.workflow?.type ?? '';
+    const intent = response.reasoning?.intent || labels.unclassified;
     const companies = response.reasoning?.companies || [];
     const citationCount = response.citations?.length || 0;
     const executionTime = response.execution_time
       ? `${response.execution_time.toFixed(2)}s`
-      : 'N/A';
+      : labels.notAvailable;
     const planSteps = response.plan?.steps?.length ?? 0;
     const planDescription = response.plan?.steps?.length
-      ? `Executed ${planSteps} research step(s)`
-      : 'Built research plan for analysis';
+      ? labels.executedSteps(planSteps)
+      : labels.builtPlan;
 
     return [
       {
         id: 'intent',
-        name: 'Intent Analyzer',
-        description: `Detected intent: ${intent}${companies.length ? ' — ' + companies.join(', ') : ''}`,
+        name: labels.intentAnalyzer,
+        description: labels.detectedIntent(intent, companies),
         status: 'completed',
       },
       {
         id: 'planner',
-        name: 'Query Planner',
-        description: `${planDescription} for ${workflowType} workflow`,
+        name: labels.queryPlanner,
+        description: labels.planForWorkflow(planDescription, workflowType),
         status: 'completed',
       },
       {
         id: 'retriever',
-        name: 'Hybrid Retriever',
-        description: `Retrieved ${citationCount} evidence chunks from vector store`,
+        name: labels.hybridRetriever,
+        description: labels.retrievedEvidence(citationCount),
         status: 'completed',
       },
       {
         id: 'ranker',
-        name: 'Evidence Ranking',
-        description: 'Ranked results by relevance score',
+        name: labels.evidenceRanking,
+        description: labels.rankedResults,
         status: 'completed',
       },
       {
         id: 'generator',
-        name: 'LLM Generation',
-        description: `Generated report via ${provider} (${strategy}) in ${executionTime}`,
+        name: labels.llmGeneration,
+        description: labels.generatedReport(provider, strategy, executionTime),
         status: 'completed',
       },
     ];
@@ -61,60 +88,141 @@ function buildTimeline(response: ChatResponse | null, loading: boolean): AgentSt
 
   if (loading) {
     return [
-      { id: 'intent', name: 'Intent Analyzer', description: 'Classifying user intent...', status: 'completed' },
-      { id: 'planner', name: 'Query Planner', description: 'Building research plan...', status: 'completed' },
-      { id: 'retriever', name: 'Hybrid Retriever', description: 'Searching knowledge base...', status: 'running' },
-      { id: 'ranker', name: 'Evidence Ranking', description: 'Waiting for retrieval...', status: 'pending' },
-      { id: 'generator', name: 'LLM Generation', description: 'Waiting for evidence...', status: 'pending' },
+      {
+        id: 'intent',
+        name: labels.intentAnalyzer,
+        description: labels.classifyingIntent,
+        status: 'completed',
+      },
+      {
+        id: 'planner',
+        name: labels.queryPlanner,
+        description: labels.buildingPlan,
+        status: 'completed',
+      },
+      {
+        id: 'retriever',
+        name: labels.hybridRetriever,
+        description: labels.searchingKnowledge,
+        status: 'running',
+      },
+      {
+        id: 'ranker',
+        name: labels.evidenceRanking,
+        description: labels.waitingForRetrieval,
+        status: 'pending',
+      },
+      {
+        id: 'generator',
+        name: labels.llmGeneration,
+        description: labels.waitingForEvidence,
+        status: 'pending',
+      },
     ];
   }
 
   return [
-    { id: 'intent', name: 'Intent Analyzer', description: 'Classifies the user query intent', status: 'pending' },
-    { id: 'planner', name: 'Query Planner', description: 'Builds a research execution plan', status: 'pending' },
-    { id: 'retriever', name: 'Hybrid Retriever', description: 'Searches vector store for evidence', status: 'pending' },
-    { id: 'ranker', name: 'Evidence Ranking', description: 'Ranks results by relevance', status: 'pending' },
-    { id: 'generator', name: 'LLM Generation', description: 'Generates the final report', status: 'pending' },
+    {
+      id: 'intent',
+      name: labels.intentAnalyzer,
+      description: labels.classifiesIntent,
+      status: 'pending',
+    },
+    {
+      id: 'planner',
+      name: labels.queryPlanner,
+      description: labels.buildsPlan,
+      status: 'pending',
+    },
+    {
+      id: 'retriever',
+      name: labels.hybridRetriever,
+      description: labels.searchesEvidence,
+      status: 'pending',
+    },
+    {
+      id: 'ranker',
+      name: labels.evidenceRanking,
+      description: labels.ranksEvidence,
+      status: 'pending',
+    },
+    {
+      id: 'generator',
+      name: labels.llmGeneration,
+      description: labels.generatesReport,
+      status: 'pending',
+    },
   ];
 }
 
 export function AgentTimeline({
   response,
   loading,
-  title = 'Agent Execution',
-  emptyMessage = 'Submit a question to see the agent execution trace.',
+  title,
+  emptyMessage,
 }: AgentTimelineProps) {
-  const steps = buildTimeline(response, loading);
+  const { t } = useLanguage();
+  const steps = buildTimeline(response, loading, t.agent);
   const hasResponse = response !== null;
+  const [open, setOpen] = useState(false);
+  const status = loading
+    ? 'running'
+    : steps.some((step) => step.status === 'failed')
+      ? 'failed'
+      : hasResponse
+        ? 'completed'
+        : 'pending';
+
+  useEffect(() => {
+    setOpen(false);
+  }, [loading, response]);
 
   return (
-    <section className="agent-timeline-panel" aria-labelledby="agent-timeline-title">
-      <h2 id="agent-timeline-title" className="agent-timeline-panel__title">
-        {title}
-      </h2>
+    <details
+      className="agent-timeline-panel"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary aria-label={`${title ?? t.agent.title}: ${t.agent.status[status]}`}>
+        <span
+          id="agent-timeline-title"
+          className="agent-timeline-panel__title"
+        >
+          {title ?? t.agent.title}
+        </span>{' '}
+        <span className="agent-timeline-panel__summary-value">
+          {t.agent.status[status]}
+        </span>
+      </summary>
 
-      {!hasResponse && !loading && (
-        <p className="agent-timeline-panel__empty">{emptyMessage}</p>
-      )}
+      <div className="agent-timeline-panel__body">
+        {!hasResponse && !loading && (
+          <p className="agent-timeline-panel__empty">
+            {emptyMessage ?? t.agent.empty}
+          </p>
+        )}
 
-      <div className="agent-timeline">
-        {steps.map((step, index) => (
-          <AgentStep
-            key={step.id}
-            step={step}
-            isLast={index === steps.length - 1}
-          />
-        ))}
-      </div>
-
-      {hasResponse && (
-        <div className="agent-timeline-panel__summary">
-          <span className="agent-timeline-panel__summary-label">Workflow</span>
-          <span className="agent-timeline-panel__summary-value">
-            {response.workflow?.type ?? 'rag'}
-          </span>
+        <div className="agent-timeline">
+          {steps.map((step, index) => (
+            <AgentStep
+              key={step.id}
+              step={step}
+              isLast={index === steps.length - 1}
+            />
+          ))}
         </div>
-      )}
-    </section>
+
+        {hasResponse && response?.workflow && (
+          <div className="agent-timeline-panel__summary">
+            <span className="agent-timeline-panel__summary-label">
+              {t.agent.workflow}
+            </span>
+            <span className="agent-timeline-panel__summary-value">
+              {response.workflow.type}
+            </span>
+          </div>
+        )}
+      </div>
+    </details>
   );
 }

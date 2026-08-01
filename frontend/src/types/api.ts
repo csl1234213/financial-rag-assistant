@@ -73,10 +73,15 @@ export interface KnowledgeDocument {
   id: string;
   filename: string;
   company: string;
+  period?: string;
   pages: number;
   status: DocumentStatus;
   uploadedAt: string;
   size?: string;
+  byteSize?: number;
+  chunkCount?: number;
+  contentSha256?: string;
+  canDelete?: boolean;
 }
 
 export interface DocumentDetail extends KnowledgeDocument {
@@ -119,7 +124,7 @@ export interface RetrievalResponse {
 // ---- Health ----
 
 export interface HealthResponse {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: 'ok' | 'healthy' | 'degraded' | 'unhealthy';
   version?: string;
   uptime?: number;
   components?: Record<string, 'up' | 'down' | 'degraded'>;
@@ -140,4 +145,6 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  response?: ChatResponse;
+  citationNamespace?: string;
 }
