@@ -278,7 +278,7 @@ docker compose up -d
 |----------|-------------|---------|
 | `LLM_PROVIDER` | LLM 提供商：`deepseek`、`gemini`、`claude` | `deepseek` |
 | `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | *(必填)* |
-| `LLM_MODEL` | 所选提供商的模型名称 | `deepseek-chat` |
+| `LLM_MODEL` | 所选提供商的模型名称 | `deepseek-v4-flash` |
 | `CHROMA_HOST` | ChromaDB 服务主机名 | `chromadb` |
 | `CHROMA_PORT` | ChromaDB 服务端口 | `8000` |
 | `DATABASE_URL` | SQLite 数据库路径 | `sqlite:///./data/financial_rag.db` |

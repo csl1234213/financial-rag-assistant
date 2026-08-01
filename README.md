@@ -337,9 +337,9 @@ $ docker compose up
 === Financial Agent Runtime Assistant v8.1.0 ===
 [Entrypoint] Running knowledge bootstrap...
 [Bootstrap] Knowledge base empty — initializing demo data...
-Loaded Documents: 5 (Tesla, NVIDIA, Apple)
-Total Chunks: 257
-[Bootstrap] Done — 257 chunks indexed.
+Loaded Documents: 3 unique sources (Tesla, NVIDIA, Apple)
+Total Chunks: 303
+[Bootstrap] Done — 3 public document sources are available.
 [Entrypoint] Starting API server...
 ```
 
@@ -352,7 +352,7 @@ Total Chunks: 257
   "api": "ok",
   "runtime": "ok",
   "embedding_model": "loaded",
-  "documents": 5
+  "documents": 0
 }
 ```
 
@@ -374,7 +374,7 @@ Response:
   "workflow": {"type": "direct_chat"},
   "reasoning": {"intent": "DIRECT_CHAT", "companies": null, "evidence_count": 0},
   "execution": {"strategy": "direct_llm", "use_retrieval": false},
-  "routing": {"provider": "deepseek", "model": "deepseek-chat"},
+  "routing": {"provider": "deepseek", "model": "deepseek-v4-flash"},
   "report": "Artificial Intelligence (AI) is..."
 }
 ```
@@ -430,7 +430,7 @@ FastAPI auto-generated API documentation at `/docs`:
 
 | Screenshot | Description |
 |---|---|
-| ![Docker Startup](docs/demo/screenshots/docker-startup.png) | `docker compose up` — Bootstrap 5 PDFs, 257 chunks indexed, both services healthy |
+| ![Docker Startup](docs/demo/screenshots/docker-startup.png) | `docker compose up` — Bootstrap 3 unique PDFs and 303 quality-gated chunks; services healthy |
 | ![Health API](docs/demo/screenshots/health-api.png) | `GET /api/v1/health` — All systems operational, embedding model loaded |
 | ![Swagger RAG](docs/demo/screenshots/swagger-rag.png) | `POST /api/v1/chat` — Tesla RAG research with 4 citations from `Tesla_Q2_2025.pdf` |
 | ![Legacy UI RAG](docs/demo/screenshots/streamlit-rag.png) | Historical Streamlit UI screenshot; the supported V8.1.0 UI is React at `:3000` in Docker or Vite at `:5173` in development. |

@@ -44,6 +44,11 @@ if [ "${RUN_DATABASE_MIGRATIONS:-true}" = "true" ]; then
     alembic upgrade head
     echo " Seeding idempotent application reference data..."
     python -c "from storage.database import seed_defaults; seed_defaults()"
+
+    if [ "${BOOTSTRAP_DEMO_KNOWLEDGE:-true}" = "true" ]; then
+        echo " Bootstrapping public demo knowledge..."
+        python docker/bootstrap_knowledge.py
+    fi
 fi
 
 # Honor a Docker Compose command (for example the agent worker) after the

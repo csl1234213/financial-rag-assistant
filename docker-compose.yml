@@ -15,6 +15,8 @@
 #   redis      (port 6379)  — Cache & Task Queue
 # ============================================================
 
+name: financial-rag-prod
+
 services:
   # ==========================================================
   # PostgreSQL — Relational Database
@@ -116,9 +118,21 @@ services:
     environment:
       - APP_ENV=production
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - LLM_CREDENTIAL_ENCRYPTION_KEYS=${LLM_CREDENTIAL_ENCRYPTION_KEYS:-}
+      - LLM_CREDENTIAL_KEY_FILE=/app/storage/memory/.llm-credential-key
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
-      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      - EMBEDDING_MODEL_REVISION=${EMBEDDING_MODEL_REVISION:-614241f622f53c4eeff9890bdc4f31cfecc418b3}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-32}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1000}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
+      - OCR_ENABLED=${OCR_ENABLED:-true}
+      - OCR_LANGUAGES=${OCR_LANGUAGES:-eng+chi_sim}
+      - OCR_DPI=${OCR_DPI:-300}
+      - OCR_MIN_TEXT_CHARS=${OCR_MIN_TEXT_CHARS:-80}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
@@ -185,9 +199,21 @@ services:
     environment:
       - APP_ENV=production
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - LLM_CREDENTIAL_ENCRYPTION_KEYS=${LLM_CREDENTIAL_ENCRYPTION_KEYS:-}
+      - LLM_CREDENTIAL_KEY_FILE=/app/storage/memory/.llm-credential-key
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
-      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      - EMBEDDING_MODEL_REVISION=${EMBEDDING_MODEL_REVISION:-614241f622f53c4eeff9890bdc4f31cfecc418b3}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-}
+      - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-32}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1000}
+      - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
+      - OCR_ENABLED=${OCR_ENABLED:-true}
+      - OCR_LANGUAGES=${OCR_LANGUAGES:-eng+chi_sim}
+      - OCR_DPI=${OCR_DPI:-300}
+      - OCR_MIN_TEXT_CHARS=${OCR_MIN_TEXT_CHARS:-80}
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - DATABASE_URL=postgresql://${POSTGRES_USER:-financial}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-financial_rag}

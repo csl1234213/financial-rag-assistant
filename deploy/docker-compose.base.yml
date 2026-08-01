@@ -24,7 +24,7 @@ services:
     env_file:
       - .env
     environment:
-      - HF_ENDPOINT=https://hf-mirror.com
+      - HF_ENDPOINT=https://huggingface.co
     networks:
       - financial_network
 

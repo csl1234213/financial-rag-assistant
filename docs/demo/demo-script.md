@@ -33,9 +33,9 @@ docker compose up -d --build
 [Bootstrap] Knowledge base empty — initializing demo data...
 Loading embedding model...
 Embedding model loaded!
-Loaded Documents: 5 (Tesla, NVIDIA, Apple)
-Total Chunks: 257
-[Bootstrap] Done — 257 chunks indexed.
+Loaded Documents: 3 unique sources (Tesla, NVIDIA, Apple)
+Total Chunks: 303
+[Bootstrap] Done — 3 public document sources are available.
 [Entrypoint] Starting API server...
 ```
 
@@ -70,7 +70,7 @@ curl http://localhost:8000/api/v1/health | python -m json.tool
     "api": "ok",
     "runtime": "ok",
     "embedding_model": "loaded",
-    "documents": 5
+    "documents": 0
 }
 ```
 
@@ -86,14 +86,12 @@ curl http://localhost:8000/api/v1/knowledge/statistics | python -m json.tool
 
 ```json
 {
-    "total_documents": 5,
-    "total_chunks": 257,
+    "total_documents": 3,
+    "total_chunks": 303,
     "documents": [
-        {"name": "Tesla_Q2_2025.pdf", "chunks": 45},
-        {"name": "NVIDIA_Q1_FY2027.pdf", "chunks": 28},
-        {"name": "NVIDIA.pdf", "chunks": 22},
-        {"name": "NVIDIAAn.pdf", "chunks": 18},
-        {"name": "Apple_Q2_2026.pdf", "chunks": 144}
+        {"name": "Tesla_Q2_2025.pdf", "chunks": 85},
+        {"name": "NVIDIA_Q1_FY2027.pdf", "chunks": 43},
+        {"name": "Apple_Q2_2026.pdf", "chunks": 175}
     ]
 }
 ```
@@ -129,7 +127,7 @@ curl -s -X POST http://localhost:8000/api/v1/chat \
     },
     "routing": {
         "provider": "deepseek",
-        "model": "deepseek-chat"
+        "model": "deepseek-v4-flash"
     },
     "report": "Artificial Intelligence (AI) is...",
     "citations": [],
@@ -233,9 +231,7 @@ curl -s -X POST http://localhost:8000/api/v1/chat \
     },
     "citations": [
         {"source": "NVIDIA_Q1_FY2027.pdf", "similarity": 0.98},
-        {"source": "NVIDIA.pdf", "similarity": 0.94},
-        {"source": "NVIDIA.pdf", "similarity": 0.91},
-        {"source": "NVIDIAAn.pdf", "similarity": 0.88}
+        {"source": "NVIDIA_Q1_FY2027.pdf", "similarity": 0.94}
     ],
     "report": "# Research Report\n\n## Question\nWhat is NVIDIA revenue?\n\n## Answer\n...",
     "execution_time": 2.31
@@ -244,7 +240,7 @@ curl -s -X POST http://localhost:8000/api/v1/chat \
 
 **Key observations:**
 - `intent` = `"SINGLE_COMPANY"` — NVIDIA auto-detected
-- Multi-source: 3 different NVIDIA PDFs contribute citations
+- A single canonical NVIDIA report supplies page-level citations without duplicate files
 - `NVIDIA_Q1_FY2027.pdf` — record revenue $81.6B, +85% YoY
 
 ---
@@ -336,7 +332,7 @@ docker compose down -v
 ```
 docker compose up -d --build
   │
-  ├── Bootstrap: 5 PDFs → 257 chunks
+  ├── Bootstrap: 3 unique PDFs → 303 quality-gated chunks
   │
   ├── Health Check: version 8.1.0, model loaded
   │
