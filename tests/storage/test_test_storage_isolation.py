@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 
 from tests.storage_paths import (
     create_sqlite_test_database,
@@ -34,7 +35,14 @@ def test_sqlite_helper_uses_an_absolute_worker_local_path():
 
     assert database_path.is_absolute()
     assert database_path.resolve().is_relative_to(get_test_storage_root())
+    assert isinstance(engine.pool, NullPool)
 
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE storage_contract (id INTEGER)"))
+
+    assert database_path.exists()
+
+    database_path.unlink()
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE storage_contract (id INTEGER)"))
 

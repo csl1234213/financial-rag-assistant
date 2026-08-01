@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import Lock
 
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.pool import NullPool
 
 _TEST_ROOT_ENV = "FINANCIAL_RAG_TEST_RUN_ROOT"
 _engines: list[Engine] = []
@@ -54,6 +55,7 @@ def create_sqlite_test_database(filename: str) -> tuple[str, Engine]:
     engine = create_engine(
         database_url,
         connect_args={"check_same_thread": False},
+        poolclass=NullPool,
     )
     with _engines_lock:
         _engines.append(engine)
