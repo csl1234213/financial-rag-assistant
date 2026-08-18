@@ -20,7 +20,7 @@ def _env_value(path: Path, name: str) -> str:
 
 
 def test_runtime_configuration_uses_the_release_version_authority() -> None:
-    assert BASE_VERSION == "8.1.0"
+    assert BASE_VERSION == "8.2.0"
     assert CONFIG_VERSION == __version__
     assert APP_CONFIG_VERSION == __version__
 
@@ -28,6 +28,8 @@ def test_runtime_configuration_uses_the_release_version_authority() -> None:
 def test_environment_templates_track_the_source_release_version() -> None:
     assert _env_value(ROOT / ".env.example", "APP_VERSION") == BASE_VERSION
     assert _env_value(ROOT / "deploy" / ".env.example", "APP_VERSION") == BASE_VERSION
+    assert _env_value(ROOT / "deploy" / ".env.dev", "APP_VERSION") == BASE_VERSION
+    assert _env_value(ROOT / "deploy" / ".env.prod", "APP_VERSION") == BASE_VERSION
 
 
 def test_mcp_initialize_reports_the_runtime_release_version() -> None:

@@ -1,6 +1,6 @@
-# V8.1.0 Operations Runbook
+# V8.2.0 Operations Runbook
 
-This runbook is for the supported V8.1.0 React + FastAPI deployment. Its
+This runbook is for the supported V8.2.0 React + FastAPI deployment. Its
 canonical definition is the repository-root
 [`docker-compose.yml`](../docker-compose.yml).
 
@@ -127,5 +127,5 @@ command alone is not proof that a recovery set is restorable.
 - Back up PostgreSQL and the ChromaDB persistent volume before upgrades.
 - Monitor `backend` health, `agent-worker` logs, Redis availability, and queue
   age/pending tasks.
-- Keep the root `docker-compose.yml` as the single supported V8.1.0 stack;
+- Keep the root `docker-compose.yml` as the single supported V8.2.0 stack;
   do not combine it with the historical files under `deploy/`.

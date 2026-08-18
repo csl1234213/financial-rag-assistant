@@ -1,7 +1,7 @@
 # V4.3 System Architecture (Runtime)
 
 > **Historical architecture record.** This V4.3 document intentionally retains
-> the Streamlit-era design for release history. It is not the V8.1.0 deployment
+> the Streamlit-era design for release history. It is not the V8.2.0 deployment
 > guide. Use [ARCHITECTURE.md](ARCHITECTURE.md) and
 > [DEPLOYMENT_ARCHITECTURE.md](DEPLOYMENT_ARCHITECTURE.md) for the current
 > React + FastAPI + PostgreSQL + Redis + ChromaDB + `agent-worker` topology.

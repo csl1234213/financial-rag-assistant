@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop the canonical V8.1.0 Docker Compose stack while preserving volumes.
+# Stop the canonical V8.2.0 Docker Compose stack while preserving volumes.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

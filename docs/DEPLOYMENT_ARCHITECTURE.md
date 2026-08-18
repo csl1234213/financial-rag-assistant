@@ -1,10 +1,10 @@
-# V8.1.0 Deployment Architecture
+# V8.2.0 Deployment Architecture
 
-## Canonical V8.1.0 topology
+## Canonical V8.2.0 topology
 
 The supported deployment definition is the repository-root
 [`docker-compose.yml`](../docker-compose.yml). It is the only Compose file that
-this V8.1.0 documentation treats as the standard startup path.
+this V8.2.0 documentation treats as the standard startup path.
 
 ```text
 Browser
@@ -73,7 +73,7 @@ are in [OPERATIONS.md](OPERATIONS.md).
 ## Historical deployment material
 
 The following files remain in the repository to preserve historical context but
-are **not** the V8.1.0 startup path:
+are **not** the V8.2.0 startup path:
 
 - `deploy/docker-compose.base.yml`
 - `deploy/docker-compose.dev.yml`
@@ -82,5 +82,5 @@ are **not** the V8.1.0 startup path:
 - `docker/Dockerfile.ui`
 
 They describe an earlier Streamlit-oriented deployment line. Do not merge them
-with the root Compose file or use them as the default V8.1.0 runbook. Historical
+with the root Compose file or use them as the default V8.2.0 runbook. Historical
 release material is retained under [`docs/releases/`](releases/).

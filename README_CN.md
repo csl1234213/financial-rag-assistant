@@ -350,6 +350,7 @@ V7.3.1 → Agent Runtime 框架
 V7.3.2 → Docker 生产打包
 V7.3.3 → 演示知识库初始化
 V8.1.0 → 多租户 + 异步任务管道
+V8.2.0 → Financial AI Copilot 发布对齐
 ```
 
 ---

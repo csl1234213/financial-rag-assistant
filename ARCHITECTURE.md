@@ -1,4 +1,4 @@
-# Financial Agent Runtime Assistant — V8.1.0 Architecture
+# Financial Agent Runtime Assistant — V8.2.0 Architecture
 
 ## Overview
 
@@ -315,3 +315,4 @@ Research Report + Evidence Panel
 | V7.3.2 | Docker Production Packaging |
 | V7.3.3 | Demo Knowledge Bootstrap |
 | V8.1.0 | Production Agent Platform |
+| V8.2.0 | Release-Aligned Financial AI Copilot |

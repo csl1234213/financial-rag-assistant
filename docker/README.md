@@ -1,6 +1,6 @@
-# Docker Build Guide — V8.1.0
+# Docker Build Guide — V8.2.0
 
-The supported V8.1.0 Docker entry point is the repository-root
+The supported V8.2.0 Docker entry point is the repository-root
 [`docker-compose.yml`](../docker-compose.yml). It builds and runs the complete
 React + FastAPI stack, including PostgreSQL, Redis, ChromaDB, and
 `agent-worker`.
@@ -47,5 +47,5 @@ The primary endpoints are:
 ## Historical Docker artifacts
 
 `Dockerfile.ui`, `Dockerfile.dev`, and the Compose files under `deploy/` are
-kept as historical Streamlit-era artifacts. They are not the supported V8.1.0
+kept as historical Streamlit-era artifacts. They are not the supported V8.2.0
 startup path and must not be combined with the root Compose stack.

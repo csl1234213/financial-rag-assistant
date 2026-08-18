@@ -32,7 +32,7 @@ def _server():
         adapter,
         server_info=MCPServerInfo(
             name="financial-agent-tools",
-            version="8.1.0",
+            version="test-version",
         ),
     )
 

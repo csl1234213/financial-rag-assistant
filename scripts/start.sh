@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the canonical V8.1.0 Docker Compose stack.
+# Start the canonical V8.2.0 Docker Compose stack.
 #
 # Usage:
 #   ./scripts/start.sh       # React/Nginx UI on :3000
@@ -27,7 +27,7 @@ cd "$PROJECT_ROOT"
 case "$MODE" in
     prod|stack)
         UI_URL="http://localhost:3000"
-        echo "Starting the complete V8.1.0 Compose stack..."
+        echo "Starting the complete V8.2.0 Compose stack..."
         docker compose up -d --build
         ;;
     dev)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Follow logs for the canonical V8.1.0 Docker Compose stack.
+# Follow logs for the canonical V8.2.0 Docker Compose stack.
 #
 # Usage:
 #   ./scripts/logs.sh

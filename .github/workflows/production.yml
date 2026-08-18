@@ -91,15 +91,30 @@ jobs:
         run: docker compose build backend frontend
 
   docker-push:
-    name: Publish immutable release images
+    name: Publish immutable release images when configured
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [docker-build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check Docker Hub publication configuration
+        id: registry
+        shell: bash
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [[ -n "$DOCKER_USERNAME" && -n "$DOCKER_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Docker Hub credentials are not configured; skipping registry publication."
+          fi
       - name: Set up Docker Buildx
+        if: steps.registry.outputs.enabled == 'true'
         uses: docker/setup-buildx-action@v3
       - name: Log in to Docker Hub
+        if: steps.registry.outputs.enabled == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -108,6 +123,7 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Build and push shared backend/worker runtime image
+        if: steps.registry.outputs.enabled == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -121,6 +137,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build and push React frontend image
+        if: steps.registry.outputs.enabled == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -132,3 +149,69 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/financial-rag-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [docker-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_version="$(python -c \
+            'from agent.__version__ import BASE_VERSION; print(BASE_VERSION)')"
+          expected_tag="v${base_version}"
+          release_title="Financial AI Copilot V${base_version}"
+          release_notes="docs/releases/v${base_version}.md"
+
+          test "$GITHUB_REF_TYPE" = "tag"
+          test "$GITHUB_REF_NAME" = "$expected_tag"
+          test -s "$release_notes"
+          grep -Fq "# ${release_title}" "$release_notes"
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          base_version="$(python -c \
+            'from agent.__version__ import BASE_VERSION; print(BASE_VERSION)')"
+          release_title="Financial AI Copilot V${base_version}"
+          release_notes="docs/releases/v${base_version}.md"
+
+          if metadata="$(gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json name,tagName,isDraft,isPrerelease \
+            --jq '[.name, .tagName, (.isDraft | tostring), (.isPrerelease | tostring)] | @tsv' \
+            2>/dev/null)"; then
+            IFS=$'\t' read -r existing_name existing_tag is_draft is_prerelease \
+              <<< "$metadata"
+
+            test "$existing_name" = "$release_title"
+            test "$existing_tag" = "$GITHUB_REF_NAME"
+            test "$is_draft" = "false"
+            test "$is_prerelease" = "false"
+            echo "Release $GITHUB_REF_NAME already exists with the expected metadata."
+            exit 0
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$release_title" \
+            --notes-file "$release_notes" \
+            --latest

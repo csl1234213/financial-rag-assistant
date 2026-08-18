@@ -1,4 +1,4 @@
-"""Contract checks for the canonical V8.1.0 Docker deployment assets."""
+"""Contract checks for the canonical Docker deployment assets."""
 
 from pathlib import Path
 
@@ -273,6 +273,39 @@ class TestCIWorkflow:
         for path in paths:
             content = path.read_text(encoding="utf-8")
             assert expected_ignores <= set(content.split())
+
+    def test_release_workflow_publishes_only_after_immutable_images(self):
+        production = (
+            ROOT / ".github" / "workflows" / "production.yml"
+        ).read_text(encoding="utf-8")
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+
+        assert "needs: [docker-push]" in production
+        assert production.count("contents: write") == 1
+        assert "gh release create" in production
+        assert "--verify-tag" in production
+        assert (
+            'release_title="Financial AI Copilot V${base_version}"'
+            in production
+        )
+        assert 'release_notes="docs/releases/v${base_version}.md"' in production
+        assert "--latest" in production
+        assert "permissions:\n  contents: read" in production
+        assert "permissions:\n  contents: read" in ci
+
+    def test_registry_publication_is_optional_without_repository_secrets(self):
+        production = (
+            ROOT / ".github" / "workflows" / "production.yml"
+        ).read_text(encoding="utf-8")
+
+        assert "Check Docker Hub publication configuration" in production
+        assert 'echo "enabled=false" >> "$GITHUB_OUTPUT"' in production
+        assert production.count(
+            "if: steps.registry.outputs.enabled == 'true'"
+        ) == 4
+        assert "skipping registry publication" in production
 
 
 class TestBackupScript:

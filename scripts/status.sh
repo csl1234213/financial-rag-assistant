@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Show status for the canonical V8.1.0 Docker Compose stack.
+# Show status for the canonical V8.2.0 Docker Compose stack.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -4,7 +4,7 @@
 FROM python:3.11.13-slim-bookworm
 
 LABEL org.opencontainers.image.title="Financial Research Copilot - Dev"
-LABEL org.opencontainers.image.version="8.1.0"
+LABEL org.opencontainers.image.version="8.2.0"
 LABEL org.opencontainers.image.description="AI Financial Research Platform — Development Image"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.source="https://github.com/your-org/financial-rag-assistant"

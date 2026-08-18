@@ -31,5 +31,5 @@ version source.
 
 import os
 
-BASE_VERSION = "8.1.0"
+BASE_VERSION = "8.2.0"
 __version__ = os.getenv("APP_VERSION", BASE_VERSION)

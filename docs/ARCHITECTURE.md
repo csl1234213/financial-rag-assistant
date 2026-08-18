@@ -1,6 +1,6 @@
-# Financial Agent Runtime Assistant V8.1.0 Architecture
+# Financial Agent Runtime Assistant V8.2.0 Architecture
 
-This document describes the supported V8.1.0 runtime. The canonical container
+This document describes the supported V8.2.0 runtime. The canonical container
 topology is defined by the repository-root
 [`docker-compose.yml`](../docker-compose.yml). For operational commands, see
 [OPERATIONS.md](OPERATIONS.md).
@@ -126,7 +126,7 @@ origin.
 
 ## Supported deployment boundary
 
-Use the root `docker-compose.yml` for V8.1.0. The `deploy/` Compose variants,
+Use the root `docker-compose.yml` for V8.2.0. The `deploy/` Compose variants,
 `docker/Dockerfile.ui`, and Streamlit-oriented material describe an earlier
 deployment line and are kept only as historical artifacts. Do not combine those
 files with the root Compose stack. Historical product milestones remain in

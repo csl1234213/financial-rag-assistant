@@ -4,6 +4,55 @@ All notable changes to Financial Agent Runtime Assistant.
 
 ---
 
+## v8.2.0 — Financial AI Copilot
+
+**Released: 2026-08-18**
+
+### Added
+
+- Persistent LangGraph agent sessions, checkpoints, messages, and traces.
+- Governed retrieval/financial-metrics tools and stdio MCP with official SDK
+  conformance.
+- Tenant-scoped hybrid retrieval, structured OCR-aware ingestion, document
+  deduplication, and asynchronous indexing.
+- Encrypted user-scoped settings for DeepSeek, Gemini, OpenAI, Anthropic, and
+  Doubao.
+- Authenticated bilingual React workspace with conversations, knowledge
+  management, citations, themes, and responsive layout.
+- Versioned offline evaluation datasets, prompt governance, model-benchmark
+  protocol, and opt-in LoRA training readiness.
+- Alembic migrations, six-service Compose deployment, observability, and
+  backup/recovery tooling.
+
+### Changed
+
+- Restored strategy routing across direct LLM, RAG, parallel, multi-step, and
+  governed tool-calling paths.
+- Standardized typed chat/API contracts and remote Chroma use for API and worker
+  containers.
+- Centralized product version metadata and aligned runtime, Docker, tag, and
+  GitHub Release naming at V8.2.0.
+- Removed duplicate demo PDF copies while retaining idempotent public-knowledge
+  bootstrap.
+
+### Security
+
+- Enforced production JWT secrets, explicit CORS, rate limiting, error
+  redaction, tenant isolation, and dedicated encrypted provider-key storage.
+
+### Validation
+
+- The pre-release baseline completed 1,656 credential-free backend tests with
+  90.35% coverage, 28 frontend tests and a production build, deterministic
+  evaluation, official MCP SDK conformance, and Compose image validation.
+
+### Known limitations
+
+- Live provider quality/availability, public HTTP MCP, browser visual E2E, and
+  actual LoRA training are outside the credential-free CI gate.
+
+---
+
 ## v7.3.1 — Agent Runtime Framework
 
 **Released: 2026-07-15**

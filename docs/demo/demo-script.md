@@ -1,6 +1,6 @@
-# Demo Script — Financial Agent Runtime Assistant v8.1.0
+# Demo Script — Financial Agent Runtime Assistant v8.2.0
 
-> This script uses the supported V8.1.0 root `docker-compose.yml` stack. For
+> This script uses the supported V8.2.0 root `docker-compose.yml` stack. For
 > the operational runbook and the Vite development workflow, see
 > [../OPERATIONS.md](../OPERATIONS.md).
 
@@ -21,14 +21,14 @@ cd financial-rag-assistant
 # Create and configure local runtime settings first.
 cp .env.example .env
 
-# Build and start the V8.1.0 React + FastAPI stack.
+# Build and start the V8.2.0 React + FastAPI stack.
 docker compose up -d --build
 ```
 
 **Expected output:**
 
 ```
-=== Financial Agent Runtime Assistant v8.1.0 ===
+=== Financial Agent Runtime Assistant v8.2.0 ===
 [Entrypoint] Running knowledge bootstrap...
 [Bootstrap] Knowledge base empty — initializing demo data...
 Loading embedding model...
@@ -66,7 +66,7 @@ curl http://localhost:8000/api/v1/health | python -m json.tool
 {
     "status": "ok",
     "service": "Financial Research Copilot",
-    "version": "8.1.0",
+    "version": "8.2.0",
     "api": "ok",
     "runtime": "ok",
     "embedding_model": "loaded",
@@ -334,7 +334,7 @@ docker compose up -d --build
   │
   ├── Bootstrap: 3 unique PDFs → 303 quality-gated chunks
   │
-  ├── Health Check: version 8.1.0, model loaded
+  ├── Health Check: version 8.2.0, model loaded
   │
   ├── Direct Chat: "What is AI?"
   │     ├── Intent: DIRECT_CHAT

@@ -1,4 +1,4 @@
-# Start the canonical V8.1.0 Docker Compose stack on Windows.
+# Start the canonical V8.2.0 Docker Compose stack on Windows.
 #
 # .\scripts\start.ps1       # React/Nginx UI on :3000
 # .\scripts\start.ps1 dev   # API/worker stack; run Vite separately on :5173
@@ -31,7 +31,7 @@ if ($Mode -eq "dev") {
     Write-Host "Run 'cd frontend; npm run dev' in another terminal for the React dev server."
 } else {
     $UiUrl = "http://localhost:3000"
-    Write-Host "Starting the complete V8.1.0 Compose stack..."
+    Write-Host "Starting the complete V8.2.0 Compose stack..."
     docker compose up -d --build
 }
 

@@ -1,4 +1,4 @@
-# Financial Agent Runtime Assistant V8.1.0
+# Financial Agent Runtime Assistant V8.2.0
 
 [![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
@@ -150,7 +150,7 @@ This design separates strategic decision-making from step-level execution, enabl
 
 ## Runtime and Operations
 
-**The V8.1.0 canonical deployment entry point is the repository-root
+**The V8.2.0 canonical deployment entry point is the repository-root
 [`docker-compose.yml`](docker-compose.yml).** It runs the React/Nginx frontend,
 FastAPI API, `agent-worker`, PostgreSQL, Redis, and ChromaDB together.
 
@@ -158,11 +158,12 @@ FastAPI API, `agent-worker`, PostgreSQL, Redis, and ChromaDB together.
 - [Deployment topology](docs/DEPLOYMENT_ARCHITECTURE.md)
 - [Operational runbook](docs/OPERATIONS.md)
 - [AI engineering and extension guide](docs/AI_ENGINEERING_GUIDE.md)
+- [V8.2.0 release record](docs/releases/v8.2.0.md)
 - [V8.1.0 release record](docs/releases/v8.1.0.md)
 - [V7.3.3 release record](docs/releases/v7.3.3.md)
 
 The files under `deploy/`, the Streamlit Dockerfile, and historical release
-documents are retained for reference. They are not the V8.1.0 startup path.
+documents are retained for reference. They are not the V8.2.0 startup path.
 
 ---
 
@@ -178,7 +179,7 @@ cp .env.example .env
 # Edit .env: set AUTH_SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD, and
 # DEEPSEEK_API_KEY. Root Compose constructs its internal database URLs.
 
-# 3. Build and start the canonical V8.1.0 stack.
+# 3. Build and start the canonical V8.2.0 stack.
 docker compose up -d --build
 
 # 4. Open in browser
@@ -289,6 +290,7 @@ V7.3.1 → Agent Runtime Framework
 V7.3.2 → Docker Production Packaging
 V7.3.3 → Demo Knowledge Bootstrap
 V8.1.0 → Production Agent Platform
+V8.2.0 → Release-Aligned Financial AI Copilot
 ```
 
 ---
@@ -334,7 +336,7 @@ $ docker compose up
 ```
 
 ```
-=== Financial Agent Runtime Assistant v8.1.0 ===
+=== Financial Agent Runtime Assistant v8.2.0 ===
 [Entrypoint] Running knowledge bootstrap...
 [Bootstrap] Knowledge base empty — initializing demo data...
 Loaded Documents: 3 unique sources (Tesla, NVIDIA, Apple)
@@ -348,7 +350,7 @@ Total Chunks: 303
 {
   "status": "ok",
   "service": "Financial Research Copilot",
-  "version": "8.1.0",
+  "version": "8.2.0",
   "api": "ok",
   "runtime": "ok",
   "embedding_model": "loaded",
@@ -420,7 +422,7 @@ FastAPI auto-generated API documentation at `/docs`:
 | `/api/v1/chat` | POST | Financial research chat |
 | `/api/v1/knowledge` | GET | Knowledge base overview |
 | `/api/v1/upload` | POST | Upload PDF documents |
-| `/api/v1/health` | GET | System health check (`APP_VERSION: "8.1.0"`) |
+| `/api/v1/health` | GET | System health check (`APP_VERSION: "8.2.0"`) |
 
 > Full demo script: [docs/demo/demo-script.md](docs/demo/demo-script.md)
 
@@ -433,7 +435,7 @@ FastAPI auto-generated API documentation at `/docs`:
 | ![Docker Startup](docs/demo/screenshots/docker-startup.png) | `docker compose up` — Bootstrap 3 unique PDFs and 303 quality-gated chunks; services healthy |
 | ![Health API](docs/demo/screenshots/health-api.png) | `GET /api/v1/health` — All systems operational, embedding model loaded |
 | ![Swagger RAG](docs/demo/screenshots/swagger-rag.png) | `POST /api/v1/chat` — Tesla RAG research with 4 citations from `Tesla_Q2_2025.pdf` |
-| ![Legacy UI RAG](docs/demo/screenshots/streamlit-rag.png) | Historical Streamlit UI screenshot; the supported V8.1.0 UI is React at `:3000` in Docker or Vite at `:5173` in development. |
+| ![Legacy UI RAG](docs/demo/screenshots/streamlit-rag.png) | Historical Streamlit UI screenshot; the supported V8.2.0 UI is React at `:3000` in Docker or Vite at `:5173` in development. |
 
 ---
 
