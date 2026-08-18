@@ -1,13 +1,15 @@
-# Financial RAG Assistant
+# Financial Agent Runtime Assistant V8.2.0
 
-**生产级 AI 金融研究助手**
+**语言：** [English](README.md) | **简体中文**
+
+**金融 AI Copilot · 生产级 AI 金融研究助手**
 
 AI 驱动的金融研究助手，通过 Agentic RAG、混合检索和带引用的生成能力，帮助金融分析师分析文档。上传财报 PDF，提出研究问题，获取带源引用的答案 — 一站式平台。
 
 [![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.137.1-009688)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-24-2496ED)](https://www.docker.com/)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -20,7 +22,7 @@ AI 驱动的金融研究助手，通过 Agentic RAG、混合检索和带引用�
 
 金融分析师花费数小时阅读季度财报、10-K 年报和盈利电话会议记录，从中提取关键洞察。传统关键词搜索无法理解上下文，通用 LLM 聊天工具在没有源文档支撑的情况下容易产生幻觉。
 
-Financial RAG Assistant 通过以下方式解决这些问题：
+Financial Agent Runtime Assistant（Financial AI Copilot）通过以下方式解决这些问题：
 
 - **Agentic RAG** — AI Agent 规划研究工作流、检索相关证据、生成带引用的答案
 - **混合检索** — 结合语义理解与关键词匹配，实现精准文档搜索
@@ -97,10 +99,10 @@ Financial RAG Assistant 通过以下方式解决这些问题：
 | **多租户安全** | JWT 认证 + 租户隔离（数据、向量、任务） |
 | **异步任务处理** | Redis Streams + Worker Pool（水平扩展、自动重试、心跳检测） |
 | **向量搜索** | ChromaDB + 混合检索（语义 + 关键词） |
-| **AI 生成** | LLM Provider 抽象层（DeepSeek / Gemini / Claude） |
+| **AI 生成** | 加密 BYOK 多模型抽象层（DeepSeek / Gemini / OpenAI / Anthropic / 豆包） |
 | **Agent Runtime** | 意图分析器 → 查询规划器 → 策略引擎 → 工作流执行器 |
-| **部署** | Docker Compose（5 个服务：frontend, backend, worker, redis, chromadb） |
-| **CI/CD** | GitHub Actions（lint, type check, test, build） |
+| **部署** | Docker Compose（6 个服务：frontend, backend, agent-worker, postgres, redis, chromadb） |
+| **CI/CD** | GitHub Actions（Ruff、pytest、覆盖率、前端测试/构建、Compose 构建） |
 | **API 文档** | 自动生成 OpenAPI（Swagger UI） |
 
 ---
@@ -151,7 +153,7 @@ Financial RAG Assistant 通过以下方式解决这些问题：
 PDF 上传
     │
     ▼
-任务数据库 (SQLite)
+任务数据库 (PostgreSQL)
     │
     ▼
 Redis Streams (消息队列)
@@ -166,13 +168,12 @@ Worker Pool (水平扩展)
 ### 基础设施
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Docker Compose                     │
-├──────────┬──────────┬──────────┬──────────┬──────────┤
-│ 前端     │ 后端     │ Worker   │ ChromaDB │  Redis   │
-│ (Nginx)  │(FastAPI) │  (x N)   │ (向量库) │ (队列)   │
-│ :3000    │ :8000    │          │ :8001    │ :6379    │
-└──────────┴──────────┴──────────┴──────────┴──────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              Docker Compose                               │
+├──────────┬──────────┬──────────────┬────────────┬──────────┬────────────┤
+│ frontend │ backend  │ agent-worker │ PostgreSQL │ Redis    │ ChromaDB   │
+│ :3000    │ :8000    │ 异步任务处理  │ :5432      │ :6379    │ :8001      │
+└──────────┴──────────┴──────────────┴────────────┴──────────┴────────────┘
 ```
 
 ---
@@ -181,9 +182,13 @@ Worker Pool (水平扩展)
 
 | 提供商 | 状态 | 说明 |
 |----------|--------|-------------|
-| DeepSeek | 生产环境 | 通过 ProviderFactory 作为主提供商 |
-| Gemini | 已支持 | 已在 ProviderRegistry 注册 |
-| Claude | 已预留 | Provider 适配器已就绪 |
+| DeepSeek | 已支持 | OpenAI 兼容接口，可在设置页选择模型 |
+| Gemini | 已支持 | Google Gemini 适配器与用户级配置 |
+| OpenAI | 已支持 | OpenAI 适配器与用户级配置 |
+| Anthropic Claude | 已支持 | Anthropic 适配器与用户级配置 |
+| 豆包（Doubao） | 已支持 | 火山引擎兼容适配器与用户级配置 |
+
+API Key 由登录用户在设置页保存，后端加密存储；仓库不附带任何真实凭据。
 
 ---
 
@@ -191,13 +196,12 @@ Worker Pool (水平扩展)
 
 ### 截图
 
-| 聊天界面 | 知识工作空间 |
-|:---:|:---:|
-| ![Chat](docs/demo/screenshots/docker-startup.png) | ![Knowledge](docs/demo/screenshots/health-api.png) |
-
-| 检索调试台 | Swagger API |
-|:---:|:---:|
-| ![Retrieval](docs/demo/screenshots/streamlit-rag.png) | ![Swagger](docs/demo/screenshots/swagger-rag.png) |
+| 截图 | 说明 |
+|---|---|
+| ![Docker 启动](docs/demo/screenshots/docker-startup.png) | Docker Compose 启动与知识库初始化 |
+| ![健康检查](docs/demo/screenshots/health-api.png) | FastAPI 健康检查结果 |
+| ![Swagger RAG](docs/demo/screenshots/swagger-rag.png) | Swagger 中的带引用 RAG 请求 |
+| ![历史原型](docs/demo/screenshots/streamlit-rag.png) | 历史 Streamlit 原型；当前正式界面为 React |
 
 ### API 演示
 
@@ -251,11 +255,13 @@ Worker Pool (水平扩展)
 git clone https://github.com/csl1234213/financial-rag-assistant.git
 cd financial-rag-assistant
 
-# 2. 配置（设置你的 DEEPSEEK_API_KEY）
+# 2. 创建本地配置文件
 cp .env.example .env
+# 编辑 .env，至少设置 AUTH_SECRET_KEY、POSTGRES_PASSWORD、REDIS_PASSWORD
+# LLM API Key 可在登录后的“设置”页面安全保存
 
-# 3. 启动
-docker compose up -d
+# 3. 构建并启动六服务生产栈
+docker compose up -d --build
 ```
 
 ### 访问地址
@@ -274,16 +280,17 @@ docker compose up -d
 
 所有配置通过 `.env` 文件管理。复制 `.env.example` 并填入你的值。
 
-| 变量 | 说明 | 默认值 |
+| 变量 | 说明 | 示例/默认值 |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | LLM 提供商：`deepseek`、`gemini`、`claude` | `deepseek` |
-| `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | *(必填)* |
-| `LLM_MODEL` | 所选提供商的模型名称 | `deepseek-v4-flash` |
+| `APP_VERSION` | 运行时版本 | `8.2.0` |
+| `AUTH_SECRET_KEY` | JWT 签名密钥，生产环境必须设置 | 无默认值 |
+| `POSTGRES_PASSWORD` | PostgreSQL 密码，生产环境必须替换 | `change-me-before-production` |
+| `REDIS_PASSWORD` | Redis 密码，生产环境必须替换 | `change-me-before-production` |
+| `POSTGRES_USER` | PostgreSQL 用户 | `financial` |
+| `POSTGRES_DB` | PostgreSQL 数据库 | `financial_rag` |
 | `CHROMA_HOST` | ChromaDB 服务主机名 | `chromadb` |
 | `CHROMA_PORT` | ChromaDB 服务端口 | `8000` |
-| `DATABASE_URL` | SQLite 数据库路径 | `sqlite:///./data/financial_rag.db` |
-| `VITE_API_BASE_URL` | 前端 API 基础 URL | `/api` |
-| `VITE_ENABLE_MOCK` | 启用 mock API 响应 | `false` |
+| `CORS_ORIGINS` | 允许访问 API 的前端来源 | 按部署环境设置 |
 
 完整可配置选项列表请参见 [`.env.example`](.env.example)。
 
@@ -295,7 +302,7 @@ docker compose up -d
 
 ```bash
 pip install -r requirements.txt
-uvicorn api.app:app --reload --port 8000
+uvicorn api.main:app --reload --port 8000
 ```
 
 ### 前端 (React + Vite)
@@ -315,10 +322,11 @@ pytest
 ### CI/CD
 
 GitHub Actions 在每次 push 和 PR 时运行：
-- 代码检查（flake8, ruff）
-- 类型检查（mypy）
-- 测试套件（pytest）
-- 前端构建（npm run build）
+- Ruff 生产代码检查
+- pytest 单元、集成与覆盖率门禁（不低于 85%）
+- 确定性 Evaluation 与 MCP 官方 SDK 契约验证
+- 前端 API 契约测试与 TypeScript/Vite 生产构建
+- Docker Compose 配置、镜像构建与容器导入检查
 
 ---
 
@@ -363,7 +371,7 @@ V8.2.0 → Financial AI Copilot 发布对齐
 
 ### LLM Provider 抽象层
 
-工厂模式：`ProviderFactory.create(config)` → `ProviderRegistry.get(name)` → `BaseProvider.chat()`。SDK 调用与业务逻辑清晰分离。DeepSeek（生产）、Gemini（已支持）、Claude（已预留）。
+工厂模式：`ProviderFactory.create(config)` → `ProviderRegistry.get(name)` → `BaseProvider.chat()`。SDK 调用与业务逻辑清晰分离，支持 DeepSeek、Gemini、OpenAI、Anthropic Claude 与豆包，并通过用户级加密 BYOK 设置进行选择。
 
 ### 可插拔运行时能力
 
@@ -388,11 +396,11 @@ Redis Streams 消息队列，支持 Consumer Group 和 Worker Pool。支持水�
 | 文档 | 说明 |
 |----------|-------------|
 | [系统架构](docs/ARCHITECTURE.md) | 详细架构、多租户安全、异步任务系统 |
-| [系统设计（面试）](docs/interview/SYSTEM_DESIGN.md) | 为什么用 RAG、为什么用 Redis Streams、扩展策略 |
-| [技术决策](docs/interview/TECH_DECISIONS.md) | 为什么选 FastAPI、React、ChromaDB、Redis Streams |
-| [面试 FAQ](docs/interview/FAQ.md) | 常见面试问题与答案 |
 | [部署架构](docs/DEPLOYMENT_ARCHITECTURE.md) | Docker、网络和生产部署 |
+| [运维手册](docs/OPERATIONS.md) | 启停、健康检查、备份与恢复 |
+| [AI 工程指南](docs/AI_ENGINEERING_GUIDE.md) | Agent、RAG、MCP、Evaluation 与训练扩展 |
 | [演示脚本](docs/demo/demo-script.md) | 所有功能的逐步操作指南 |
+| [V8.2.0 发布说明](docs/releases/v8.2.0.md) | 当前正式版本的功能、升级与限制说明 |
 
 ---
 

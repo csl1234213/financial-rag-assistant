@@ -1,5 +1,7 @@
 # Financial Agent Runtime Assistant V8.2.0
 
+**Languages:** **English** | [简体中文](README_CN.md)
+
 [![CI](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/csl1234213/financial-rag-assistant/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](https://github.com/csl1234213/financial-rag-assistant)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
@@ -137,7 +139,7 @@ This design separates strategic decision-making from step-level execution, enabl
 
 | Category | Technology |
 |---|---|
-| Language | Python 3.11 |
+| Language | Python 3.12 |
 | API Framework | FastAPI |
 | Vector Database | ChromaDB |
 | LLM Provider | DeepSeek (primary), Gemini (supported) |
