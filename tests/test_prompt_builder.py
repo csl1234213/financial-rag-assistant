@@ -225,6 +225,9 @@ class TestPromptRules:
         assert "financial analyst" in PROMPT_RULES
         assert "Evidence" in PROMPT_RULES
         assert "invent facts" in PROMPT_RULES
+        assert "every number" in PROMPT_RULES
+        assert "internal English representation" in PROMPT_RULES
+        assert "final answer" in PROMPT_RULES
 
     def test_grounded_prompts_use_new_immutable_versions(self):
         assert FINANCIAL_RAG_PROMPT_VERSION == "2.2.0"

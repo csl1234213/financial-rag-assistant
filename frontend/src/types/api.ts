@@ -147,4 +147,5 @@ export interface ChatMessage {
   content: string;
   response?: ChatResponse;
   citationNamespace?: string;
+  durationMs?: number;
 }

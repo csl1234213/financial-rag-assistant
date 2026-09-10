@@ -6,6 +6,7 @@ import { UploadPanel } from '../components/knowledge/UploadPanel';
 import {
   deleteDocument,
   getDocuments,
+  getDocumentQuota,
   refreshKnowledge,
   uploadDocument,
 } from '../api/knowledge';
@@ -13,9 +14,11 @@ import { ApiClientError } from '../api/client';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Icon } from '../components/ui/Icon';
 import type { KnowledgeDocument } from '../types/knowledge';
+import type { DocumentQuota } from '../api/knowledge';
 
 export function Knowledge() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [quota, setQuota] = useState<DocumentQuota | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +32,7 @@ export function Knowledge() {
     try {
       const docs = await getDocuments();
       setDocuments(docs);
+      setQuota(await getDocumentQuota());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t.knowledge.connectionError;
       setError(message);
@@ -47,6 +51,7 @@ export function Knowledge() {
     try {
       const docs = await refreshKnowledge();
       setDocuments(docs);
+      setQuota(await getDocumentQuota());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t.knowledge.connectionError;
       setError(message);
@@ -96,6 +101,7 @@ export function Knowledge() {
     try {
       await deleteDocument(document.id);
       setDocuments((current) => current.filter((item) => item.id !== document.id));
+      setQuota(await getDocumentQuota());
       setNotice(t.knowledge.deleteSuccess(document.filename));
     } catch (err: unknown) {
       const message = err instanceof Error
@@ -186,6 +192,13 @@ export function Knowledge() {
           </main>
 
           <aside className="knowledge-sidebar">
+            {quota && (
+              <p role="status">
+                {language === 'zh-CN'
+                  ? `已用 ${quota.used} / ${quota.limit} 份（删除文档后释放额度）`
+                  : `${quota.used} / ${quota.limit} documents used (deleting frees capacity)`}
+              </p>
+            )}
             <UploadPanel onUploadSuccess={handleUpload} />
           </aside>
         </div>

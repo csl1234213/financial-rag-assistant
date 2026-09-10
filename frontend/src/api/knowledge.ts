@@ -13,6 +13,15 @@ import { MOCK_DOCUMENTS } from '../types/knowledge';
 import type { KnowledgeDocument } from '../types/knowledge';
 
 const knowledgeEndpoint = '/v1/knowledge';
+export interface DocumentQuota {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export function getDocumentQuota(): Promise<DocumentQuota> {
+  return getJson<DocumentQuota>(`${knowledgeEndpoint}/quota`);
+}
 const knowledgeUploadEndpoint = '/v1/upload';
 const taskEndpoint = (taskId: string) => `/v1/tasks/${taskId}`;
 

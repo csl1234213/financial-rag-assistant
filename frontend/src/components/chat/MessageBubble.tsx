@@ -9,6 +9,7 @@ interface MessageBubbleProps {
   citationNamespace?: string;
   loading?: boolean;
   loadingText?: string;
+  durationMs?: number;
 }
 
 export function MessageBubble({
@@ -18,6 +19,7 @@ export function MessageBubble({
   citationNamespace,
   loading = false,
   loadingText,
+  durationMs,
 }: MessageBubbleProps) {
   const { t } = useLanguage();
   const roleLabel = role === 'user' ? t.chat.user : t.chat.assistant;
@@ -50,6 +52,11 @@ export function MessageBubble({
         <span className="message__role">
           {roleLabel}
         </span>
+        {role === 'assistant' && durationMs !== undefined && (
+          <span className="message__time">
+            用时 {(durationMs / 1000).toFixed(1)} 秒
+          </span>
+        )}
       </div>
       <div className="message__body">
         {role === 'assistant'

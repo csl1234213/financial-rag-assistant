@@ -6,6 +6,7 @@ from typing import Any, Sequence
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT))
 
+#agent 执行组件
 from agent.agent_runtime import AgentRuntime
 from agent.execution import strategies as _builtin_execution_strategies  # noqa: F401
 from agent.execution.execution_dispatcher import ExecutionDispatcher
@@ -335,13 +336,17 @@ def run_rag(
             provider=result.provider_instance,
             system_prompt=get_prompt_system_prompt(prompt_name),
         )
+        if not str(answer).strip():
+            answer = _empty_answer_for_question(question)
         return RAGResult(
             report=answer,
-            citations=result.citations,
-            context=result.context,
+            # Direct chat is not evidence-grounded retrieval.  Do not expose
+            # incidental planner evidence as financial citations.
+            citations=[],
+            context="",
             research_mode=research_mode,
             intent=result.intent_result,
-            evidence=result.evidence,
+            evidence=[],
             plan=result.plan,
             routing=result.routing,
             planning=result.planning,
@@ -384,7 +389,7 @@ def run_rag(
             workflow=result.workflow,
         )
 
-    if len(result.citations) == 0:
+    if len(result.citations) == 0:     #计算结果长度
         return RAGResult(
             report="No relevant evidence found in uploaded documents.",
             citations=[],
@@ -404,6 +409,8 @@ def run_rag(
         provider=result.provider_instance,
         system_prompt=get_prompt_system_prompt(prompt_name),
     )
+    if not str(answer).strip():
+        answer = _empty_answer_for_question(question)
 
     evidence_stats = analyze_evidence(result.citations)
 
@@ -425,4 +432,19 @@ def run_rag(
         planning=result.planning,
         execution=result.execution,
         workflow=result.workflow,
+    )
+
+
+def _empty_answer_for_question(question: str) -> str:
+    """Return a user-visible answer when a provider returns an empty body."""
+
+    if any("\u3400" <= char <= "\u9fff" for char in str(question)):
+        return (
+            "当前模型未返回可用内容。已完成检索，但没有获得足够的有效回答。"
+            "请缩小问题范围，或补充对应公司的财报与期间。"
+        )
+    return (
+        "The model returned no usable content. Retrieval completed, but the "
+        "answer was empty. Please narrow the question or provide the relevant "
+        "company filing and reporting period."
     )

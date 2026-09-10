@@ -991,6 +991,13 @@
   text-transform: none;
 }
 
+.message__time {
+  margin-left: 0.5rem;
+  color: var(--text-muted, #64748b);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .message__body,
 .message--assistant .message__body {
   min-width: 0;

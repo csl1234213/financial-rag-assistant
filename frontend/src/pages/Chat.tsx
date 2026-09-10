@@ -163,6 +163,7 @@ export function Chat({
 
   const handleSend = useCallback(
     async (question: string) => {
+      const startedAt = performance.now();
       const turnId = crypto.randomUUID();
       const userMessage: ChatMessage = {
         id: turnId,
@@ -195,6 +196,7 @@ export function Chat({
             id: crypto.randomUUID(),
             role: 'assistant',
             content: report,
+            durationMs: performance.now() - startedAt,
             response: apiResponse,
             citationNamespace: `chat-turn-${turnId}`,
           },
@@ -208,6 +210,7 @@ export function Chat({
             id: crypto.randomUUID(),
             role: 'assistant',
             content: `${t.chat.connectionError}：${detail}`,
+            durationMs: performance.now() - startedAt,
           },
         ]);
       } finally {

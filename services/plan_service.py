@@ -1,10 +1,12 @@
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from core.usage_events import UsageEvent
+from models.document import Document
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.usage import UsageRecord
@@ -12,6 +14,45 @@ from models.usage import UsageRecord
 logger = logging.getLogger(__name__)
 
 DEFAULT_PLAN_SLUG = "free"
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def chat_plan_limits_enabled() -> bool:
+    """Read the chat quota switch with a safe, fail-closed default."""
+    raw = os.environ.get("CHAT_PLAN_LIMITS_ENABLED")
+    if raw is None or raw.strip().lower() in _TRUE_VALUES:
+        return True
+    if raw.strip().lower() in _FALSE_VALUES:
+        return False
+    logger.warning("Invalid CHAT_PLAN_LIMITS_ENABLED value; keeping chat limits enabled")
+    return True
+
+
+def _evaluation_bypass_enabled() -> bool:
+    return os.environ.get("EVALUATION_BYPASS_PLAN_LIMITS", "false").strip().lower() in _TRUE_VALUES
+
+
+def _evaluation_tenant_ids() -> set[int]:
+    values: set[int] = set()
+    for raw in os.environ.get("EVALUATION_BYPASS_TENANT_IDS", "").split(","):
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        try:
+            values.add(int(candidate))
+        except ValueError:
+            logger.warning("Ignoring invalid evaluation tenant id")
+    return values
+
+
+def should_bypass_plan_limit(tenant_id: int, *, context: str = "evaluation") -> bool:
+    """Allow only explicitly configured evaluation tenants to bypass chat limits."""
+    return (
+        context == "evaluation"
+        and _evaluation_bypass_enabled()
+        and tenant_id in _evaluation_tenant_ids()
+    )
 
 
 def _get_default_plan(db: Session) -> Optional[Plan]:
@@ -73,7 +114,18 @@ def can_upload(db: Session, tenant_id: int) -> bool:
     return check_plan_limit(db, tenant_id, UsageEvent.DOCUMENT_UPLOAD, "documents")
 
 
+def get_document_quota(db: Session, tenant_id: int) -> dict[str, int]:
+    """Current holdings consume capacity; historical usage remains audit-only."""
+    limit = _get_tenant_plan(db, tenant_id).max_documents
+    used = db.query(Document).filter(Document.tenant_id == tenant_id).count()
+    return {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+
+
 def can_chat(db: Session, tenant_id: int) -> bool:
+    if not chat_plan_limits_enabled():
+        return True
+    if should_bypass_plan_limit(tenant_id):
+        return True
     return check_plan_limit(db, tenant_id, UsageEvent.CHAT_REQUEST, "chats")
 
 
@@ -86,16 +138,8 @@ def check_plan_limit(
     plan = _get_tenant_plan(db, tenant_id)
 
     if limit_type == "documents":
-        limit = plan.max_documents
-        count = (
-            db.query(UsageRecord)
-            .filter(
-                UsageRecord.tenant_id == tenant_id,
-                UsageRecord.event_type == event_type,
-            )
-            .count()
-        )
-        return count < limit
+        quota = get_document_quota(db, tenant_id)
+        return quota["used"] < quota["limit"]
 
     if limit_type == "chats":
         today_start = datetime.now(timezone.utc).replace(

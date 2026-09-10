@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from api.app import app
 from core.usage_events import ResourceType, UsageEvent
+from models.document import Document
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.tenant import Tenant
@@ -265,6 +266,7 @@ class TestPlanService:
     def test_can_upload_at_limit(self, db_session, tenant):
         initialize_default_plans(db_session)
         for _ in range(10):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"{_}.pdf"))
             record_usage(
                 tenant_id=tenant.id,
                 event_type=UsageEvent.DOCUMENT_UPLOAD,
@@ -312,6 +314,7 @@ class TestPlanService:
         db_session.commit()
 
         for _ in range(2):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"{_}.pdf"))
             record_usage(
                 tenant_id=tenant.id,
                 event_type=UsageEvent.DOCUMENT_UPLOAD,
@@ -321,6 +324,7 @@ class TestPlanService:
             )
         assert can_upload(db=db_session, tenant_id=tenant.id) is True
 
+        db_session.add(Document(tenant_id=tenant.id, filename="third.pdf"))
         record_usage(
             tenant_id=tenant.id,
             event_type=UsageEvent.DOCUMENT_UPLOAD,
@@ -364,6 +368,7 @@ class TestTenantIsolation:
         db_session.refresh(tenant_b)
 
         for _ in range(10):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"{_}.pdf"))
             record_usage(
                 tenant_id=tenant.id,
                 user_id=user.id,
@@ -452,6 +457,7 @@ class TestUploadLimitEnforcement:
     def test_upload_at_limit_returns_429(self, client, tenant, db_session, auth_headers):
         initialize_default_plans(db_session)
         for _ in range(10):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"{_}.pdf"))
             record_usage(
                 tenant_id=tenant.id,
                 event_type=UsageEvent.DOCUMENT_UPLOAD,

@@ -24,6 +24,12 @@ Rules:
 4. Write the complete response in the same language as the QUESTION.
    Determine the response language from the QUESTION, not from the Evidence
    or conversation history.
+   When the QUESTION is Chinese and the Evidence is English, translate the
+   question and evidence into an internal English representation first,
+   complete the evidence-grounded analysis in English, then translate only
+   the final answer back to Chinese. Preserve every number, period, unit,
+   company name, qualifier, and citation marker. Do not substitute facts from
+   memory or from another language's conversation history.
 5. If the Evidence does not contain enough information, state that clearly
    in the same language as the QUESTION.
 6. When making a statement, cite the Evidence number.
@@ -106,6 +112,10 @@ Requirements:
 - Never invent facts.
 - Never use external knowledge.
 - Write all response headings and prose in the same language as the QUESTION.
+- For Chinese questions with English evidence, internally translate the
+  question/evidence to English before reasoning, then translate the final
+  answer to Chinese. Preserve figures, periods, units, entities, uncertainty,
+  and citation markers exactly.
 - Cite evidence numbers.
 - Keep citation markers exactly as [Evidence N], regardless of response language.
 - Prefer numerical facts.
@@ -125,6 +135,11 @@ If evidence is insufficient, state that clearly.
 Do NOT invent facts.
 Write the complete response in the same language as the QUESTION.
 When evidence is insufficient, state that in the QUESTION's language.
+When the QUESTION is Chinese and the evidence is English, translate the
+ question and evidence into English before reasoning, then translate the
+ final answer back to Chinese. Preserve every number, period, unit, company
+ name, qualifier, and citation marker; never replace evidence with remembered
+ facts.
 Keep evidence citation markers exactly as [Evidence N].
 
 ==================================================
@@ -147,7 +162,9 @@ RETRIEVED EVIDENCE
 
 ==================================================
 
-Compare the companies using EXACTLY the following format.
+Compare the companies using the following structure. When the QUESTION is
+Chinese, translate every heading and every section label into Chinese; do not
+copy the English template labels into the final answer.
 
 # 1. Business Strategy
 

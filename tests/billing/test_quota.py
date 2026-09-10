@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from billing.plans import get_plan_limits
 from billing.service import check_quota
+from models.document import Document
 from models.plan import Plan
 from models.subscription import TenantSubscription
 from models.tenant import Tenant
@@ -155,6 +156,7 @@ class TestQuotaFree:
 
         limits = get_plan_limits("free")
         for _ in range(limits.max_documents):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"{_}.pdf"))
             record = UsageRecord(
                 tenant_id=tenant.id,
                 event_type="document_upload",
@@ -166,6 +168,21 @@ class TestQuotaFree:
 
         allowed, msg = check_quota(db_session, tenant.id, "document")
         assert allowed is False
+
+        from services.plan_service import can_upload, get_document_quota
+
+        assert can_upload(db_session, tenant.id) is False
+        document = db_session.query(Document).filter_by(tenant_id=tenant.id).first()
+        db_session.delete(document)
+        db_session.commit()
+        assert can_upload(db_session, tenant.id) is True
+        assert check_quota(db_session, tenant.id, "document")[0] is True
+        assert get_document_quota(db_session, tenant.id) == {
+            "used": 9, "limit": 10, "remaining": 1,
+        }
+        assert db_session.query(UsageRecord).filter_by(
+            tenant_id=tenant.id, event_type="document_upload",
+        ).count() == 10
 
 
 class TestQuotaPro:

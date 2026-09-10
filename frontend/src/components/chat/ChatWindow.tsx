@@ -237,6 +237,7 @@ export function ChatWindow({
               content={msg.content}
               response={msg.response}
               citationNamespace={msg.citationNamespace}
+              durationMs={msg.durationMs}
             />
           ))}
 

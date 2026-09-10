@@ -11,6 +11,7 @@ from auth.dependencies import get_current_user
 from models.document import Document
 from models.task import Task, TaskStatus, TaskType
 from models.user import User
+from services.plan_service import get_document_quota
 from storage.chroma_store import ChromaEmbeddingStore
 from storage.database import get_db
 
@@ -18,6 +19,14 @@ router = APIRouter(tags=["Knowledge"])
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "storage/uploads"))
+
+
+@router.get("/knowledge/quota")
+def document_quota(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_document_quota(db, current_user.tenant_id)
 
 
 def _document_item(

@@ -71,23 +71,11 @@ def _check_document_quota(
     db: Session,
     tenant_id: int,
 ) -> Tuple[bool, str]:
-    plan_slug = _get_tenant_plan_slug(db, tenant_id)
-    limits = get_plan_limits(plan_slug)
+    from services.plan_service import get_document_quota
 
-    if is_enterprise(plan_slug):
-        return True, ""
-
-    count = (
-        db.query(UsageRecord)
-        .filter(
-            UsageRecord.tenant_id == tenant_id,
-            UsageRecord.event_type == "document_upload",
-        )
-        .count()
-    )
-
-    if count >= limits.max_documents:
-        return False, f"Document upload limit ({limits.max_documents}) exceeded"
+    quota = get_document_quota(db, tenant_id)
+    if quota["used"] >= quota["limit"]:
+        return False, f"Document upload limit ({quota['limit']}) exceeded"
     return True, ""
 
 
