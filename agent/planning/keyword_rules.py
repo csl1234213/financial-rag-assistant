@@ -7,6 +7,9 @@
 # 3. Keywords can be reviewed and tuned independently
 # ============================================================
 
+import re
+
+from .entity_extractor import extract_companies
 from .task_enums import TaskType
 
 # =========================
@@ -46,6 +49,8 @@ DOCUMENT_QA_KEYWORDS = [
     "annual reports",
     "financial report",
     "financial statement",
+    "financial performance",
+    "财务表现",
     "filing",
     "财报",
     "年报",
@@ -123,8 +128,37 @@ _PRIORITY_ORDER = [
     (TaskType.RESEARCH, RESEARCH_KEYWORDS),
 ]
 
+_CONCEPT_PREFIX = re.compile(
+    r"^(?:please\s+)?(?:(?:what (?:is|are)\b)|what does\b.*\bmean\b|explain\b|define\b|describe the difference\b)"
+    r"|^(?:请)?(?:什么是|什么叫|解释|说明|简单解释|用简单|简单说)"
+)
+_SOURCE_REFERENCE = re.compile(
+    r"\b(?:reports?|filings?|documents?|uploaded|10-[kq])\b|财报|财务报告|年报|季报|上传|文档"
+)
+_PERIOD_REFERENCE = re.compile(
+    r"\bq[1-4]\b|\b(?:fy|fiscal)\s*\d{2,4}\b|\b(?:first|second|third|fourth)\s+quarter\b"
+    r"|第[一二三四1-4]季度|季度|年度"
+)
+_BUSINESS_PERFORMANCE = re.compile(
+    r"\b(?:business|performance|growth|drivers?|segments?|financially|datacentre|datacenter)\b"
+    r"|data[ -]cent(?:er|re)|业务|表现|业绩|增长|动力|驱动|发展"
+)
+
+
+def is_company_performance_question(question_lower: str) -> bool:
+    return bool(_BUSINESS_PERFORMANCE.search(question_lower))
+
 
 def classify_by_keyword(question_lower: str) -> tuple[TaskType, str | None]:
+    # A definition is not document QA merely because it mentions a financial
+    # metric. Explicit companies or source references still require evidence.
+    if (
+        _CONCEPT_PREFIX.search(question_lower.strip())
+        and not extract_companies(question_lower)
+        and not _SOURCE_REFERENCE.search(question_lower)
+        and not _PERIOD_REFERENCE.search(question_lower)
+    ):
+        return TaskType.CHAT, "general concept"
     for task_type, keywords in _PRIORITY_ORDER:
         for kw in keywords:
             if kw in question_lower:

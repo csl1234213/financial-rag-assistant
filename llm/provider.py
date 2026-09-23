@@ -22,12 +22,15 @@
 from config import (
     LLM_API_KEY,
     LLM_BASE_URL,
+    LLM_CONNECT_TIMEOUT,
     LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_PROVIDER,
+    LLM_READ_TIMEOUT,
     LLM_STREAM,
     LLM_TEMPERATURE,
     LLM_TIMEOUT,
+    LLM_TOTAL_DEADLINE,
 )
 
 from .adapters.claude_provider import ClaudeProvider
@@ -40,6 +43,7 @@ from .providers.base_provider import BaseProvider
 from .providers.provider_config import ProviderConfig
 from .providers.provider_models import ChatRequest
 from .providers.provider_registry import ProviderRegistry
+from .usage import record_failed_usage, record_usage
 
 # Register providers at import time
 ProviderRegistry.register("deepseek", DeepSeekProvider)
@@ -59,6 +63,9 @@ def _build_config() -> ProviderConfig:
         max_tokens=LLM_MAX_TOKENS,
         timeout=LLM_TIMEOUT,
         stream=LLM_STREAM,
+        connect_timeout=LLM_CONNECT_TIMEOUT,
+        read_timeout=LLM_READ_TIMEOUT,
+        total_deadline=LLM_TOTAL_DEADLINE,
     )
 
 
@@ -67,6 +74,7 @@ def call_llm(
     *,
     provider: BaseProvider | None = None,
     system_prompt: str = "You are a professional financial analyst.",
+    deadline: float | None = None,
 ) -> str:
     """Generate through the provider selected by the runtime when supplied."""
     if provider is None:
@@ -77,6 +85,12 @@ def call_llm(
         system_prompt=system_prompt,
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,
+        deadline=deadline,
     )
-    response = provider.chat(request)
+    try:
+        response = provider.chat(request)
+    except Exception:
+        record_failed_usage(provider.provider_name, getattr(provider, "model", "unknown"))
+        raise
+    record_usage(response)
     return response.content

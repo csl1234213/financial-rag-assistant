@@ -43,6 +43,7 @@ class ChatRequest:
     temperature: float = 0.0
     max_tokens: int | None = None
     system_prompt: str | None = None
+    deadline: float | None = None
 
 
 @dataclass

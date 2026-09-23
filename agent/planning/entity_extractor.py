@@ -10,10 +10,22 @@ import re
 
 _COMPANY_MAP = {
     "apple": "Apple",
+    "iphone maker": "Apple",
     "苹果": "Apple",
     "tesla": "Tesla",
+    "ev maker": "Tesla",
+    "electric vehicle maker": "Tesla",
     "特斯拉": "Tesla",
+    "电动车公司": "Tesla",
+    "电动汽车公司": "Tesla",
     "nvidia": "NVIDIA",
+    "chip company": "NVIDIA",
+    "gpu company": "NVIDIA",
+    "gpu maker": "NVIDIA",
+    "gpu 的公司": "NVIDIA",
+    "gpu的公司": "NVIDIA",
+    "gpu 厂商": "NVIDIA",
+    "gpu厂商": "NVIDIA",
     "英伟达": "NVIDIA",
     "amd": "AMD",
     "超威": "AMD",
@@ -79,6 +91,22 @@ _COMPANY_MAP = {
 }
 
 _YEAR_PATTERN = re.compile(r"\b(20[012]\d)\b")
+_APPLE_PRODUCT_COMPANY_HINT = re.compile(
+    r"\biphone\b.{0,15}\b(?:maker|manufacturer|company)\b|"
+    r"(?:做|生产|制造)?\s*i\s*phone.{0,12}(?:的)?\s*(?:公司|厂商|企业)",
+    re.IGNORECASE,
+)
+_FOLLOWUP_REFERENCE_PATTERN = re.compile(
+    r"^\s*(?:what|which)\s+(?:was|is|were|are)\s+the\s+"
+    r"(?:main|primary|key)\s+(?:growth\s+)?drivers?\s*[?.!]*$|"
+    r"\b(?:it|its|they|their|them|this|that|those|same|there|now)\b|"
+    r"^\s*(?:(?:what|how)\s+about|and|also)\b|\bcompare\s+it\b|"
+    r"^\s*(?:focus(?:\s+only)?(?:\s+on)?|concentrate\s+on|elaborate\s+on|"
+    r"expand\s+on|tell\s+me\s+more\s+about)\b|"
+    r"^\s*(?:只(?:重点)?(?:分析|讨论|关注|聚焦|看|比较)|重点(?:分析|讨论|关注|聚焦))|"
+    r"它(?:的)?|那份|这份|同一(?:家公司|份)|现在(?:再)?|那么|继续",
+    re.IGNORECASE,
+)
 
 
 def extract_companies(question: str) -> list[str]:
@@ -91,7 +119,48 @@ def extract_companies(question: str) -> list[str]:
             seen.add(name)
             result.append(name)
 
+    # A product mention alone (for example, “What is an iPhone?”) is not a
+    # company scope. Resolve Apple only when the wording identifies the maker.
+    if "Apple" not in seen and _APPLE_PRODUCT_COMPANY_HINT.search(question):
+        seen.add("Apple")
+        result.append("Apple")
+
+    for ticker, name in {"aapl": "Apple", "tsla": "Tesla", "nvda": "NVIDIA"}.items():
+        if re.search(rf"\b{ticker}\b", lower) and name not in seen:
+            seen.add(name)
+            result.append(name)
+
     return result
+
+
+def prior_user_context_for_followup(
+    question: str,
+    history: list[dict] | None,
+) -> tuple[str, list[str]] | None:
+    """Return the latest entity-bearing user request for a referential follow-up.
+
+    Assistant messages are deliberately ignored: their text may mention other
+    companies or periods than the user asked about, and must not silently
+    change the retrieval scope of a later pronoun such as “it” / “它”. A prior
+    standalone user question without an entity is a topic boundary; do not scan
+    past it and resurrect an older company. Entityless referential turns may be
+    followed backward until the nearest topic boundary or entity-bearing turn.
+    """
+
+    if not _FOLLOWUP_REFERENCE_PATTERN.search(question or ""):
+        return None
+    for message in reversed(history or []):
+        if not isinstance(message, dict) or str(message.get("role", "")).casefold() != "user":
+            continue
+        content = str(message.get("content", "")).strip()
+        if not content:
+            continue
+        companies = extract_companies(content)
+        if companies:
+            return content, companies
+        if not _FOLLOWUP_REFERENCE_PATTERN.search(content):
+            return None
+    return None
 
 
 def extract_years(question: str) -> list[str]:

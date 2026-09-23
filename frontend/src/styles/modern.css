@@ -678,7 +678,7 @@
 
 .chat-window-shell {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
   width: min(100%, 920px);
   min-width: 0;

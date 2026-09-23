@@ -2,13 +2,10 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
-  useState,
 } from 'react';
 import { MessageBubble } from './MessageBubble';
 import {
   getChatScrollState,
-  getPageScrollDelta,
-  type ChatScrollDirection,
   type ChatScrollState,
 } from './chatScroll';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -56,9 +53,6 @@ export function ChatWindow({
     messageCount: messages.length,
     lastMessageId: messages.at(-1)?.id ?? null,
   });
-  const [scrollState, setScrollState] = useState<ChatScrollState>(
-    INITIAL_SCROLL_STATE,
-  );
   const isEmpty = messages.length === 0;
   const resolvedLoadingText = loadingText ?? t.chat.loading;
   const resolvedEmptyTitle = emptyTitle ?? t.chat.emptyTitle;
@@ -71,17 +65,6 @@ export function ChatWindow({
     }
 
     const nextState = getChatScrollState(viewport);
-    setScrollState((currentState) => {
-      if (
-        currentState.hasOverflow === nextState.hasOverflow
-        && currentState.canScrollUp === nextState.canScrollUp
-        && currentState.canScrollDown === nextState.canScrollDown
-        && currentState.isNearBottom === nextState.isNearBottom
-      ) {
-        return currentState;
-      }
-      return nextState;
-    });
 
     if (trackReaderPosition) {
       shouldFollowLatestRef.current = nextState.isNearBottom;
@@ -93,21 +76,6 @@ export function ChatWindow({
   const handleScroll = useCallback(() => {
     syncScrollState(true);
   }, [syncScrollState]);
-
-  const scrollByPage = useCallback((direction: ChatScrollDirection) => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const reduceMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches;
-    viewport.scrollBy({
-      top: getPageScrollDelta(viewport.clientHeight, direction),
-      behavior: reduceMotion ? 'auto' : 'smooth',
-    });
-  }, []);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -202,7 +170,7 @@ export function ChatWindow({
             <div className="chat-landing">
               <div className="chat-landing__hero">
                 <span className="chat-landing__icon" aria-hidden="true">
-                  <Icon name="ledger" />
+                  <Icon name="financial-research" />
                 </span>
                 <h1 className="chat-landing__title">{resolvedEmptyTitle}</h1>
                 <p className="chat-landing__subtitle">{resolvedEmptyHint}</p>
@@ -221,7 +189,9 @@ export function ChatWindow({
                         className="chat-landing__demo-chip"
                         onClick={() => onDemoQuestion?.(dq.question)}
                       >
-                        {dq.label}
+                        <Icon name="chat" className="chat-landing__suggestion-icon" />
+                        <span>{dq.label}</span>
+                        <Icon name="chevron-right" className="chat-landing__suggestion-arrow" />
                       </button>
                     ))}
                   </div>
@@ -252,35 +222,6 @@ export function ChatWindow({
         </div>
       </section>
 
-      {messages.length > 0 && scrollState.hasOverflow && (
-        <nav
-          className="chat-scroll-controls"
-          aria-label={t.chat.scrollNavigation}
-        >
-          <button
-            type="button"
-            className="chat-scroll-controls__button"
-            aria-controls="chat-message-viewport"
-            aria-label={t.chat.previousPage}
-            disabled={!scrollState.canScrollUp}
-            onClick={() => scrollByPage('previous')}
-          >
-            <Icon name="chevron-left" />
-            <span>{t.chat.previousPage}</span>
-          </button>
-          <button
-            type="button"
-            className="chat-scroll-controls__button"
-            aria-controls="chat-message-viewport"
-            aria-label={t.chat.nextPage}
-            disabled={!scrollState.canScrollDown}
-            onClick={() => scrollByPage('next')}
-          >
-            <span>{t.chat.nextPage}</span>
-            <Icon name="chevron-right" />
-          </button>
-        </nav>
-      )}
     </div>
   );
 }

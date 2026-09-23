@@ -47,3 +47,4 @@ class ChatResponse(BaseModel):
     planning: Optional[Dict[str, Any]] = None
     execution: Optional[Execution] = None
     workflow: Optional[Workflow] = None
+    usage: Optional[Dict[str, Any]] = None

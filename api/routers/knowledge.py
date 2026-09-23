@@ -31,9 +31,12 @@ def document_quota(
 
 def _document_item(
     document: Document,
-    *,
-    current_user_id: int,
 ) -> dict[str, object]:
+    # Knowledge documents and their quota are workspace-scoped.  Once a row
+    # has passed the tenant filter in ``knowledge_overview``, every member of
+    # that workspace may manage it, including documents uploaded by an older
+    # test account or by a legacy import with no owner.
+    can_delete = True
     return {
         "id": document.id,
         "filename": document.filename,
@@ -44,7 +47,7 @@ def _document_item(
         "byte_size": document.byte_size,
         "content_sha256": document.content_sha256,
         "uploaded_at": document.created_at,
-        "can_delete": document.uploaded_by_user_id == current_user_id,
+        "can_delete": can_delete,
     }
 
 
@@ -156,7 +159,6 @@ def knowledge_overview(
         "items": [
             _document_item(
                 document,
-                current_user_id=current_user.id,
             )
             for document in docs
         ],
@@ -205,15 +207,6 @@ def delete_knowledge_document(
     if document is None:
         # The same response is used for absent and foreign-tenant IDs.
         raise HTTPException(status_code=404, detail="Document not found")
-
-    if (
-        document.uploaded_by_user_id is None
-        or document.uploaded_by_user_id != current_user.id
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have permission to delete this document.",
-        )
 
     document_tasks = _document_tasks(
         db,

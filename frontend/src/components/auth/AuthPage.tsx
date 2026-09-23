@@ -3,6 +3,7 @@ import { loginUser, registerUser } from '../../api/auth';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { AuthUser } from '../../types/auth';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { Icon } from '../ui/Icon';
 
 type AuthMode = 'login' | 'register';
 
@@ -49,7 +50,9 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         <div className="auth-card__language">
           <LanguageSwitcher compact />
         </div>
-        <div className="auth-card__brand" aria-hidden="true">R</div>
+        <div className="auth-card__brand" aria-hidden="true">
+          <Icon name="financial-research" />
+        </div>
         <p className="auth-card__eyebrow">{t.auth.eyebrow}</p>
         <h1 id="auth-title">
           {mode === 'register' ? t.auth.registerTitle : t.auth.loginTitle}

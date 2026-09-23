@@ -1,7 +1,10 @@
 import io
 import time
 
+import pytest
 import requests
+
+pytestmark = pytest.mark.live
 
 
 def _run_upload_task():

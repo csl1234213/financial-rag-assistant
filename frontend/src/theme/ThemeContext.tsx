@@ -21,11 +21,11 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getInitialTheme(): Theme {
   try {
-    return window.localStorage.getItem(THEME_STORAGE_KEY) === 'light'
-      ? 'light'
-      : 'dark';
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 
@@ -42,8 +42,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
+    const freeze = document.createElement('style');
+    freeze.textContent = '*,*::before,*::after{transition:none !important}';
+    document.head.append(freeze);
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
+    void document.body.offsetHeight;
+    const frame = requestAnimationFrame(() => freeze.remove());
+    return () => {
+      cancelAnimationFrame(frame);
+      freeze.remove();
+    };
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);

@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, Optional
 
 from cache.session import session_cache
+from llm.providers.provider_exceptions import ProviderTimeoutError
 from observability.logger import log_agent_request, log_agent_response
 from observability.tracer import finish_trace, node_span, start_trace
 from services.agent_runtime.checkpointing import (
@@ -28,6 +29,7 @@ def run_agent(
     tenant_id: Optional[int] = None,
     user_id: Optional[int] = None,
     company: Optional[str] = None,
+    deadline: float | None = None,
 ) -> Dict[str, Any]:
     t0 = time.time()
     scope_tenant_id = tenant_id or 0
@@ -111,18 +113,21 @@ def run_agent(
                         "durable": checkpointer is not None,
                     },
                 ):
-                    result = agent["run_agent"](
-                        question,
-                        company=company,
-                        thread_id=thread_id,
-                        tenant_id=scope_tenant_id,
-                        user_id=user_id,
-                        history=history,
-                        trace=trace,
-                        checkpointer=checkpointer,
-                        checkpoint_thread_id=checkpoint_thread_id,
-                        llm_settings=llm_settings,
-                    )
+                    graph_kwargs = {
+                        "question": question,
+                        "company": company,
+                        "thread_id": thread_id,
+                        "tenant_id": scope_tenant_id,
+                        "user_id": user_id,
+                        "history": history,
+                        "trace": trace,
+                        "checkpointer": checkpointer,
+                        "checkpoint_thread_id": checkpoint_thread_id,
+                        "llm_settings": llm_settings,
+                    }
+                    if deadline is not None:
+                        graph_kwargs["deadline"] = deadline
+                    result = agent["run_agent"](**graph_kwargs)
 
             duration = round(time.time() - t0, 3)
             output = {
@@ -160,6 +165,7 @@ def run_agent(
                         "trace_id": trace.request_id,
                         "tools_used": output["tools_used"],
                         "quality_score": output["quality_score"],
+                        "duration_ms": duration * 1000,
                     },
                 )
                 output["history"] = _load_history(tenant_id, user_id, thread_id)
@@ -193,6 +199,26 @@ def run_agent(
             )
             return output
 
+        except ProviderTimeoutError:
+            duration = round(time.time() - t0, 3)
+            finish_trace(
+                trace,
+                status="failed",
+                metadata={
+                    "error_type": "provider_timeout",
+                    "duration_ms": duration * 1000,
+                },
+            )
+            log_agent_response(
+                request_id=trace.request_id,
+                tenant_id=tenant_id or 0,
+                thread_id=thread_id,
+                duration_ms=duration * 1000,
+                quality_score=0.0,
+                tools_used=[],
+                error="provider_timeout",
+            )
+            raise
         except Exception as e:
             logger.error(f"LangGraph agent error: {e}", exc_info=True)
             duration = round(time.time() - t0, 3)
@@ -368,6 +394,16 @@ def _fallback_response(question: str, thread_id: str, error: str = "", trace_id:
             "[Provider Configuration Error] AI provider credentials are not "
             "configured on the backend. Contact the deployment administrator "
             "and retry after provider authentication is enabled."
+        )
+    elif "Insufficient balance" in error or "Rate limit exceeded" in error:
+        # A provider/account failure is operationally different from an
+        # Agent Runtime fallback.  Keep the response safe and explicit so
+        # evaluation can distinguish dependency failure from planner/runtime
+        # failure without exposing upstream response bodies.
+        answer = (
+            "[Provider Error] The configured AI provider is temporarily "
+            "unavailable due to account limits. Retry after provider access "
+            "has been restored."
         )
     else:
         answer = (

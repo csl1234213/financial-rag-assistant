@@ -43,6 +43,11 @@ class RuntimeResult:
 
     workflow: Optional[Dict[str, Any]] = None
 
+    # User-visible question remains unchanged; this query includes only safe,
+    # role-checked prior user context needed to resolve a follow-up's entities
+    # and period for retrieval/grounding.
+    resolved_question: Optional[str] = None
+
     memory: Optional[Dict[str, Any]] = None
 
     metrics: Optional["MetricResult"] = None

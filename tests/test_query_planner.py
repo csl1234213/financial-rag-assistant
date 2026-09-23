@@ -13,6 +13,10 @@ from agent.planning import (
     TaskResult,
     TaskType,
 )
+from agent.planning.entity_extractor import (
+    extract_companies,
+    prior_user_context_for_followup,
+)
 from agent.query_planner import QueryPlanner
 
 
@@ -49,6 +53,31 @@ class TestQueryPlanner:
 
         synthesis_step = [t for t in plan.tasks if t.step_type == StepType.SYNTHESIS][0]
         assert compare_step.step_id in synthesis_step.depends_on
+
+    def test_chinese_comparison_followup_builds_retrieval_steps_for_both_companies(self, planner):
+        question = "现在把它跟特斯拉比较一下。"
+        setup = "分析一下苹果这份财报。"
+        followup = prior_user_context_for_followup(
+            question,
+            [{"role": "user", "content": setup}],
+        )
+        assert followup is not None
+        prior_question, inherited_companies = followup
+        resolved_question = (
+            f"{question}\nRelevant prior user request for reference resolution: {prior_question}"
+        )
+        current_companies = extract_companies(question)
+        planned_companies = [*current_companies]
+        planned_companies.extend(
+            company for company in inherited_companies if company not in planned_companies
+        )
+
+        plan, _, _ = planner.plan(
+            PlanningContext(question=resolved_question, companies=planned_companies),
+        )
+
+        retrieve_steps = [step for step in plan.tasks if step.step_type is StepType.RETRIEVE]
+        assert {step.company for step in retrieve_steps} == {"Apple", "Tesla"}
 
     def test_single_company_plan(self, planner):
         context = PlanningContext(

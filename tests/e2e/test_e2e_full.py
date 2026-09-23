@@ -6,8 +6,11 @@ import subprocess
 import time
 import uuid
 
+import fitz
 import pytest
 import requests
+
+pytestmark = pytest.mark.live
 
 BASE = "http://localhost:8000/api/v1"
 RESULTS = []
@@ -98,9 +101,20 @@ def test_login():
 # ============================================================
 task_ids = {}
 
+
+def _valid_pdf(text: str) -> bytes:
+    """Create a minimal one-page, text-bearing PDF for the happy-path E2E."""
+    document = fitz.open()
+    try:
+        page = document.new_page()
+        page.insert_text((72, 72), text)
+        return document.tobytes()
+    finally:
+        document.close()
+
 @pytest.mark.e2e
 def test_upload_pdf():
-    pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\ntrailer<</Size 3/Root 1 0 R>>\n%%EOF"
+    pdf_content = _valid_pdf("Tesla financial report. Revenue: 82.4 billion USD.")
     files = {"file": ("tesla_report.pdf", io.BytesIO(pdf_content), "application/pdf")}
     headers = {"Authorization": f"Bearer {tokens['user_a']}"}
     resp = requests.post(f"{BASE}/upload", files=files, headers=headers)
@@ -170,7 +184,7 @@ def test_tenant_isolation():
     headers_b = {"Authorization": f"Bearer {token_b}"}
 
     # Upload Apple PDF for User B
-    pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\ntrailer<</Size 3/Root 1 0 R>>\n%%EOF"
+    pdf_content = _valid_pdf("Apple financial report. Revenue: 100 billion USD.")
     files = {"file": ("apple_report.pdf", io.BytesIO(pdf_content), "application/pdf")}
     resp = requests.post(f"{BASE}/upload", files=files, headers=headers_b)
     assert resp.status_code == 200, f"Upload B: {resp.status_code} {resp.text}"

@@ -161,8 +161,14 @@ class TestIntentAnalyzerEdgeCases:
 
     def test_unknown_companies_returns_global(self):
         analyzer = IntentAnalyzer()
-        result = analyzer.analyze("Microsoft revenue 2024")
+        result = analyzer.analyze("Acme revenue 2024")
         assert result["intent"] == "GLOBAL_RESEARCH"
+
+    def test_company_in_canonical_entity_catalog_returns_single_company(self):
+        analyzer = IntentAnalyzer()
+        result = analyzer.analyze("Microsoft revenue 2024")
+        assert result["intent"] == "SINGLE_COMPANY"
+        assert result["companies"] == ["Microsoft"]
 
     def test_multiple_companies_without_compare_returns_unknown(self):
         analyzer = IntentAnalyzer()

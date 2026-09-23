@@ -8,6 +8,7 @@ import pytest
 
 from core.core_engine import run_rag
 
+pytestmark = pytest.mark.live
 
 @pytest.mark.e2e
 class TestDirectChatE2E:

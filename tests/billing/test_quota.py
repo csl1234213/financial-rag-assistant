@@ -178,7 +178,7 @@ class TestQuotaFree:
         assert can_upload(db_session, tenant.id) is True
         assert check_quota(db_session, tenant.id, "document")[0] is True
         assert get_document_quota(db_session, tenant.id) == {
-            "used": 9, "limit": 10, "remaining": 1,
+            "used": 9, "limit": 10, "remaining": 1, "bypassed": False,
         }
         assert db_session.query(UsageRecord).filter_by(
             tenant_id=tenant.id, event_type="document_upload",
@@ -186,6 +186,27 @@ class TestQuotaFree:
 
 
 class TestQuotaPro:
+    def test_evaluation_bypass_allows_document_quota_for_listed_tenant(
+        self, db_session, tenant, free_plan, monkeypatch,
+    ):
+        sub = TenantSubscription(
+            tenant_id=tenant.id,
+            plan_id=free_plan.id,
+            status="active",
+        )
+        db_session.add(sub)
+        for index in range(free_plan.max_documents):
+            db_session.add(Document(tenant_id=tenant.id, filename=f"evaluation-{index}.pdf"))
+        db_session.commit()
+
+        monkeypatch.setenv("EVALUATION_BYPASS_PLAN_LIMITS", "true")
+        monkeypatch.setenv("EVALUATION_BYPASS_TENANT_IDS", str(tenant.id))
+
+        from services.plan_service import can_upload
+
+        assert can_upload(db_session, tenant.id) is True
+        assert check_quota(db_session, tenant.id, "document")[0] is True
+
     def test_pro_plan_allows_more(self, db_session, tenant, pro_plan):
         sub = TenantSubscription(
             tenant_id=tenant.id,

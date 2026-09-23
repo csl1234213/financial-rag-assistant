@@ -25,10 +25,13 @@ from config.llm import (
     GEMINI_API_KEY,
     LLM_API_KEY,
     LLM_BASE_URL,
+    LLM_CONNECT_TIMEOUT,
     LLM_MAX_TOKENS,
+    LLM_READ_TIMEOUT,
     LLM_STREAM,
     LLM_TEMPERATURE,
     LLM_TIMEOUT,
+    LLM_TOTAL_DEADLINE,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
 )
@@ -134,4 +137,7 @@ class ModelRouter:
             max_tokens=LLM_MAX_TOKENS,
             timeout=LLM_TIMEOUT,
             stream=LLM_STREAM,
+            connect_timeout=LLM_CONNECT_TIMEOUT,
+            read_timeout=LLM_READ_TIMEOUT,
+            total_deadline=LLM_TOTAL_DEADLINE,
         )

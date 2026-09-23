@@ -1,5 +1,7 @@
 import re
 
+from agent.planning.entity_extractor import extract_companies as _extract_company_entities
+
 # Financial/research keywords that indicate a query is research-oriented
 # rather than a simple chat. Without these, the query is DIRECT_CHAT.
 _RESEARCH_SIGNALS = [
@@ -54,6 +56,15 @@ _RESEARCH_SIGNALS = [
     "经济",
 ]
 
+_GENERAL_CONCEPT_PREFIX = re.compile(
+    r"^(?:please\s+)?(?:(?:what is\b)|what does\b.*\bmean\b|explain\b|define\b|"
+    r"describe the difference\b)"
+    r"|^(?:请)?(?:什么是|什么叫|解释|说明|简单解释|用简单|简单说)"
+)
+_SOURCE_REFERENCE = re.compile(
+    r"\b(?:reports?|filings?|documents?|uploaded|10-[kq])\b|财报|财务报告|年报|季报|上传|文档"
+)
+
 
 class IntentAnalyzer:
     def analyze(self, query: str):
@@ -92,27 +103,22 @@ class IntentAnalyzer:
         return {"intent": "GLOBAL_RESEARCH", "companies": None, "document_ids": None}
 
     def _is_direct_chat(self, query_lower: str) -> bool:
+        # A definition/explanation without a named company or source should
+        # be answered conversationally, even when it contains a financial
+        # term such as "gross margin"/"毛利率".
+        if (
+            _GENERAL_CONCEPT_PREFIX.search(query_lower.strip())
+            and not self._extract_companies(query_lower)
+            and not _SOURCE_REFERENCE.search(query_lower)
+        ):
+            return True
         for signal in _RESEARCH_SIGNALS:
             if signal in query_lower:
                 return False
         return True
 
     def _extract_companies(self, query: str):
-        companies = []
-
-        keywords = {
-            "apple": "Apple",
-            "苹果": "Apple",
-            "tesla": "Tesla",
-            "特斯拉": "Tesla",
-            "nvidia": "NVIDIA",
-            "英伟达": "NVIDIA",
-            "amd": "AMD",
-            "超威": "AMD",
-        }
-
-        for k, v in keywords.items():
-            if k in query.lower():
-                companies.append(v)
-
-        return companies
+        # Keep the runtime intent router aligned with the planner's canonical
+        # aliases; separate maps caused implicit bilingual issuer descriptions
+        # (for example, "iPhone maker") to fall through to direct chat.
+        return _extract_company_entities(query)

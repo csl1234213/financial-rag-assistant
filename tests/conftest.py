@@ -14,6 +14,11 @@ _TEST_RUN_ROOT = Path(
 ).resolve()
 os.environ["FINANCIAL_RAG_TEST_RUN_ROOT"] = str(_TEST_RUN_ROOT)
 os.environ["APP_ENV"] = "test"
+# Do not let a developer's local evaluation allowlist silently bypass the
+# ordinary quota-contract tests. Bypass-specific tests opt in explicitly.
+os.environ["EVALUATION_BYPASS_PLAN_LIMITS"] = "false"
+os.environ["EVALUATION_BYPASS_TENANT_IDS"] = ""
+os.environ["CHAT_PLAN_LIMITS_ENABLED"] = "true"
 os.environ.setdefault("OCR_ENABLED", "false")
 os.environ.setdefault(
     "LLM_CREDENTIAL_ENCRYPTION_KEYS",
@@ -39,6 +44,20 @@ def pytest_configure(config):
         "markers",
         "integration: mark test as integration test"
     )
+    config.addinivalue_line(
+        "markers",
+        "live: requires an explicit real-provider or Docker environment",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    del config
+    if os.environ.get("ALLOW_REAL_PROVIDER", "false").lower() in {"1", "true", "yes"}:
+        return
+    skip_live = pytest.mark.skip(reason="live/provider tests require ALLOW_REAL_PROVIDER=true")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
 
 
 @pytest.fixture(autouse=True)

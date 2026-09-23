@@ -9,6 +9,7 @@ export type IconName =
   | 'clock'
   | 'document'
   | 'folder'
+  | 'financial-research'
   | 'ledger'
   | 'lock'
   | 'logout'
@@ -69,6 +70,13 @@ function IconPaths({ name }: { name: IconName }) {
         <>
           <path d="M3 6.5h7l2 2h9v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z" />
           <path d="M3 10h18" />
+        </>
+      );
+    case 'financial-research':
+      return (
+        <>
+          <path d="M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+          <path d="M14 3v4h4M8 9h3M8 17l3-3 2 1 3-4" />
         </>
       );
     case 'ledger':

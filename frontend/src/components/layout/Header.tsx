@@ -1,4 +1,5 @@
 import { useLanguage } from '../../i18n/LanguageContext';
+import { LanguageSwitcher } from '../LanguageSwitcher';
 
 interface HeaderProps {
   title: string;
@@ -16,9 +17,12 @@ export function Header({ title, subtitle, connected = true }: HeaderProps) {
         <span className="app-header__subtitle">{title}</span>
       </div>
 
-      <div className="app-header__status" aria-label={t.header.systemStatus}>
-        <span className="app-header__status-dot" aria-hidden="true" />
-        {connected ? t.header.connected : t.header.offline}
+      <div className="app-header__tools">
+        <LanguageSwitcher compact />
+        <div className={`app-header__status ${connected ? '' : 'app-header__status--offline'}`} aria-label={t.header.systemStatus}>
+          <span className="app-header__status-dot" aria-hidden="true" />
+          {connected ? t.header.connected : t.header.offline}
+        </div>
       </div>
     </header>
   );

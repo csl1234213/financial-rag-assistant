@@ -13,14 +13,32 @@ import { MOCK_DOCUMENTS } from '../types/knowledge';
 import type { KnowledgeDocument } from '../types/knowledge';
 
 const knowledgeEndpoint = '/v1/knowledge';
+const TASK_POLL_INTERVAL_MS = 4_000;
+const TASK_RATE_LIMIT_RETRY_MS = 6_000;
+const READ_RATE_LIMIT_RETRY_MS = 2_000;
 export interface DocumentQuota {
   used: number;
   limit: number;
   remaining: number;
+  bypassed?: boolean;
+}
+
+async function getKnowledgeJson<TResponse>(path: string): Promise<TResponse> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await getJson<TResponse>(path);
+    } catch (error: unknown) {
+      if (!(error instanceof ApiClientError) || error.status !== 429 || attempt === 2) {
+        throw error;
+      }
+      await wait(READ_RATE_LIMIT_RETRY_MS * (attempt + 1));
+    }
+  }
+  throw new ApiClientError('Knowledge request retry budget exhausted.');
 }
 
 export function getDocumentQuota(): Promise<DocumentQuota> {
-  return getJson<DocumentQuota>(`${knowledgeEndpoint}/quota`);
+  return getKnowledgeJson<DocumentQuota>(`${knowledgeEndpoint}/quota`);
 }
 const knowledgeUploadEndpoint = '/v1/upload';
 const taskEndpoint = (taskId: string) => `/v1/tasks/${taskId}`;
@@ -70,7 +88,7 @@ interface DeleteDocumentResponse {
 
 export async function getDocuments(): Promise<KnowledgeDocument[]> {
   try {
-    const raw = await getJson<unknown>(knowledgeEndpoint);
+    const raw = await getKnowledgeJson<unknown>(knowledgeEndpoint);
     if (isRecord(raw) && Array.isArray(raw.items)) {
       return raw.items
         .map(mapKnowledgeDocument)
@@ -103,14 +121,26 @@ async function waitForTask(taskId: string): Promise<void> {
   const deadline = Date.now() + 120_000;
 
   while (Date.now() < deadline) {
-    const task = await getJson<TaskResponse>(taskEndpoint(taskId));
+    let task: TaskResponse;
+    try {
+      task = await getJson<TaskResponse>(taskEndpoint(taskId));
+    } catch (error: unknown) {
+      // Upload already succeeded at this point. A reverse-proxy 429 while
+      // checking task progress is transient and must not be reported as a
+      // failed document upload.
+      if (error instanceof ApiClientError && error.status === 429) {
+        await wait(TASK_RATE_LIMIT_RETRY_MS);
+        continue;
+      }
+      throw error;
+    }
     if (task.status === 'success') {
       return;
     }
     if (task.status === 'failed') {
       throw new ApiClientError(task.error || 'Document processing failed.');
     }
-    await wait(1_500);
+    await wait(TASK_POLL_INTERVAL_MS);
   }
 
   throw new ApiClientError('Document processing timed out after 120 seconds.');

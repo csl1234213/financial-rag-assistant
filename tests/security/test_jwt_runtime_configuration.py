@@ -14,17 +14,18 @@ def test_auth_secret_prefers_explicit_name(monkeypatch: pytest.MonkeyPatch) -> N
     _clear_auth_environment(monkeypatch)
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "legacy-signing-key")
-    monkeypatch.setenv("AUTH_SECRET_KEY", "explicit-signing-key")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "x" * 32)
 
-    assert jwt._resolve_secret_key() == "explicit-signing-key"
+    assert jwt._resolve_secret_key() == "x" * 32
 
 
-def test_auth_secret_accepts_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auth_secret_rejects_legacy_alias_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_auth_environment(monkeypatch)
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "legacy-signing-key")
 
-    assert jwt._resolve_secret_key() == "legacy-signing-key"
+    with pytest.raises(RuntimeError, match="AUTH_SECRET_KEY"):
+        jwt._resolve_secret_key()
 
 
 def test_auth_secret_rejects_missing_or_placeholder_production_value(
@@ -39,6 +40,24 @@ def test_auth_secret_rejects_missing_or_placeholder_production_value(
     monkeypatch.setenv("AUTH_SECRET_KEY", "change-me-to-a-random-secret-key")
     with pytest.raises(RuntimeError, match="AUTH_SECRET_KEY"):
         jwt._resolve_secret_key()
+
+    monkeypatch.setenv("AUTH_SECRET_KEY", "short")
+    with pytest.raises(RuntimeError, match="AUTH_SECRET_KEY"):
+        jwt._resolve_secret_key()
+
+    monkeypatch.setenv("AUTH_SECRET_KEY", "financial-rag-e2e-secret-key-2026")
+    with pytest.raises(RuntimeError, match="AUTH_SECRET_KEY"):
+        jwt._resolve_secret_key()
+
+
+def test_auth_secret_accepts_explicit_test_secret_outside_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_auth_environment(monkeypatch)
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "test-secret")
+
+    assert jwt._resolve_secret_key() == "test-secret"
 
 
 def test_auth_secret_uses_development_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

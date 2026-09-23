@@ -93,6 +93,63 @@ class TestBuildPrompt:
         assert "prior-year comparison" in prompt
         assert "value is absent" in prompt
 
+    def test_prompt_uses_document_aware_financial_period_rules(self):
+        prompt = build_prompt(
+            "What was Apple's operating cash flow in Q2 2026?",
+            "Three Months Ended | Six Months Ended | Operating cash flow 82,627",
+        )
+        assert "internal evidence ledger" in prompt
+        assert "reporting period" in prompt
+        assert "duration" in prompt
+        assert "three-month and six-month values separate" in prompt
+        assert "filename is never authoritative" in prompt
+        assert "outlook value" in prompt
+
+    def test_prompt_handles_tesla_table_and_nvidia_actual_vs_outlook(self):
+        prompt = build_compare_prompt(
+            "Compare Tesla Q2 2025 revenue with NVIDIA Q1 FY2027 revenue.",
+            "Q4-2024 Q1-2025 Q2-2025 | Q1 actual | Q2 outlook",
+        )
+        assert "exact requested column" in prompt
+        assert "Q4/FY2025" in prompt
+        assert "Q2 outlook is not Q1 actual" in prompt
+        assert "actual/" in prompt
+
+    def test_prompt_limits_repeated_insufficient_evidence_text(self):
+        prompt = build_prompt("Summarize Apple Q2 2026.", "partial evidence")
+        assert "one concise evidence-limitation sentence" in prompt
+        assert "do not repeat" in prompt
+        assert "refusal" in prompt
+
+    def test_prompt_requires_cited_causal_evidence_for_driver_questions(self):
+        prompt = build_prompt(
+            "Why did NVIDIA's Data Center business grow?",
+            "AI-factory and agentic-AI management commentary.",
+        )
+        assert "explicitly cited causal or" in prompt
+        assert "Do not substitute" in prompt
+        assert "correlation or a safe-harbor disclaimer" in prompt
+
+    @pytest.mark.parametrize("question", [
+        "What is Apple's revenue for Q2 2026?",
+        "苹果 2026 年第二季度的营收是多少？",
+    ])
+    def test_metric_fact_has_no_mandatory_report_sections(self, question):
+        prompt = build_prompt(question, "Apple revenue evidence")
+
+        assert "Direct financial answer:" in prompt
+        assert "Answer only the requested metric or fact" in prompt
+        assert "\nRisks\n" not in prompt
+        assert "\nKey Findings\n" not in prompt
+
+    def test_summary_does_not_force_risk_or_outlook_sections(self):
+        prompt = build_prompt("Summarize Apple's Q2 2026 financial results.", "evidence")
+
+        assert "Financial summary:" in prompt
+        assert "supported headline facts" in prompt
+        assert "component rows distinct from financial statement totals" in prompt
+        assert "\nRisks\n" not in prompt
+
     def test_prompt_no_history_section_empty(self):
         prompt = build_prompt(
             question="test",
@@ -184,12 +241,13 @@ class TestBuildComparePrompt:
         )
         assert "Competitive Advantages" in prompt
 
-    def test_compare_prompt_has_risks_section(self):
+    def test_broad_compare_risk_dimension_is_optional(self):
         prompt = build_compare_prompt(
             question="Compare Apple and Tesla",
             context="data",
         )
-        assert "# 5. Risks" in prompt
+        assert "and Risks. These are optional" in prompt
+        assert "Never skip a section" not in prompt
 
     def test_compare_prompt_includes_analyst_role(self):
         prompt = build_compare_prompt(
@@ -215,6 +273,60 @@ class TestBuildComparePrompt:
         assert "Use ONLY the provided context" in prompt
         assert "exactly as [Evidence N]" in prompt
 
+    @pytest.mark.parametrize("question", [
+        "Compare Tesla Q2 2025 revenue with NVIDIA Q1 FY2027 revenue.",
+        "比较特斯拉 2025 年第二季度和英伟达 FY2027 第一季度的营收。",
+        "Compare Apple and NVIDIA gross margins.",
+        "比较苹果和英伟达的毛利率。",
+    ])
+    def test_metric_comparison_has_focused_format(self, question):
+        prompt = build_compare_prompt(question, "Revenue, AI strategy and risks evidence")
+
+        assert "Focused financial comparison:" in prompt
+        assert "Compare only the financial metrics explicitly requested" in prompt
+        assert "reporting period" in prompt
+        assert "unit/currency" in prompt
+        assert "cite both operands" in prompt
+        assert "Business Strategy" not in prompt
+        assert "AI Technology" not in prompt
+        assert "Investment Implications" not in prompt
+        assert "Never skip a section" not in prompt
+
+    def test_chinese_and_english_metric_comparisons_receive_same_scope(self):
+        english = build_compare_prompt("Compare Tesla and NVIDIA revenue.", "context")
+        chinese = build_compare_prompt("比较特斯拉和英伟达的营收。", "context")
+
+        def response_format(prompt):
+            return prompt.split("RESPONSE FORMAT\n", 1)[1]
+
+        assert response_format(english) == response_format(chinese)
+
+    def test_rag_and_compare_routes_both_focus_metric_comparisons(self):
+        question = "Compare Apple's revenue in Q1 and Q2 2026."
+
+        for builder in (build_prompt, build_compare_prompt):
+            prompt = builder(question, "Apple quarterly financial evidence")
+            assert "Focused financial comparison:" in prompt
+            assert "Compare only the financial metrics explicitly requested" in prompt
+
+    def test_broad_comparison_does_not_inject_unrequested_company(self):
+        prompt = build_compare_prompt("Compare Apple and Microsoft strategies.", "evidence")
+
+        assert "Question-led comparison:" in prompt
+        assert "Business Strategy" in prompt
+        assert "These are optional" in prompt
+        assert "Tesla:" not in prompt
+        assert "NVIDIA:" not in prompt
+
+    def test_strategy_request_is_not_expanded_by_retrieved_numeric_data(self):
+        prompt = build_compare_prompt(
+            "Compare Apple and Microsoft strategies.",
+            "Apple revenue was $94 billion; Microsoft operating income was $32 billion.",
+        )
+
+        assert "Question-led comparison:" in prompt
+        assert "Focused financial comparison:" not in prompt
+
 
 @pytest.mark.unit
 class TestPromptRules:
@@ -230,8 +342,8 @@ class TestPromptRules:
         assert "final answer" in PROMPT_RULES
 
     def test_grounded_prompts_use_new_immutable_versions(self):
-        assert FINANCIAL_RAG_PROMPT_VERSION == "2.2.0"
-        assert FINANCIAL_COMPARE_PROMPT_VERSION == "2.2.0"
+        assert FINANCIAL_RAG_PROMPT_VERSION == "2.4.1"
+        assert FINANCIAL_COMPARE_PROMPT_VERSION == "2.4.1"
 
 
 @pytest.mark.unit

@@ -5,6 +5,7 @@ import {
   formatByteSize,
   MAX_PDF_UPLOAD_BYTES,
   mapKnowledgeDocument,
+  validateDocumentUpload,
   validatePdfUpload,
 } from '../src/api/knowledgeContract.ts';
 
@@ -38,11 +39,11 @@ test('maps stable knowledge item fields from the backend contract', () => {
   });
 });
 
-test('legacy filename responses remain readable but are never deletable', () => {
+test('legacy filename responses remain readable without a stable delete id', () => {
   assert.deepEqual(mapKnowledgeDocument('NVIDIA.pdf'), {
     id: 'NVIDIA.pdf',
     filename: 'NVIDIA.pdf',
-    company: 'NVIDIA',
+    company: 'Unknown',
     status: 'indexed',
     pages: 0,
     uploadedAt: '',
@@ -69,6 +70,19 @@ test('accepts PDF filenames at the 50 MB upload boundary', () => {
 test('rejects non-PDF files before upload', () => {
   assert.equal(
     validatePdfUpload({ name: 'financials.xlsx', size: 1024 }),
+    'invalid-type',
+  );
+});
+
+test('accepts supported financial report formats through the multi-format contract', () => {
+  for (const name of ['report.pdf', 'quarterly.xlsx', 'filing.docx', 'facts.csv']) {
+    assert.equal(validateDocumentUpload({ name, size: 1024 }), null);
+  }
+});
+
+test('rejects unsupported financial report formats before upload', () => {
+  assert.equal(
+    validateDocumentUpload({ name: 'quarterly.xls', size: 1024 }),
     'invalid-type',
   );
 });

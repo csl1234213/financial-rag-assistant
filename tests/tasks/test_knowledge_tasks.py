@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import fitz
 import pytest
+from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -283,4 +284,50 @@ def test_successful_processing_batches_embeddings_and_persists_provenance(
     assert vector_document.metadata["chunker_version"]
     assert vector_document.metadata["embedding_model"] == ("intfloat/multilingual-e5-small")
     assert vector_document.metadata["content_sha256"] == content_sha256
+    assert document.company == "Tesla"
     assert usage_recorder.call_count == 3
+
+
+def test_xlsx_task_uses_body_company_and_persists_row_locator(
+    tmp_path,
+    task_database,
+):
+    db, create_task, embedding_loader, store_factory, _usage_recorder = task_database
+    workbook_path = tmp_path / "quarterly.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Income Statement"
+    sheet.append(["Tesla Q2 2025 Results"])
+    sheet.append(["Metric", "Q2 2025"])
+    sheet.append(["Revenue", "$20.7 billion"])
+    workbook.save(workbook_path)
+    workbook.close()
+
+    processing_task = create_task(workbook_path)
+    document = db.get(Document, processing_task.document_id)
+    assert document is not None
+    document.company = "Unknown"
+    db.commit()
+
+    model = Mock()
+    model.encode.side_effect = lambda texts, **_kwargs: [[0.1, 0.2, 0.3] for _ in texts]
+    embedding_loader.side_effect = None
+    embedding_loader.return_value = model
+    store = Mock()
+    store_factory.side_effect = None
+    store_factory.return_value = store
+
+    knowledge_tasks.process_document_task(processing_task.public_id)
+
+    db.expire_all()
+    task = TaskRepository(db).get_task(processing_task.public_id)
+    document = db.get(Document, processing_task.document_id)
+    assert task is not None and task.status == TaskStatus.SUCCESS.value
+    assert document is not None
+    assert document.status == "indexed"
+    assert document.company == "Tesla"
+    assert document.period == "Q2_2025"
+    indexed = store.add_documents.call_args.args[0]
+    assert indexed
+    assert indexed[0].metadata["source_format"].endswith("spreadsheetml.sheet")
+    assert "Sheet 'Income Statement'" in indexed[0].metadata["source_locator"]

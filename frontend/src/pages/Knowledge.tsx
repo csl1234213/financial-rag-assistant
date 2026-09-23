@@ -61,10 +61,8 @@ export function Knowledge() {
   }, [t.knowledge.connectionError]);
 
   const handleUpload = useCallback(async (file: File) => {
-    setNotice(null);
     try {
       await uploadDocument(file);
-      await loadDocuments();
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 400) {
@@ -77,18 +75,28 @@ export function Knowledge() {
           throw new Error(t.upload.fileTooLarge);
         }
         if (err.status === 429) {
-          throw new Error(t.upload.uploadLimitExceeded);
+          const detail = err.detail?.detail?.toLowerCase() ?? '';
+          throw new Error(
+            detail.includes('upload limit')
+              ? t.upload.uploadLimitExceeded
+              : t.upload.rateLimited,
+          );
         }
       }
       throw err;
     }
   }, [
-    loadDocuments,
     t.upload.duplicateDocument,
     t.upload.fileTooLarge,
     t.upload.invalidDocument,
+    t.upload.rateLimited,
     t.upload.uploadLimitExceeded,
   ]);
+
+  const handleUploadComplete = useCallback(async () => {
+    setNotice(null);
+    await loadDocuments();
+  }, [loadDocuments]);
 
   const handleDelete = useCallback(async (document: KnowledgeDocument) => {
     if (!window.confirm(t.knowledge.deleteConfirm(document.filename))) {
@@ -194,12 +202,17 @@ export function Knowledge() {
           <aside className="knowledge-sidebar">
             {quota && (
               <p role="status">
-                {language === 'zh-CN'
+                {quota.bypassed
+                  ? t.knowledge.quotaBypassed
+                  : language === 'zh-CN'
                   ? `已用 ${quota.used} / ${quota.limit} 份（删除文档后释放额度）`
                   : `${quota.used} / ${quota.limit} documents used (deleting frees capacity)`}
               </p>
             )}
-            <UploadPanel onUploadSuccess={handleUpload} />
+            <UploadPanel
+              onUploadSuccess={handleUpload}
+              onUploadComplete={handleUploadComplete}
+            />
           </aside>
         </div>
       </div>

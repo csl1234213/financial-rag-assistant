@@ -99,6 +99,7 @@ class AgentRuntime:
         *,
         tenant_id: int = 0,
         thread_id: Optional[str] = None,
+        conversation_history: Optional[list[dict]] = None,
     ) -> RuntimeResult:
         """
         Execute the full Agent pipeline for one question.
@@ -106,11 +107,28 @@ class AgentRuntime:
 
         runtime_start = time.time()
 
-        # 1. Intent Analysis (legacy — for backward compat)
-        intent_result = self.intent_analyzer.analyze(question)
+        from agent.planning.entity_extractor import (
+            extract_companies,
+            prior_user_context_for_followup,
+        )
 
-        if company is None and intent_result.get("companies"):
-            company = intent_result["companies"][0]
+        followup_context = prior_user_context_for_followup(question, conversation_history)
+        resolved_question = question
+        inherited_companies: list[str] = []
+        if followup_context is not None:
+            prior_question, inherited_companies = followup_context
+            resolved_question = (
+                f"{question}\nRelevant prior user request for reference resolution: {prior_question}"
+            )
+        current_companies = extract_companies(question)
+
+        # 1. Intent Analysis (legacy — for backward compat)
+        intent_result = self.intent_analyzer.analyze(resolved_question)
+
+        if company is None and current_companies:
+            company = current_companies[0]
+        if company is None and inherited_companies:
+            company = inherited_companies[0]
 
         # 2. Memory Retrieve — retrieve historical context
         memory_retrieve_info = None
@@ -118,7 +136,7 @@ class AgentRuntime:
             retrieve_ctx = MemoryBridge.to_memory_context(
                 task_result=None,
                 runtime_state=RuntimeState(),
-                question=question,
+                question=resolved_question,
                 company=company,
             )
             retrieve_result = self.memory_engine.retrieve(retrieve_ctx)
@@ -134,10 +152,22 @@ class AgentRuntime:
             )
 
         # 3. Plan — TaskAnalyzer + ComplexityAnalyzer run inside QueryPlanner
-        planning_context = PlanningContext(
-            question=question,
-            companies=intent_result.get("companies") or [],
-        )
+        planned_companies = list(current_companies)
+        for inherited_company in inherited_companies:
+            if inherited_company.casefold() not in {
+                str(item).casefold() for item in planned_companies
+            }:
+                planned_companies.append(inherited_company)
+        # Preserve an inherited company alongside any newly named company.
+        # For a follow-up such as "Now compare it with Tesla", the prior turn
+        # supplies Apple while the current turn supplies Tesla; dropping the
+        # inherited entity made the comparison retrieve only Tesla (or an
+        # unrelated default filing).
+        if company and str(company).casefold() not in {
+            str(item).casefold() for item in planned_companies
+        }:
+            planned_companies.insert(0, company)
+        planning_context = PlanningContext(question=resolved_question, companies=planned_companies)
         plan, task_result, complexity_result = self.planner.plan(planning_context)
 
         # 4. Routing — from TaskResult + ComplexityResult
@@ -259,7 +289,7 @@ class AgentRuntime:
 
         # 8. Execute — dispatch via ExecutionDispatcher
         ctx = RuntimeContext(
-            question=question,
+            question=resolved_question,
             company=company,
             tenant_id=tenant_id,
             thread_id=thread_id,
@@ -508,6 +538,7 @@ class AgentRuntime:
             planning=planning_info,
             execution=strategy_info,
             workflow=workflow_info,
+            resolved_question=resolved_question,
             memory={
                 "retrieve": memory_retrieve_info,
                 "store": memory_store_info,

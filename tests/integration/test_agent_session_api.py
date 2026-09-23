@@ -65,6 +65,21 @@ def seed_session(
         return session.id
 
 
+def test_session_reload_preserves_generation_duration_metadata(client):
+    session_id = seed_session(1, 10, "duration-reload", (("user", "What is AI?"),))
+    with TestingSessionLocal() as db:
+        AgentRepository(db).add_message(
+            session_id, "assistant", "An explanation.", {"duration_ms": 18200},
+        )
+
+    first = client.get("/api/v1/agent/sessions/duration-reload")
+    reloaded = client.get("/api/v1/agent/sessions/duration-reload")
+
+    assert first.status_code == reloaded.status_code == 200
+    assert reloaded.json()["messages"][1]["metadata"]["duration_ms"] == 18200
+    assert first.json()["messages"] == reloaded.json()["messages"]
+
+
 def test_sessions_require_authentication():
     app.dependency_overrides[get_db] = override_get_db
 

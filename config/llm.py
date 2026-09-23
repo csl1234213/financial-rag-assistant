@@ -18,6 +18,9 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "60"))
+LLM_CONNECT_TIMEOUT = float(os.getenv("LLM_CONNECT_TIMEOUT", "10"))
+LLM_READ_TIMEOUT = float(os.getenv("LLM_READ_TIMEOUT", "45"))
+LLM_TOTAL_DEADLINE = float(os.getenv("LLM_TOTAL_DEADLINE", "120"))
 LLM_STREAM = os.getenv("LLM_STREAM", "false").lower() == "true"
 
 # =========================

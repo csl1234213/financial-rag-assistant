@@ -6,7 +6,9 @@ from unittest.mock import MagicMock
 
 import fitz
 import pytest
+from docx import Document as WordDocument
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlalchemy.orm import sessionmaker
 
 from api.app import app
@@ -55,6 +57,30 @@ def _encrypted_pdf() -> bytes:
         )
     finally:
         document.close()
+
+
+def _xlsx_report() -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Metric", "Q1 FY2026", "Q1 FY2025"])
+    sheet.append(["Revenue", "$95.4 billion", "$90.8 billion"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    workbook.close()
+    return buffer.getvalue()
+
+
+def _docx_report() -> bytes:
+    document = WordDocument()
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Metric"
+    table.rows[0].cells[1].text = "Q1 FY2026"
+    row = table.add_row().cells
+    row[0].text = "Revenue"
+    row[1].text = "95.4 billion USD"
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
 
 
 def _override_get_db():
@@ -165,6 +191,40 @@ class TestUploadAPI:
         finally:
             db.close()
 
+    @pytest.mark.parametrize(
+        ("filename", "content", "content_type"),
+        [
+            ("quarterly.xlsx", _xlsx_report(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ("quarterly.docx", _docx_report(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ("quarterly.csv", b"Metric,Q1 2026\nRevenue,95.4 billion USD\n", "text/csv"),
+        ],
+        ids=["xlsx", "docx", "csv"],
+    )
+    def test_upload_supported_structured_report_formats_creates_processing_task(
+        self,
+        client,
+        upload_dir,
+        filename,
+        content,
+        content_type,
+    ):
+        response = client.post(
+            "/api/v1/upload",
+            files={"file": (filename, io.BytesIO(content), content_type)},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["file"] == filename
+        db = TestingSessionLocal()
+        try:
+            task = db.query(Task).filter(Task.public_id == data["task_id"]).one()
+            persisted_file = Path(task.payload["file_path"])
+            assert persisted_file.name == filename
+            assert persisted_file.read_bytes() == content
+        finally:
+            db.close()
+
     def test_duplicate_content_in_same_tenant_returns_409(
         self,
         client,
@@ -264,7 +324,7 @@ class TestUploadAPI:
         )
 
         assert response.status_code == 400
-        assert response.json()["detail"] == "Uploaded content is not a valid PDF document"
+        assert response.json()["detail"] == "Uploaded content does not match a valid PDF file"
 
     @pytest.mark.parametrize(
         ("filename", "content"),

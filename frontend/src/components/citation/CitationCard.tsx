@@ -20,9 +20,12 @@ export function CitationCard({ citation }: CitationCardProps) {
   const sourceLabelId = `${cardId}-source`;
   const contextId = `${cardId}-context`;
 
-  const sourceName = citation.source.replace(/\.pdf$/i, '')
+  const sourceName = citation.source.replace(/\.(pdf|xlsx|docx|csv)$/i, '')
     || t.citations.sourceFallback(citation.rank);
   const snippet = citation.preview;
+  const sourceLocation = citation.source_locator
+    || citation.page_label
+    || (citation.page ? `Page ${citation.page}` : `Chunk ${citation.chunk_id}`);
 
   useEffect(() => {
     function syncTarget() {
@@ -62,8 +65,8 @@ export function CitationCard({ citation }: CitationCardProps) {
           <span id={sourceLabelId} className="citation-card__source-name">
             {sourceName}
           </span>
-          {citation.chunk_id && (
-            <span className="citation-card__page">{citation.chunk_id}</span>
+          {sourceLocation && (
+            <span className="citation-card__page" title={sourceLocation}>{sourceLocation}</span>
           )}
         </div>
         <SourceBadge similarity={citation.similarity} />

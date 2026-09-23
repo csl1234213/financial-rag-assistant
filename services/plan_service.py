@@ -111,14 +111,21 @@ def get_tenant_subscription(db: Session, tenant_id: int) -> Optional[dict]:
 
 
 def can_upload(db: Session, tenant_id: int) -> bool:
+    if should_bypass_plan_limit(tenant_id):
+        return True
     return check_plan_limit(db, tenant_id, UsageEvent.DOCUMENT_UPLOAD, "documents")
 
 
-def get_document_quota(db: Session, tenant_id: int) -> dict[str, int]:
+def get_document_quota(db: Session, tenant_id: int) -> dict[str, int | bool]:
     """Current holdings consume capacity; historical usage remains audit-only."""
     limit = _get_tenant_plan(db, tenant_id).max_documents
     used = db.query(Document).filter(Document.tenant_id == tenant_id).count()
-    return {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+    return {
+        "used": used,
+        "limit": limit,
+        "remaining": max(0, limit - used),
+        "bypassed": should_bypass_plan_limit(tenant_id),
+    }
 
 
 def can_chat(db: Session, tenant_id: int) -> bool:

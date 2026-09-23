@@ -1,5 +1,4 @@
 import { useLanguage } from '../../i18n/LanguageContext';
-import { LanguageSwitcher } from '../LanguageSwitcher';
 import { Icon, type IconName } from '../ui/Icon';
 
 export type NavigationPage = 'chat' | 'knowledge' | 'retrieval' | 'settings';
@@ -36,7 +35,9 @@ export function AppNavigation({
   return (
     <nav className="app-nav" aria-label={t.header.title}>
       <div className="app-nav__identity">
-        <span className="app-nav__mark" aria-hidden="true">R</span>
+        <span className="app-nav__mark" aria-hidden="true">
+          <Icon name="financial-research" />
+        </span>
         <span className="app-nav__wordmark">{t.header.title}</span>
       </div>
 
@@ -70,7 +71,6 @@ export function AppNavigation({
       </div>
 
       <div className="app-nav__account">
-        <LanguageSwitcher compact />
         <div className="app-nav__user">
           <span className="app-nav__avatar" aria-hidden="true">
             {email.slice(0, 1).toUpperCase()}

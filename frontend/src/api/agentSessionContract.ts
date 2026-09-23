@@ -103,10 +103,20 @@ function parseConversationMessage(value: unknown): ChatMessage | null {
     return null;
   }
 
+  const metadata = isRecord(value.metadata) ? value.metadata : null;
+  const duration = metadata?.duration_ms;
+  const durationMs = role === 'assistant'
+    && typeof duration === 'number'
+    && Number.isFinite(duration)
+    && duration >= 0
+    ? duration
+    : undefined;
+
   return {
     id: `session-message-${id}`,
     role,
     content,
+    ...(durationMs !== undefined ? { durationMs } : {}),
   };
 }
 

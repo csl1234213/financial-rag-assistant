@@ -47,6 +47,7 @@ export function DocumentCard({
   deleting = false,
 }: DocumentCardProps) {
   const { language, t } = useLanguage();
+  const fileType = filename.split('.').at(-1)?.toUpperCase().slice(0, 4) || 'FILE';
   const interactiveProps = onClick
     ? {
         onClick: () => onClick(id),
@@ -67,7 +68,7 @@ export function DocumentCard({
       {...interactiveProps}
     >
       <div className="doc-card__icon">
-        <span className="doc-card__icon-text">PDF</span>
+        <span className="doc-card__icon-text">{fileType}</span>
       </div>
 
       <div className="doc-card__info">

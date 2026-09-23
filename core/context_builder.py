@@ -72,18 +72,31 @@ def build_context_from_evidence(evidences) -> tuple:
             "ocr_used",
             "parser_version",
             "chunker_version",
+            "table_context",
+            "source_locator",
+            "page_label",
+            "content_type",
+            "source_format",
+            "source_authority",
             "embedding_model",
             "embedding_revision",
             "content_sha256",
+            "semantic_support",
+            "semantic_support_reason",
+            "claim_support",
+            "claim_support_reason",
         ):
             value = ev.metadata.get(field)
             if value is not None:
                 citation[field] = value
         citations.append(citation)
+        location = ev.metadata.get("source_locator") or ev.metadata.get("page_label")
+        location_text = f"Location: {location}\n" if location else ""
         context += f"""
 [Evidence {i + 1}]
 Source: {ev.source}
 Chunk: {ev.metadata.get("chunk_id", "")}
+{location_text}
 
 {ev.content}
 

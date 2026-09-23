@@ -1,5 +1,41 @@
 # Backup and Recovery Runbook
 
+## V8.1 unified bundle and derived-data reindex
+
+The repeatable bundle command is:
+
+```powershell
+python scripts/backup.py --output-dir D:\\financial-rag-backups\\p0.2-<id> --git-commit (git rev-parse HEAD)
+python scripts/verify_backup.py D:\\financial-rag-backups\\p0.2-<id>
+```
+
+The bundle contains PostgreSQL `pg_dump -Fc`, an uploads archive with
+`uploads_manifest.json`, a Chroma snapshot, and a secret-free
+`backup_manifest.json`. PostgreSQL and uploads are authoritative; Chroma is
+derived and can be rebuilt from restored PDFs.
+
+For an isolated Chroma container, re-index restored PDFs without touching the
+production database or volume:
+
+```powershell
+python scripts/reindex_chroma.py /app/storage/uploads
+```
+
+In the local drill, five restored PDFs produced 345 queryable chunks and a
+similarity search returned `Tesla_sample.pdf`. This completed the Chroma
+fallback verification. KMS/secret-manager encryption and off-site transfer
+remain production configuration requirements; no live remote upload was run.
+
+### LLM provider credential boundary
+
+The running stack uses `LLM_CREDENTIAL_ENCRYPTION_KEYS` and the runtime file
+`/app/storage/memory/.llm-credential-key` from the `agent_memory` volume to
+decrypt provider credentials. These values are intentionally excluded from
+the PostgreSQL/uploads/Chroma bundle. Disaster recovery must inject them from
+an external Secret Manager before claiming a restored `/api/v1/chat` report.
+Without that controlled injection, health, authentication, and retrieval can
+be verified, but a real LLM response must remain unverified.
+
 This runbook defines the minimum supported disaster-recovery loop for the
 canonical repository-root `docker-compose.yml` stack. It covers PostgreSQL and
 the remote Chroma service's named volume without requiring a cloud-specific
@@ -257,3 +293,69 @@ The drill should:
 CI tests intentionally mock Docker and PostgreSQL subprocesses. They prove
 manifest/confirmation/fail-closed behavior, but they do not replace the
 quarterly restore drill.
+# P0.2 unified backup bundle (V8.1)
+
+The repeatable operator entry point is kept outside the repository output
+directory (for example `D:\\financial-rag-backups\\p0.2-<id>`):
+
+```powershell
+docker compose stop backend agent-worker chromadb
+python scripts/backup.py --output-dir D:\\financial-rag-backups\\p0.2-<id> --git-commit (git rev-parse HEAD)
+docker compose up -d backend agent-worker chromadb
+python scripts/verify_backup.py D:\\financial-rag-backups\\p0.2-<id>
+```
+
+The bundle contains a PostgreSQL `pg_dump -Fc`, an uploads tar archive plus
+`uploads_manifest.json`, a Chroma volume snapshot, and a secret-free
+`backup_manifest.json`. The scripts refuse to overwrite an existing output
+directory and reject unsafe archive paths. Backup output is not stored in Git.
+
+## Data authority matrix
+
+| Data | System of record |
+| --- | --- |
+| users, tenants, documents, tasks, usage, subscriptions, provider metadata, sessions/checkpoints | PostgreSQL |
+| uploaded PDFs | `financial_uploads` volume |
+| embeddings and chunks | Chroma (`financial_chroma_prod`), derived from PostgreSQL + PDFs |
+| queue state, cache, rate limiting | Redis (non-authoritative) |
+
+Loss of Redis does not require restoring core business data; queued work and
+cache entries may be rebuilt. PostgreSQL and uploads are authoritative.
+
+## Isolated restore drill
+
+Never restore into canonical volumes. Use a separately named PostgreSQL volume
+and a separately named Chroma volume/container, then validate the dump with:
+
+```powershell
+python scripts/restore.py D:\\financial-rag-backups\\p0.2-<id> --target fra-p02-postgres-restore
+```
+
+The production volume names are explicitly rejected by `restore.py`. A real
+drill must verify database rows, upload SHA-256 values, and a Chroma query from
+the isolated environment. In this environment the captured Chroma SQLite
+volume started successfully but did not contain the live collection records;
+therefore Chroma is treated as rebuildable derived data and the release gate
+remains **PARTIAL** until an isolated re-index from restored PostgreSQL and
+uploads is completed.
+
+## Encryption, off-site, retention, and RPO/RTO
+
+Artifacts must be encrypted before leaving the host using an external KMS or
+secret-manager controlled key. No key is written to code, manifests, logs, or
+Git. KMS integration is a production configuration requirement; no remote
+upload was performed in the local drill (`OFFSITE_UPLOAD: NOT_RUN`).
+
+Retention should be configured by the operator with an explicit
+`BACKUP_RETENTION_DAYS` policy and must only remove recognized backup bundles.
+For a daily cadence the design target is potential RPO <= 24 hours; this is not
+an SLA. The measured PostgreSQL/uploads/Chroma artifact creation duration for
+the local drill is recorded in `backup_manifest.json`; restore duration is an
+experiment result, not a commercial RTO.
+
+## Failure behavior
+
+`verify_backup.py` fails closed for a missing artifact, modified checksum,
+missing manifest, unsafe archive member, or invalid Chroma archive. Restore
+helpers never target canonical production volumes. Test encryption with the
+external encryption tool before scheduling off-site transfer.

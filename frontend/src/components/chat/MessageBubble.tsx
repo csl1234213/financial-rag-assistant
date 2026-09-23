@@ -1,5 +1,7 @@
 import { useLanguage } from '../../i18n/LanguageContext';
 import { AssistantReport } from './AssistantReport';
+import { formatGenerationDuration } from './generationDuration';
+import { Icon } from '../ui/Icon';
 import type { ChatResponse } from '../../types/api';
 
 interface MessageBubbleProps {
@@ -21,14 +23,17 @@ export function MessageBubble({
   loadingText,
   durationMs,
 }: MessageBubbleProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const roleLabel = role === 'user' ? t.chat.user : t.chat.assistant;
+  const generationDuration = formatGenerationDuration(durationMs, language);
 
   if (loading) {
     return (
       <article className="message message--assistant message--loading" aria-busy="true">
         <div className="message__header">
-          <div className="message__avatar" aria-hidden="true">AI</div>
+          <div className="message__avatar" aria-hidden="true">
+            <Icon name="financial-research" />
+          </div>
           <span className="message__role">{t.chat.assistant}</span>
         </div>
         <div className="message__body">
@@ -47,14 +52,15 @@ export function MessageBubble({
     <article className={`message message--${role}`}>
       <div className="message__header">
         <div className="message__avatar" aria-hidden="true">
-          {role === 'user' ? 'U' : 'AI'}
+          {role === 'user' ? 'U' : <Icon name="financial-research" />}
         </div>
         <span className="message__role">
           {roleLabel}
         </span>
-        {role === 'assistant' && durationMs !== undefined && (
+        {role === 'assistant' && generationDuration !== null && (
           <span className="message__time">
-            用时 {(durationMs / 1000).toFixed(1)} 秒
+            <Icon name="clock" />
+            {generationDuration}
           </span>
         )}
       </div>

@@ -91,9 +91,9 @@
       "question": "Analyze NVIDIA financial performance.",
       "expected_intent": "SINGLE_COMPANY",
       "expected_companies": ["NVIDIA"],
-      "expected_task_type": "research",
-      "expected_workflow": "multi_step",
-      "expected_strategy": "multi_step",
+      "expected_task_type": "document_qa",
+      "expected_workflow": "rag",
+      "expected_strategy": "rag",
       "expected_tools": ["retrieval"],
       "expected_use_retrieval": true,
       "expected_use_tools": false,
@@ -102,7 +102,8 @@
       "reference_claims": ["financial performance"],
       "criteria": ["revenue", "margin", "source citation"],
       "metadata": {
-        "scenario": "single_company_research"
+        "scenario": "single_company_document_qa",
+        "contract_note": "Broad company financial-performance questions use the governed RAG path; global research remains multi_step."
       }
     },
     {
@@ -110,9 +111,9 @@
       "question": "Analyze Apple financial performance.",
       "expected_intent": "SINGLE_COMPANY",
       "expected_companies": ["Apple"],
-      "expected_task_type": "research",
-      "expected_workflow": "multi_step",
-      "expected_strategy": "multi_step",
+      "expected_task_type": "document_qa",
+      "expected_workflow": "rag",
+      "expected_strategy": "rag",
       "expected_tools": ["retrieval"],
       "expected_use_retrieval": true,
       "expected_use_tools": false,
@@ -121,7 +122,8 @@
       "reference_claims": ["financial performance"],
       "criteria": ["revenue", "cash flow", "source citation"],
       "metadata": {
-        "scenario": "single_company_research"
+        "scenario": "single_company_document_qa",
+        "contract_note": "Broad company financial-performance questions use the governed RAG path; global research remains multi_step."
       }
     }
   ]

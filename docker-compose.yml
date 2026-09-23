@@ -117,7 +117,17 @@ services:
       - huggingface_cache:/home/appuser/.cache/huggingface
     environment:
       - APP_ENV=production
-      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:?AUTH_SECRET_KEY is required in .env}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-60}
+      - LLM_CONNECT_TIMEOUT=${LLM_CONNECT_TIMEOUT:-10}
+      - LLM_READ_TIMEOUT=${LLM_READ_TIMEOUT:-45}
+      - LLM_TOTAL_DEADLINE=${LLM_TOTAL_DEADLINE:-120}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DOUBAO_API_KEY=${DOUBAO_API_KEY:-}
       - LLM_CREDENTIAL_ENCRYPTION_KEYS=${LLM_CREDENTIAL_ENCRYPTION_KEYS:-}
       - LLM_CREDENTIAL_KEY_FILE=/app/storage/memory/.llm-credential-key
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
@@ -144,6 +154,8 @@ services:
       - AGENT_MEMORY_DIR=/app/storage/memory
       - TRUST_PROXY_HEADERS=true
       - RUN_DATABASE_MIGRATIONS=true
+      - P1_3_SMOKE_AUDIT_PATH=${P1_3_SMOKE_AUDIT_PATH:-}
+      - ALLOW_REAL_PROVIDER=${ALLOW_REAL_PROVIDER:-false}
     depends_on:
       chromadb:
         condition: service_healthy
@@ -201,7 +213,13 @@ services:
       - huggingface_cache:/home/appuser/.cache/huggingface
     environment:
       - APP_ENV=production
-      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-financial-rag-e2e-secret-key-2026}
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:?AUTH_SECRET_KEY is required in .env}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-4096}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DOUBAO_API_KEY=${DOUBAO_API_KEY:-}
       - LLM_CREDENTIAL_ENCRYPTION_KEYS=${LLM_CREDENTIAL_ENCRYPTION_KEYS:-}
       - LLM_CREDENTIAL_KEY_FILE=/app/storage/memory/.llm-credential-key
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}

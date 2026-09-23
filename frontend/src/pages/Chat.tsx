@@ -241,7 +241,12 @@ export function Chat({
           throw new Error(t.upload.fileTooLarge);
         }
         if (error.status === 429) {
-          throw new Error(t.upload.uploadLimitExceeded);
+          const detail = error.detail?.detail?.toLowerCase() ?? '';
+          throw new Error(
+            detail.includes('upload limit')
+              ? t.upload.uploadLimitExceeded
+              : t.upload.rateLimited,
+          );
         }
       }
       throw error;
@@ -250,6 +255,7 @@ export function Chat({
     t.upload.duplicateDocument,
     t.upload.fileTooLarge,
     t.upload.invalidDocument,
+    t.upload.rateLimited,
     t.upload.uploadLimitExceeded,
   ]);
 

@@ -28,3 +28,9 @@ class ModelNotFoundError(ProviderError):
 
 class ProviderConnectionError(ProviderError):
     pass
+
+
+class ProviderTimeoutError(ProviderError):
+    """The provider exceeded the request's total deadline."""
+
+    pass

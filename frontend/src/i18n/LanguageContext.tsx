@@ -21,8 +21,13 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function getInitialLanguage(): Language {
-  const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  return storedLanguage === 'zh-CN' ? 'zh-CN' : 'en';
+  try {
+    const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (storedLanguage === 'zh-CN' || storedLanguage === 'en') return storedLanguage;
+  } catch {
+    // Browser privacy settings may disable persistence.
+  }
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -30,7 +35,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = useCallback((nextLanguage: Language) => {
     setLanguageState(nextLanguage);
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+    } catch {
+      // Language changes remain available without browser storage.
+    }
   }, []);
 
   useEffect(() => {

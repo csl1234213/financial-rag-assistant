@@ -71,7 +71,10 @@ def _check_document_quota(
     db: Session,
     tenant_id: int,
 ) -> Tuple[bool, str]:
-    from services.plan_service import get_document_quota
+    from services.plan_service import get_document_quota, should_bypass_plan_limit
+
+    if should_bypass_plan_limit(tenant_id):
+        return True, ""
 
     quota = get_document_quota(db, tenant_id)
     if quota["used"] >= quota["limit"]:

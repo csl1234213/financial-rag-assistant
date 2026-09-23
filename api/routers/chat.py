@@ -1,13 +1,16 @@
+import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from api.schemas.request import ChatRequest
 from api.schemas.response import ChatResponse
 from api.services.chat_service import ChatService
 from auth.dependencies import get_optional_user
+from config import LLM_TOTAL_DEADLINE
 from core.usage_events import ResourceType, UsageEvent
+from llm.providers.provider_exceptions import ProviderTimeoutError
 from models.user import User
 from services.plan_service import can_chat
 from services.usage_service import record_usage
@@ -21,19 +24,27 @@ chat_service = ChatService()
 @router.post("/chat", response_model=ChatResponse)
 def chat(
     request: ChatRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     if current_user is not None and not can_chat(db, current_user.tenant_id):
         raise HTTPException(status_code=429, detail="Chat limit exceeded. Upgrade your plan.")
 
-    response = chat_service.chat(
-        question=request.question,
-        company=request.company,
-        tenant_id=current_user.tenant_id if current_user is not None else None,
-        user_id=current_user.id if current_user is not None else None,
-        thread_id=request.thread_id,
-    )
+    try:
+        response = chat_service.chat(
+            question=request.question,
+            company=request.company,
+            tenant_id=current_user.tenant_id if current_user is not None else None,
+            user_id=current_user.id if current_user is not None else None,
+            thread_id=request.thread_id,
+            deadline=time.monotonic() + LLM_TOTAL_DEADLINE,
+        )
+    except ProviderTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="The AI provider exceeded the request deadline. Please retry later.",
+        ) from exc
 
     if current_user is not None:
         record_usage(

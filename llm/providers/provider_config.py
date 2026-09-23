@@ -18,3 +18,6 @@ class ProviderConfig:
     max_tokens: int = 4096
     timeout: int = 60
     stream: bool = False
+    connect_timeout: float | None = None
+    read_timeout: float | None = None
+    total_deadline: float | None = None

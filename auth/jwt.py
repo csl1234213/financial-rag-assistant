@@ -11,7 +11,15 @@ _INSECURE_PRODUCTION_SECRETS = {
     "change-me-to-a-random-secret-key",
     "change-me",
     "your-secret-key",
+    "financial-rag-e2e-secret-key-2026",
+    "test-secret",
+    "dev-secret",
+    "secret",
+    "password",
+    "default",
+    "changeme",
 }
+_MIN_PRODUCTION_SECRET_LENGTH = 32
 
 
 def _is_production() -> bool:
@@ -26,11 +34,23 @@ def _resolve_secret_key() -> str:
     can still run without a secret-manager value; production cannot.
     """
 
-    secret_key = (os.getenv("AUTH_SECRET_KEY") or os.getenv("SECRET_KEY") or "").strip()
-    if _is_production() and secret_key in _INSECURE_PRODUCTION_SECRETS:
-        raise RuntimeError(
-            "AUTH_SECRET_KEY must be set to a non-placeholder value when APP_ENV=production."
-        )
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    if app_env in {"production", "prod"}:
+        # Production must use the explicit variable. The legacy alias is kept
+        # only for development/test compatibility and is never a production
+        # fallback.
+        secret_key = os.getenv("AUTH_SECRET_KEY", "").strip()
+        if (
+            not secret_key
+            or secret_key.lower() in _INSECURE_PRODUCTION_SECRETS
+            or len(secret_key) < _MIN_PRODUCTION_SECRET_LENGTH
+        ):
+            raise RuntimeError(
+                "AUTH_SECRET_KEY must be set to a strong, non-placeholder value "
+                "when APP_ENV=production."
+            )
+    else:
+        secret_key = (os.getenv("AUTH_SECRET_KEY") or os.getenv("SECRET_KEY") or "").strip()
 
     return secret_key or DEVELOPMENT_SECRET_KEY
 

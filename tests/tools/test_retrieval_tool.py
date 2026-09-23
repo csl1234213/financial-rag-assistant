@@ -10,6 +10,29 @@ from agent.tools.tool_enums import ToolStatus
 
 
 class TestRetrievalTool:
+    def test_citation_keeps_structured_file_locator(self):
+        result = RetrievalTool(
+            lambda _request: [
+                {
+                    "content": "Metric: Revenue | Q1 FY2026: 81.6 billion USD",
+                    "source": "nvidia.xlsx",
+                    "document_id": "nvidia-q1",
+                    "chunk_id": "nvidia-q1-0",
+                    "metadata": {
+                        "source_locator": "Sheet 'Income Statement', row 4, columns A–C",
+                        "content_type": "table",
+                        "source_format": "xlsx",
+                    },
+                }
+            ]
+        ).execute(ToolContext(tenant_id=1, parameters={"query": "NVIDIA Q1 revenue"}))
+
+        assert result.status is ToolStatus.SUCCESS
+        assert result.output["citations"][0]["source_locator"] == (
+            "Sheet 'Income Statement', row 4, columns A–C"
+        )
+        assert result.output["citations"][0]["content_type"] == "table"
+
     def test_executes_only_with_tenant_scope_and_trusted_adapter(self):
         received: list[RetrievalRequest] = []
 

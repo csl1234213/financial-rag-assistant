@@ -3,14 +3,13 @@ import os
 import uuid
 from pathlib import Path
 
-import fitz
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth.dependencies import get_current_user
 from core.usage_events import ResourceType, UsageEvent
-from document_loader import get_company, get_quarter
+from document_formats import validate_document_payload
 from models.document import Document
 from models.task import TaskType
 from models.user import User
@@ -24,8 +23,6 @@ router = APIRouter(tags=["Upload"])
 
 UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "storage/uploads"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
-PDF_HEADER = b"%PDF-"
-PDF_EOF_MARKER = b"%%EOF"
 DUPLICATE_DOCUMENT_DETAIL = "This document already exists in your workspace."
 
 
@@ -37,43 +34,6 @@ def _safe_filename(filename: str | None) -> str:
     return candidate
 
 
-def _has_pdf_signature(content: bytes) -> bool:
-    """Perform a bounded structural signature check before persistence."""
-
-    return (
-        content.startswith(PDF_HEADER)
-        and PDF_EOF_MARKER in content[-1024:]
-    )
-
-
-def _validate_pdf_structure(content: bytes) -> None:
-    """Reject unreadable, encrypted, and zero-page PDFs before persistence.
-
-    This is intentionally a lightweight container check. Text extraction,
-    chunking, OCR, and embedding remain asynchronous worker responsibilities.
-    """
-
-    try:
-        with fitz.open(stream=content, filetype="pdf") as document:
-            if document.needs_pass or document.is_encrypted:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Encrypted PDF documents are not supported",
-                )
-            if document.page_count < 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Uploaded PDF must contain at least one page",
-                )
-    except HTTPException:
-        raise
-    except (fitz.FileDataError, RuntimeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Uploaded PDF could not be opened",
-        ) from exc
-
-
 @router.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
@@ -81,8 +41,6 @@ async def upload_pdf(
     current_user: User = Depends(get_current_user),
 ):
     filename = _safe_filename(file.filename)
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
@@ -90,12 +48,10 @@ async def upload_pdf(
             status_code=413,
             detail=f"File exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB upload limit",
         )
-    if not _has_pdf_signature(content):
-        raise HTTPException(
-            status_code=400,
-            detail="Uploaded content is not a valid PDF document",
-        )
-    _validate_pdf_structure(content)
+    try:
+        validate_document_payload(filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     content_sha256 = hashlib.sha256(content).hexdigest()
     existing_document = (
@@ -114,8 +70,8 @@ async def upload_pdf(
 
     document = Document(
         filename=filename,
-        company=get_company(filename),
-        period=get_quarter(filename),
+        company="Unknown",
+        period="Unknown",
         status="processing",
         tenant_id=current_user.tenant_id,
         content_sha256=content_sha256,

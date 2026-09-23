@@ -198,6 +198,7 @@ export interface Translation {
     deleteConfirm: (filename: string) => string;
     deleteSuccess: (filename: string) => string;
     deleteFailed: string;
+    quotaBypassed: string;
     status: {
       indexed: string;
       processing: string;
@@ -216,11 +217,15 @@ export interface Translation {
     uploadAnother: string;
     retry: string;
     fallbackError: string;
+    selectedFiles: (count: number) => string;
+    batchSuccess: (count: number) => string;
+    batchPartial: (success: number, failed: number) => string;
     duplicateDocument: string;
     invalidFileType: string;
     fileTooLarge: string;
     invalidDocument: string;
     uploadLimitExceeded: string;
+    rateLimited: string;
   };
   retrieval: {
     queryFailed: string;
@@ -430,9 +435,9 @@ export const translations: Record<Language, Translation> = {
       provider: 'Provider',
       model: 'Model',
       executionTime: 'Execution time',
-      emptyTitle: 'Financial RAG Assistant',
+      emptyTitle: 'Turn financial reports into insight.',
       emptyDescription:
-        'AI-powered financial research agent. Analyze earnings reports, compare companies, and extract insights from financial documents.',
+        'Ask a question, compare companies, or attach a report. Explore the analysis alongside its sources.',
       demoPrompt: 'Try a demo question',
       loading: 'Agent Runtime is analyzing...',
       placeholder: 'Ask a financial question...',
@@ -560,6 +565,7 @@ export const translations: Record<Language, Translation> = {
         `Delete ${filename}? This removes its indexed evidence and uploaded file.`,
       deleteSuccess: (filename) => `${filename} was deleted.`,
       deleteFailed: 'Document deletion failed.',
+      quotaBypassed: 'Evaluation mode: document quota is disabled; usage history is retained.',
       status: {
         indexed: 'Indexed',
         processing: 'Processing',
@@ -568,22 +574,26 @@ export const translations: Record<Language, Translation> = {
     },
     upload: {
       title: 'Upload Document',
-      ariaLabel: 'Upload PDF document',
-      idle: 'Drag & drop a PDF here, or click to browse',
+      ariaLabel: 'Upload financial report document',
+      idle: 'Drag & drop a financial report, or click to browse',
       uploading: 'Uploading...',
       success: 'Upload complete!',
       error: 'Upload failed. Please try again.',
-      hint: 'PDF files only, up to 50 MB',
+      hint: 'PDF, XLSX, DOCX or CSV · up to 50 MB each · select multiple files',
       chooseFile: 'Choose File',
       uploadAnother: 'Upload Another',
       retry: 'Retry',
       fallbackError: 'Upload failed.',
+      selectedFiles: (count) => `${count} files selected`,
+      batchSuccess: (count) => `${count} documents uploaded successfully.`,
+      batchPartial: (success, failed) => `${success} uploaded, ${failed} failed.`,
       duplicateDocument: 'This document already exists in your workspace.',
-      invalidFileType: 'Only PDF files are supported.',
-      fileTooLarge: 'The PDF exceeds the 50 MB upload limit.',
-      invalidDocument: 'The PDF is invalid, encrypted, or unsupported.',
+      invalidFileType: 'Supported formats: PDF, XLSX, DOCX and CSV.',
+      fileTooLarge: 'The file exceeds the 50 MB upload limit.',
+      invalidDocument: 'The document is invalid, encrypted, or unsupported.',
       uploadLimitExceeded:
         'Your current document upload limit has been reached.',
+      rateLimited: 'The upload service is busy. Please wait a moment and try again.',
     },
     retrieval: {
       queryFailed: 'Retrieval query failed.',
@@ -795,9 +805,9 @@ export const translations: Record<Language, Translation> = {
       provider: '服务提供方',
       model: '模型',
       executionTime: '执行时间',
-      emptyTitle: '金融 RAG 助手',
+      emptyTitle: '读懂财报，看清关键。',
       emptyDescription:
-        'AI 驱动的金融研究智能体，可分析财报、比较公司，并从金融文档中提取洞察。',
+        '提出问题、比较公司，或上传一份财报。结合分析与来源，让每一次研究更有依据。',
       demoPrompt: '试试示例问题',
       loading: '智能体正在分析...',
       placeholder: '请输入金融问题...',
@@ -924,6 +934,7 @@ export const translations: Record<Language, Translation> = {
         `确认删除 ${filename}？其索引证据和上传文件也会被删除。`,
       deleteSuccess: (filename) => `已删除 ${filename}。`,
       deleteFailed: '删除文档失败。',
+      quotaBypassed: '评测模式：文档额度已关闭，历史使用记录仍会保留。',
       status: {
         indexed: '已索引',
         processing: '处理中',
@@ -932,21 +943,25 @@ export const translations: Record<Language, Translation> = {
     },
     upload: {
       title: '上传文档',
-      ariaLabel: '上传 PDF 文档',
-      idle: '将 PDF 拖放到此处，或点击浏览',
+      ariaLabel: '上传财务报告',
+      idle: '将财务报告拖放到此处，或点击浏览',
       uploading: '正在上传...',
       success: '上传完成！',
       error: '上传失败，请重试。',
-      hint: '仅支持 PDF，最大 50 MB',
+      hint: '支持 PDF、XLSX、DOCX、CSV；单份最大 50 MB，可一次选择多份',
       chooseFile: '选择文件',
       uploadAnother: '继续上传',
       retry: '重试',
       fallbackError: '上传失败。',
+      selectedFiles: (count) => `已选择 ${count} 个文件`,
+      batchSuccess: (count) => `已成功上传 ${count} 份文档。`,
+      batchPartial: (success, failed) => `成功 ${success} 份，失败 ${failed} 份。`,
       duplicateDocument: '此文档已存在于当前工作空间。',
-      invalidFileType: '仅支持 PDF 文件。',
-      fileTooLarge: 'PDF 文件超过 50 MB 上传限制。',
-      invalidDocument: 'PDF 文件无效、已加密或暂不受支持。',
+      invalidFileType: '支持格式：PDF、XLSX、DOCX、CSV。',
+      fileTooLarge: '文件超过 50 MB 上传限制。',
+      invalidDocument: '文件无效、已加密或暂不受支持。',
       uploadLimitExceeded: '当前工作空间的文档上传额度已用完。',
+      rateLimited: '上传服务当前请求较多，请稍后重试。',
     },
     retrieval: {
       queryFailed: '检索查询失败。',

@@ -1,5 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { formatGenerationDuration } from '../src/components/chat/generationDuration.ts';
+
+test('keeps generation duration localized and displays minutes and seconds', () => {
+  assert.equal(formatGenerationDuration(18200, 'zh-CN'), '用时 18.2 秒');
+  assert.equal(formatGenerationDuration(18200, 'en'), 'Generated in 18.2 s');
+  assert.equal(formatGenerationDuration(62500, 'zh-CN'), '用时 1 分 2.5 秒');
+  assert.equal(formatGenerationDuration(62500, 'en'), 'Generated in 1 min 2.5 s');
+  assert.equal(formatGenerationDuration(59999, 'zh-CN'), '用时 1 分 0.0 秒');
+  assert.equal(formatGenerationDuration(0, 'zh-CN'), '用时 0.0 秒');
+});
+
+test('does not invent elapsed time for history without duration metadata', () => {
+  for (const value of [undefined, NaN, Infinity, -1]) {
+    assert.equal(formatGenerationDuration(value, 'zh-CN'), null);
+  }
+});
 
 import {
   ChatContractError,
@@ -335,6 +351,28 @@ test('parses authenticated conversation summaries and transcript messages', () =
     '/v1/agent/sessions/tenant%2Fthread%201'
       + '?message_limit=500&message_offset=120',
   );
+});
+
+test('restores saved generation time from transcript metadata after a refresh', () => {
+  const detail = parseConversationDetail({
+    session: {
+      thread_id: 'duration-thread', message_count: 2,
+      created_at: '2026-09-13T08:00:00Z', updated_at: '2026-09-13T08:01:00Z',
+    },
+    messages: [
+      { id: 1, role: 'user', content: 'What is AI?', metadata: {} },
+      { id: 2, role: 'assistant', content: 'An explanation.', metadata: { duration_ms: 18200 } },
+      { id: 3, role: 'assistant', content: 'Legacy answer.', metadata: {} },
+      { id: 4, role: 'assistant', content: 'Invalid time.', metadata: { duration_ms: -1 } },
+      { id: 5, role: 'assistant', content: 'Zero time.', metadata: { duration_ms: 0 } },
+    ],
+    total_messages: 5, limit: 500, offset: 0,
+  });
+  assert.equal(detail.messages[0].durationMs, undefined);
+  assert.equal(formatGenerationDuration(detail.messages[1].durationMs, 'zh-CN'), '用时 18.2 秒');
+  assert.equal(detail.messages[2].durationMs, undefined);
+  assert.equal(detail.messages[3].durationMs, undefined);
+  assert.equal(detail.messages[4].durationMs, 0);
 });
 
 test('parses session deletion results and safely encodes delete paths', () => {

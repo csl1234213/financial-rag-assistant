@@ -8,6 +8,7 @@ from .provider_exceptions import (
     ProviderConnectionError,
     ProviderError,
     ProviderNotFound,
+    ProviderTimeoutError,
     RateLimitError,
 )
 from .provider_models import ChatRequest, ChatResponse
@@ -23,5 +24,6 @@ __all__ = [
     "RateLimitError",
     "ModelNotFoundError",
     "ProviderConnectionError",
+    "ProviderTimeoutError",
     "ProviderRegistry",
 ]

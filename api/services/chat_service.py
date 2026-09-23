@@ -1,8 +1,12 @@
+import logging
 import time
 from typing import Optional
 
 from api.schemas.response import ChatResponse
+from llm.usage import collect_usage, summarize_usage
 from services.agent_runtime.runtime import run_agent
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -23,16 +27,28 @@ class ChatService:
         tenant_id: Optional[int] = None,
         user_id: Optional[int] = None,
         thread_id: Optional[str] = None,
+        deadline: float | None = None,
     ) -> ChatResponse:
-        t0 = time.time()
-
-        result = run_agent(
-            question,
-            company=company,
-            tenant_id=tenant_id,
-            user_id=user_id,
-            thread_id=thread_id or "default",
+        t0 = time.monotonic()
+        logger.info(
+            "chat_request_start thread_id=%s question_chars=%s",
+            thread_id or "default",
+            len(question),
         )
+
+        with collect_usage() as usage_calls:
+            run_kwargs = {
+                "question": question,
+                "company": company,
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "thread_id": thread_id or "default",
+            }
+            if deadline is not None:
+                run_kwargs["deadline"] = deadline
+            result = run_agent(
+                **run_kwargs,
+            )
         intent_result = result.get("intent") or {}
         plan_dict = result.get("plan") or {}
 
@@ -43,7 +59,12 @@ class ChatService:
             "evidence_count": result.get("evidence_count", 0),
         }
 
-        execution_time = round(time.time() - t0, 3)
+        execution_time = round(time.monotonic() - t0, 3)
+        logger.info(
+            "chat_request_end thread_id=%s duration_ms=%.2f",
+            thread_id or "default",
+            execution_time * 1000,
+        )
 
         return ChatResponse(
             report=result.get("answer", ""),
@@ -55,4 +76,5 @@ class ChatService:
             planning=result.get("planning"),
             execution=result.get("execution"),
             workflow=result.get("workflow"),
+            usage=summarize_usage(usage_calls),
         )

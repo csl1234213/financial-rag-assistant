@@ -192,7 +192,7 @@ class TestTenantDocumentIsolation:
         assert item["chunk_count"] == 0
         assert item["byte_size"] is None
         assert item["content_sha256"] is None
-        assert item["can_delete"] is False
+        assert item["can_delete"] is True
         assert isinstance(item["uploaded_at"], str)
 
     def test_knowledge_statistics_tenant_scoped(self, client, db_session):
@@ -386,18 +386,16 @@ class TestTenantDocumentIsolation:
         db_session.expire_all()
         assert db_session.get(Document, document.id) is not None
 
-    @pytest.mark.parametrize("legacy_owner", [False, True])
-    def test_user_cannot_delete_unowned_or_legacy_document(
+    def test_workspace_member_can_delete_document_owned_by_another_user(
         self,
         client,
         db_session,
         monkeypatch,
         tmp_path: Path,
-        legacy_owner: bool,
     ):
         token = _register_and_get_token(
             client,
-            f"delete-denied-{legacy_owner}@example.com",
+            "delete-denied-other-owner@example.com",
         )
         tenant = (
             db_session.query(Tenant)
@@ -405,22 +403,23 @@ class TestTenantDocumentIsolation:
             .one()
         )
         other_user = User(
-            email=f"other-owner-{legacy_owner}@example.com",
+            email="other-owner@example.com",
             password_hash="not-used",
             tenant_id=tenant.id,
         )
         db_session.add(other_user)
         db_session.flush()
         document = Document(
-            filename="legacy.pdf" if legacy_owner else "other-user.pdf",
+            filename="other-user.pdf",
             company="Tesla",
             period="Q2_2025",
             status="indexed",
             tenant_id=tenant.id,
-            uploaded_by_user_id=other_user.id if not legacy_owner else None,
+            uploaded_by_user_id=other_user.id,
         )
         db_session.add(document)
         db_session.commit()
+        document_id = document.id
 
         RecordingVectorStore.calls = []
         monkeypatch.setattr(
@@ -437,10 +436,58 @@ class TestTenantDocumentIsolation:
             headers={"Authorization": f"Bearer {token}"},
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 200
         assert response.json() == {
-            "detail": "You do not have permission to delete this document."
+            "deleted": True,
+            "document_id": document_id,
         }
-        assert RecordingVectorStore.calls == []
+        assert RecordingVectorStore.calls == [
+            (f"tenant_{tenant.id}_document_{document_id}", tenant.id)
+        ]
         db_session.expire_all()
-        assert db_session.get(Document, document.id) is not None
+        assert db_session.get(Document, document_id) is None
+
+    def test_user_can_delete_legacy_document_without_owner(
+        self,
+        client,
+        db_session,
+        monkeypatch,
+        tmp_path: Path,
+    ):
+        token = _register_and_get_token(client, "delete-legacy@example.com")
+        tenant = (
+            db_session.query(Tenant)
+            .filter(Tenant.slug == "default")
+            .one()
+        )
+        document = Document(
+            filename="legacy.pdf",
+            company="Tesla",
+            period="Q2_2025",
+            status="indexed",
+            tenant_id=tenant.id,
+            uploaded_by_user_id=None,
+        )
+        db_session.add(document)
+        db_session.commit()
+        db_session.refresh(document)
+        document_id = document.id
+
+        monkeypatch.setattr(
+            "api.routers.knowledge.ChromaEmbeddingStore",
+            RecordingVectorStore,
+        )
+        monkeypatch.setattr("api.routers.knowledge.UPLOAD_DIR", tmp_path)
+
+        response = client.delete(
+            f"{KNOWLEDGE_URL}/{document_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "deleted": True,
+            "document_id": document_id,
+        }
+        db_session.expire_all()
+        assert db_session.get(Document, document_id) is None

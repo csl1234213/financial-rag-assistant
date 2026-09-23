@@ -13,7 +13,7 @@ from .entity_extractor import (
 from .entity_extractor import (
     extract_years as extract_years_from_question,
 )
-from .keyword_rules import classify_by_keyword
+from .keyword_rules import classify_by_keyword, is_company_performance_question
 from .planning_context import PlanningContext
 from .task_enums import (
     ComplexityLevel,
@@ -36,6 +36,13 @@ class TaskAnalyzer:
             context.companies,
             extract_companies_from_question(q),
         )
+        if (
+            task_type == TaskType.CHAT
+            and matched_keyword != "general concept"
+            and companies
+            and is_company_performance_question(q_lower)
+        ):
+            task_type, matched_keyword = TaskType.DOCUMENT_QA, "company business performance"
         years = self._merge_entities(
             context.years,
             extract_years_from_question(q),

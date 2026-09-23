@@ -20,6 +20,7 @@ from agent.planning import (
     TaskResult,
     TaskType,
 )
+from agent.planning.entity_extractor import prior_user_context_for_followup
 from agent.reasoning_models import Evidence, ReasoningResult
 from agent.runtime_result import RuntimeResult
 from llm.router import RoutingContext, RoutingPriority
@@ -47,10 +48,14 @@ class FakeIntentAnalyzer:
 
 
 class FakePlanner:
+    def __init__(self):
+        self.last_context = None
+
     def plan(
         self,
         context: PlanningContext,
     ) -> tuple[ExecutionPlan, TaskResult, ComplexityResult]:
+        self.last_context = context
         task = TaskModel(
             task_type=TaskType.DOCUMENT_QA,
             complexity=ComplexityLevel.MEDIUM,
@@ -198,6 +203,117 @@ class TestAgentRuntime:
         assert result.plan is not None
         assert result.intent_result is not None
         assert result.reasoning_result is not None
+
+    def test_followup_context_uses_prior_user_entity_not_assistant_mentions(self):
+        context = prior_user_context_for_followup(
+            "What did it say about margins?",
+            [
+                {"role": "user", "content": "Tell me about Tesla's Q2 2025 performance."},
+                {"role": "assistant", "content": "Apple's report is another example; NVIDIA is different."},
+            ],
+        )
+
+        assert context == (
+            "Tell me about Tesla's Q2 2025 performance.",
+            ["Tesla"],
+        )
+
+    def test_followup_context_adds_previous_company_for_explicit_comparison(self):
+        context = prior_user_context_for_followup(
+            "Now compare it with Tesla.",
+            [{"role": "user", "content": "Analyze Apple's Q2 2026 report."}],
+        )
+
+        assert context == ("Analyze Apple's Q2 2026 report.", ["Apple"])
+
+    def test_companyless_growth_driver_followup_inherits_previous_company(self):
+        context = prior_user_context_for_followup(
+            "What was the main growth driver?",
+            [{"role": "user", "content": "Summarize NVIDIA's financial performance."}],
+        )
+
+        assert context == (
+            "Summarize NVIDIA's financial performance.",
+            ["NVIDIA"],
+        )
+
+    def test_focus_only_growth_driver_followup_inherits_all_compared_companies(self):
+        history = [{"role": "user", "content": "Compare Apple and NVIDIA."}]
+
+        assert prior_user_context_for_followup(
+            "Focus only on the business growth drivers.", history
+        ) == ("Compare Apple and NVIDIA.", ["Apple", "NVIDIA"])
+        assert prior_user_context_for_followup(
+            "只重点比较它们的业务增长动力。", history
+        ) == ("Compare Apple and NVIDIA.", ["Apple", "NVIDIA"])
+
+    def test_new_topic_does_not_inherit_a_prior_company(self):
+        assert prior_user_context_for_followup(
+            "What is gross margin?",
+            [{"role": "user", "content": "Tell me about Tesla's Q2 2025 performance."}],
+        ) is None
+
+    def test_followup_does_not_resurrect_company_across_standalone_topic_boundary(self):
+        assert prior_user_context_for_followup(
+            "What did it say about margins?",
+            [
+                {"role": "user", "content": "Tell me about Tesla's Q2 2025 performance."},
+                {"role": "assistant", "content": "Tesla's Q2 revenue was $22.496 billion."},
+                {"role": "user", "content": "What is gross margin?"},
+            ],
+        ) is None
+
+    def test_chained_entityless_followups_keep_nearest_active_company(self):
+        assert prior_user_context_for_followup(
+            "And operating margin?",
+            [
+                {"role": "user", "content": "Tell me about Tesla's Q2 2025 performance."},
+                {"role": "assistant", "content": "Tesla's Q2 revenue was $22.496 billion."},
+                {"role": "user", "content": "What about margins?"},
+                {"role": "assistant", "content": "Gross margin details."},
+            ],
+        ) == ("Tell me about Tesla's Q2 2025 performance.", ["Tesla"])
+
+    def test_followup_retrieval_scope_inherits_company_and_period(self, runtime):
+        result = runtime.run(
+            "What did it say about margins?",
+            conversation_history=[
+                {"role": "user", "content": "Tell me about Tesla's Q2 2025 performance."},
+                {"role": "assistant", "content": "Apple also reported strong services revenue."},
+            ],
+        )
+
+        assert "Tesla's Q2 2025 performance" in result.resolved_question
+        assert runtime.planner.last_context.companies == ["Tesla"]
+        assert "Q2 2025" in runtime.planner.last_context.question
+
+    def test_growth_driver_followup_is_planned_as_company_document_qa(self, runtime):
+        from agent.query_planner import QueryPlanner
+
+        runtime.planner = QueryPlanner()
+        result = runtime.run(
+            "What was the main growth driver?",
+            conversation_history=[
+                {"role": "user", "content": "Summarize NVIDIA's financial performance."},
+                {"role": "assistant", "content": "NVIDIA reported strong quarterly results."},
+            ],
+        )
+
+        retrieval_steps = [
+            step for step in result.plan.tasks if step.step_type is StepType.RETRIEVE
+        ]
+        assert "Summarize NVIDIA's financial performance." in result.resolved_question
+        assert retrieval_steps
+        assert all(step.company == "NVIDIA" for step in retrieval_steps)
+        assert result.plan.task_type is TaskType.DOCUMENT_QA
+
+    def test_comparison_followup_keeps_new_and_inherited_companies(self, runtime):
+        runtime.run(
+            "Now compare it with Tesla.",
+            conversation_history=[{"role": "user", "content": "Analyze Apple's Q2 2026 report."}],
+        )
+
+        assert runtime.planner.last_context.companies == ["Tesla", "Apple"]
 
     def test_run_with_company(self, runtime):
         result = runtime.run("Revenue analysis", company="Apple")

@@ -14,6 +14,7 @@ from agent.planning.financial_metric_parser import (
     parse_financial_metric_query,
 )
 from llm.router import RoutingContext, RoutingPriority
+from retrieval.periods import query_filters
 
 
 class QueryPlanner:
@@ -70,6 +71,7 @@ class QueryPlanner:
         task_result = self.task_analyzer.analyze(context)
         complexity_result = self.complexity_analyzer.analyze(task_result)
         task_type = task_result.task.task_type
+        retrieval_filters = query_filters(context.question)
 
         companies = [e for e in task_result.extracted_entities if not e.isdigit()]
         metric_invocation = parse_financial_metric_query(context.question)
@@ -80,11 +82,11 @@ class QueryPlanner:
                 metric_invocation,
             )
         elif task_type == TaskType.COMPARISON:
-            plan = self._build_compare_plan(context.question, companies)
+            plan = self._build_compare_plan(context.question, companies, retrieval_filters)
         elif task_type == TaskType.DOCUMENT_QA:
-            plan = self._build_single_plan(context.question, companies)
+            plan = self._build_single_plan(context.question, companies, retrieval_filters)
         elif task_type in (TaskType.RESEARCH, TaskType.FINANCIAL_ANALYSIS):
-            plan = self._build_global_plan(context.question)
+            plan = self._build_global_plan(context.question, retrieval_filters)
         else:
             plan = self._build_generic_plan(context.question)
 
@@ -161,7 +163,7 @@ class QueryPlanner:
     # 1. Compare Plan
     # =========================
 
-    def _build_compare_plan(self, query, companies) -> ExecutionPlan:
+    def _build_compare_plan(self, query, companies, retrieval_filters=None) -> ExecutionPlan:
         plan = ExecutionPlan(intent="comparison", original_query=query)
 
         retrieve_ids = []
@@ -173,7 +175,10 @@ class QueryPlanner:
                 description=f"Retrieve {c} financial report",
                 company=c,
                 query=query,
-                parameters={"metrics": ["revenue", "margin", "risk"]},
+                parameters={
+                    "metrics": ["revenue", "margin", "risk"],
+                    "filters": dict(retrieval_filters or {}),
+                },
             )
             plan.tasks.append(step)
             retrieve_ids.append(step.step_id)
@@ -203,7 +208,7 @@ class QueryPlanner:
     # 2. Single Company Plan
     # =========================
 
-    def _build_single_plan(self, query, companies) -> ExecutionPlan:
+    def _build_single_plan(self, query, companies, retrieval_filters=None) -> ExecutionPlan:
         company = companies[0] if companies else None
 
         plan = ExecutionPlan(
@@ -217,6 +222,7 @@ class QueryPlanner:
             description=f"Retrieve {company} documents" if company else "Retrieve relevant documents",
             company=company,
             query=query,
+            parameters={"filters": dict(retrieval_filters or {})},
         )
         plan.tasks.append(retrieve_step)
 
@@ -235,7 +241,7 @@ class QueryPlanner:
     # 3. Global Research Plan
     # =========================
 
-    def _build_global_plan(self, query) -> ExecutionPlan:
+    def _build_global_plan(self, query, retrieval_filters=None) -> ExecutionPlan:
         plan = ExecutionPlan(
             intent="global_research",
             original_query=query,
@@ -246,7 +252,7 @@ class QueryPlanner:
             step_type=StepType.RETRIEVE,
             description="Retrieve industry-wide documents",
             query=query,
-            parameters={"top_k": 6},
+            parameters={"top_k": 6, "filters": dict(retrieval_filters or {})},
         )
         plan.tasks.append(retrieve_step)
 

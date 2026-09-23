@@ -22,6 +22,8 @@ type FileUploadState =
   | { status: 'success'; filename: string }
   | { status: 'error'; filename: string; detail: string };
 
+const MAX_CONCURRENT_UPLOADS = 3;
+
 export function InputBox({
   onSubmit,
   onFileUpload,
@@ -35,13 +37,17 @@ export function InputBox({
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadingFile = fileUpload.status === 'uploading';
-  const composerDisabled = disabled || uploadingFile;
+  // Keep the draft editable while a response is being generated. Sending a
+  // second turn is still blocked until the active request finishes, while a
+  // file upload continues to lock the composer to avoid mixed states.
+  const inputDisabled = uploadingFile;
+  const submitDisabled = disabled || uploadingFile;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = message.trim();
 
-    if (!trimmed || composerDisabled) {
+    if (!trimmed || submitDisabled) {
       return;
     }
 
@@ -50,34 +56,77 @@ export function InputBox({
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
+    const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = '';
 
-    if (!file || !onFileUpload) {
+    if (files.length === 0 || !onFileUpload) {
       return;
     }
 
-    const validationIssue = validatePdfUpload(file);
-    if (validationIssue) {
+    const selectedLabel = files.length === 1
+      ? files[0].name
+      : t.upload.selectedFiles(files.length);
+    const validFiles: File[] = [];
+    const failures: string[] = [];
+    for (const file of files) {
+      const validationIssue = validatePdfUpload(file);
+      if (!validationIssue) {
+        validFiles.push(file);
+        continue;
+      }
+      failures.push(
+        `${file.name}: ${validationIssue === 'too-large'
+          ? t.upload.fileTooLarge
+          : t.upload.invalidFileType}`,
+      );
+    }
+
+    if (validFiles.length === 0) {
       setFileUpload({
         status: 'error',
-        filename: file.name,
-        detail: validationIssue === 'too-large'
-          ? t.upload.fileTooLarge
-          : t.upload.invalidFileType,
+        filename: selectedLabel,
+        detail: failures.join('\n'),
       });
       return;
     }
 
-    setFileUpload({ status: 'uploading', filename: file.name });
-    try {
-      await onFileUpload(file);
-      setFileUpload({ status: 'success', filename: file.name });
-    } catch (error: unknown) {
+    setFileUpload({ status: 'uploading', filename: selectedLabel });
+    const uploadFailures: string[] = [];
+    let nextIndex = 0;
+    const uploadWorker = async () => {
+      while (nextIndex < validFiles.length) {
+        const file = validFiles[nextIndex];
+        nextIndex += 1;
+        try {
+          await onFileUpload(file);
+        } catch (error: unknown) {
+          uploadFailures.push(
+            `${file.name}: ${error instanceof Error ? error.message : t.upload.fallbackError}`,
+          );
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(MAX_CONCURRENT_UPLOADS, validFiles.length) },
+        () => uploadWorker(),
+      ),
+    );
+
+    const successCount = validFiles.length - uploadFailures.length;
+    const allFailures = [...failures, ...uploadFailures];
+    if (allFailures.length > 0) {
       setFileUpload({
         status: 'error',
-        filename: file.name,
-        detail: error instanceof Error ? error.message : t.upload.fallbackError,
+        filename: selectedLabel,
+        detail: `${t.upload.batchPartial(successCount, allFailures.length)}\n${allFailures.join('\n')}`,
+      });
+    } else {
+      setFileUpload({
+        status: 'success',
+        filename: files.length === 1
+          ? files[0].name
+          : t.upload.batchSuccess(successCount),
       });
     }
   }
@@ -129,6 +178,7 @@ export function InputBox({
           ref={fileInputRef}
           type="file"
           accept=".pdf,application/pdf"
+          multiple
           className="chat-input__file-input"
           onChange={handleFileChange}
           tabIndex={-1}
@@ -138,7 +188,7 @@ export function InputBox({
           type="button"
           className="chat-input__attachment"
           onClick={() => fileInputRef.current?.click()}
-          disabled={composerDisabled || !onFileUpload}
+          disabled={disabled || uploadingFile || !onFileUpload}
           aria-label={t.chat.attachPdf}
           title={t.chat.attachPdf}
         >
@@ -157,13 +207,13 @@ export function InputBox({
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleMessageKeyDown}
           placeholder={placeholder ?? t.chat.placeholder}
-          disabled={composerDisabled}
+          disabled={inputDisabled}
           autoComplete="off"
         />
         <button
           type="submit"
           className="chat-input__send"
-          disabled={composerDisabled || message.trim().length === 0}
+          disabled={submitDisabled || message.trim().length === 0}
         >
           <span className="chat-input__send-label">{t.chat.send}</span>
           <Icon name="arrow-up" />

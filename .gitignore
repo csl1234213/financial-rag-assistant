@@ -45,6 +45,10 @@ venv/
 test_*.txt
 *.log
 /backup/
+backups/
+*.dump
+*.tar.gz
+/evaluation/results/*
 
 
 # =========================

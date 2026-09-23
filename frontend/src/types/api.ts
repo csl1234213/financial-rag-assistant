@@ -10,6 +10,11 @@ export interface Citation {
   chunk_id: string;
   similarity: number | null;
   preview: string;
+  page?: number;
+  page_label?: string;
+  source_locator?: string;
+  content_type?: string;
+  source_format?: string;
 }
 
 export interface Reasoning {

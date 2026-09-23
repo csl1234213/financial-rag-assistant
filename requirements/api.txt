@@ -10,11 +10,13 @@ fastapi==0.137.1
 httptools==0.8.0
 langgraph==1.2.9
 langgraph-checkpoint-postgres==3.1.0
+openpyxl==3.1.5
 psycopg==3.3.4
 psycopg-binary==3.3.4
 psycopg-pool==3.3.1
 psycopg2-binary>=2.9.9
 pydantic==2.13.4
+python-docx==1.2.0
 python-jose==3.4.0
 python-multipart==0.0.32
 redis==5.2.1

@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from core.fact_ledger import canonical_metric_id
+from core.query_scope import QueryScope, classify_query_scope
 from prompts.registry import PromptDefinition, PromptRegistry
 
-FINANCIAL_RAG_PROMPT_VERSION = "2.2.0"
-FINANCIAL_COMPARE_PROMPT_VERSION = "2.2.0"
+FINANCIAL_RAG_PROMPT_VERSION = "2.4.1"
+FINANCIAL_COMPARE_PROMPT_VERSION = "2.4.1"
 DIRECT_CHAT_PROMPT_VERSION = "1.0.0"
 
 FINANCIAL_SYSTEM_PROMPT = "You are a professional financial analyst."
@@ -33,7 +35,8 @@ Rules:
 5. If the Evidence does not contain enough information, state that clearly
    in the same language as the QUESTION.
 6. When making a statement, cite the Evidence number.
-7. Prefer numerical facts whenever available.
+7. Prefer supported numerical facts relevant to the QUESTION; do not add
+   unrelated numbers merely because they appear in the Evidence.
 8. Separate facts from interpretation.
 9. Be concise and objective.
 10. Keep evidence citation markers in this exact, language-independent format:
@@ -44,6 +47,30 @@ Rules:
 13. Keep year-over-year and quarter-over-quarter comparisons distinct. Do not
     claim a YoY change for a requested period when its prior-year comparison
     value is absent from the Evidence.
+14. Before drafting, build an internal evidence ledger for every requested
+    financial fact: company, source document, reporting period, period
+    duration, metric, value, unit/currency, accounting basis (GAAP or
+    non-GAAP), result type (actual or guidance), and Evidence ID. Do not show
+    this ledger unless the QUESTION asks for methodology.
+15. Use the most specific period in the evidence: table-column header and row
+    label take precedence over section heading, document title, and filename.
+    A filename is never authoritative period evidence.
+16. Keep reported actuals, outlook/guidance, estimates, and derived values
+    separate. Never answer an actual-period question with an outlook value.
+17. Distinguish reporting duration: three months, six months, quarter, fiscal
+    year, and trailing/annual periods are not interchangeable. If a requested
+    fact is only available for another duration, state that limit.
+18. Preserve units and accounting basis. Normalize million/billion values only
+    when the source unit is explicit, and label conversions. Do not merge GAAP
+    and non-GAAP metrics or consolidated and segment metrics.
+19. For a missing fact, write one concise evidence limitation and continue
+    with supported requested facts. Do not repeat refusal text in multiple
+    sections or append unrelated evidence analysis.
+20. For a why/driver question, answer with an explicitly cited causal or
+    management-driver statement from the retrieved narrative. Do not substitute
+    a related revenue/margin figure for the requested cause. If no such narrative
+    is present, state that the causal evidence is unavailable; do not infer a
+    cause from correlation or a safe-harbor disclaimer.
 
 [Evidence 1]
 [Evidence 2]
@@ -82,27 +109,7 @@ QUESTION
 RESPONSE FORMAT
 ==================================================
 
-Summary
-
-Key Findings
-
-1.
-2.
-3.
-
-Risks
-
-1.
-2.
-
-Evidence Used
-
-List evidence exactly using:
-
-[Evidence 1]
-[Evidence 2]
-
-List all evidence references used.
+{{response_format}}
 
 ==================================================
 
@@ -118,9 +125,16 @@ Requirements:
   and citation markers exactly.
 - Cite evidence numbers.
 - Keep citation markers exactly as [Evidence N], regardless of response language.
-- Prefer numerical facts.
+- Prefer numerical facts that directly answer the QUESTION.
 - If evidence is insufficient, state that clearly in the same language as
   the QUESTION.
+- Before answering, reconcile the requested company, period, duration, metric,
+  unit, accounting basis, and actual/guidance status against the Evidence.
+- Prefer a table column explicitly labelled by the requested period over any
+  document title or filename. Keep three-month and six-month values separate.
+- Never use a later outlook/guidance row to answer an earlier reported period.
+- Use one concise evidence-limitation sentence when a requested fact is absent;
+  do not repeat the same refusal across sections.
 
 ==================================================
 
@@ -162,66 +176,21 @@ RETRIEVED EVIDENCE
 
 ==================================================
 
-Compare the companies using the following structure. When the QUESTION is
-Chinese, translate every heading and every section label into Chinese; do not
-copy the English template labels into the final answer.
+RESPONSE FORMAT
 
-# 1. Business Strategy
+{response_format}
 
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-# 2. AI Technology
-
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-# 3. Infrastructure
-
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-# 4. Competitive Advantages
-
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-# 5. Risks
-
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-If evidence is missing, state that clearly in the same language as the QUESTION.
-
-# 6. Future Outlook
-
-Tesla:
-NVIDIA:
-Supporting Evidence:
-
-# 7. Final Comparison
-
-Key Similarities:
-Key Differences:
-
-# 8. Investment Implications
-
-Which company appears better positioned?
-Why?
-Supporting Evidence:
+When the QUESTION is Chinese, translate every heading and section label into
+Chinese. Use the company names requested by the QUESTION; never substitute
+companies from a template or an unrelated evidence chunk.
 
 ==================================================
 Rules
 ==================================================
 
 1. Use ONLY evidence.
-2. Compare BOTH companies.
-3. Never skip a section.
+2. Compare the requested companies or periods on the requested dimensions.
+3. Include only sections needed to answer the QUESTION and supported by evidence.
 4. Reference evidence numbers.
 5. Keep answers concise.
 6. Do not invent risks.
@@ -232,6 +201,22 @@ Rules
 11. Treat a trailing YoY value as applying to the latest displayed period unless
     the evidence explicitly maps it elsewhere.
 12. Do not infer a YoY comparison when the corresponding prior-year value is absent.
+13. Build an internal fact ledger before comparing: company, source document,
+    period, duration, metric, value, unit/currency, GAAP/non-GAAP, actual/
+    guidance, and Evidence ID.
+14. For Tesla-style quarterly tables, select the exact requested column (for
+    example Q2-2025), even when the document itself is titled Q4/FY2025.
+15. For Apple-style statements, keep Three Months Ended and Six Months Ended
+    columns separate; do not label six-month cash flow as quarterly cash flow.
+16. For NVIDIA-style releases, keep current-quarter actuals separate from the
+    next-quarter outlook; Q2 outlook is not Q1 actual.
+17. Report only one concise limitation for missing evidence and do not repeat
+    "insufficient evidence" in multiple sections.
+18. For a why/driver question, answer with an explicitly cited causal or
+    management-driver statement from the retrieved narrative. Do not substitute
+    a related revenue/margin figure for the requested cause. If no such narrative
+    is present, state that the causal evidence is unavailable; do not infer a
+    cause from correlation or a safe-harbor disclaimer.
 """.strip()
 
 DIRECT_CHAT_TEMPLATE = """
@@ -313,6 +298,66 @@ def _format_history(history: Sequence[dict[str, Any]] | None) -> str:
     )
 
 
+def _financial_response_format(question: str, *, comparison: bool) -> str:
+    """Budget the response from the request, never from retrieved side topics."""
+
+    scope = classify_query_scope(question)
+    has_metric = canonical_metric_id(question) is not None
+    if comparison or scope == QueryScope.COMPARE:
+        if has_metric:
+            return """Focused financial comparison:
+- Compare only the financial metrics explicitly requested in the QUESTION.
+- Give each requested company's value with its company, reporting period,
+  metric, unit/currency and supporting [Evidence N] citation.
+- Keep periods explicit when the companies use different fiscal calendars.
+- Add a difference, ratio or growth calculation only when requested; show
+  the formula and cite both operands. Do not imply unlike periods are equal.
+- End with a short conclusion answering the requested comparison.
+- Do not add unrelated metrics, strategy, technology, risk, investment or
+  outlook sections. An evidence chunk's other facts do not expand the task.
+- If one requested fact is missing, identify that fact while preserving the
+  supported comparison facts. Do not replace a missing fact with guidance."""
+        return """Question-led comparison:
+- Compare only the companies, periods and dimensions requested in the QUESTION.
+- For an open-ended strategic comparison, possible dimensions include
+  Business Strategy, AI Technology, Infrastructure, Competitive Advantages
+  and Risks. These are optional: select only relevant, evidenced dimensions.
+- Give each requested company's supporting [Evidence N] citations separately.
+- Summarize supported similarities and differences. State limitations where
+  they affect the requested comparison.
+- Do not force a fixed section count or add an investment recommendation or
+  future outlook unless the QUESTION requests it."""
+    if scope == QueryScope.FACT or (scope == QueryScope.GENERAL_CONCEPT and has_metric):
+        return """Direct financial answer:
+- Answer only the requested metric or fact, with its company, reporting
+  period, unit/currency and inline [Evidence N] citation.
+- Include only the context needed to interpret that answer.
+- Do not append a research report, unrelated metrics, risks or outlook.
+- If the required fact is absent, name the missing fact clearly."""
+    if scope == QueryScope.SUMMARY:
+        return """Financial summary:
+- Give a brief summary of the requested company and reporting period.
+- Include a few supported headline facts with inline [Evidence N] citations.
+- Keep component rows distinct from financial statement totals.
+- Add other themes only when the QUESTION requests them; do not append
+  speculative risks, outlook or investment recommendations."""
+    if scope == QueryScope.RISK:
+        return """Evidence-grounded risk answer:
+- Address only the risks or challenges requested in the QUESTION.
+- Separate disclosed facts from interpretations and cite [Evidence N].
+- Do not add unrelated financial metrics or speculative recommendations."""
+    if scope == QueryScope.ANALYSIS:
+        return """Focused analysis:
+- Start with a concise answer to the requested analytical question.
+- Include only findings needed for that analysis, with [Evidence N] citations.
+- Distinguish evidence, calculations and interpretations. Include limitations
+  where they matter; do not require unrelated risk or outlook sections."""
+    return """Concise explanation:
+- Explain only the concept or issue requested in the QUESTION.
+- Cite the supporting evidence and state any relevant evidence limitation.
+- Do not expand into a company research report or unrelated numeric claims."""
+
+
 def _render(
     name: str,
     *,
@@ -326,6 +371,9 @@ def _render(
         question=question,
         context=context,
         history_text=_format_history(history),
+        response_format=_financial_response_format(
+            question, comparison=name == "financial_compare"
+        ) if name != "direct_chat" else "",
     )
 
 

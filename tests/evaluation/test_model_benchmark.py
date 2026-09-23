@@ -17,6 +17,7 @@ from prompt_builder import FINANCIAL_RAG_PROMPT_VERSION
 FINANCIAL_RAG_BENCHMARK_VERSION = (
     f"financial-rag-{FINANCIAL_RAG_PROMPT_VERSION}"
 )
+FROZEN_FINANCIAL_MODEL_BENCHMARK_V1_PROMPT_VERSION = "financial-rag-2.4.0"
 
 
 def _protocol():
@@ -39,7 +40,9 @@ def test_source_controlled_benchmark_protocol_is_valid():
 
     assert protocol.protocol_id == "financial-model-benchmark-v1"
     assert len(protocol.cases) == 3
-    assert protocol.prompt_version == FINANCIAL_RAG_BENCHMARK_VERSION
+    # Benchmark v1 is a frozen 2.4.0 protocol. New runtime prompt revisions
+    # must not silently rewrite the version recorded by this baseline artifact.
+    assert protocol.prompt_version == FROZEN_FINANCIAL_MODEL_BENCHMARK_V1_PROMPT_VERSION
 
 
 def test_offline_mode_is_deterministic_and_never_invokes_provider():

@@ -15,6 +15,7 @@ from llm.providers.provider_exceptions import (
     ProviderConnectionError,
     ProviderError,
     ProviderNotFound,
+    ProviderTimeoutError,
     RateLimitError,
 )
 from llm.providers.provider_models import (
@@ -46,6 +47,7 @@ __all__ = [
     "RateLimitError",
     "ModelNotFoundError",
     "ProviderConnectionError",
+    "ProviderTimeoutError",
     "ProviderRegistry",
     "ProviderFactory",
     "RoutingContext",

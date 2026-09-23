@@ -1,21 +1,36 @@
 import type { KnowledgeDocument } from '../types/knowledge';
 
 export const MAX_PDF_UPLOAD_BYTES = 50 * 1024 * 1024;
+export const MAX_DOCUMENT_UPLOAD_BYTES = MAX_PDF_UPLOAD_BYTES;
+export const SUPPORTED_DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx', '.docx', '.csv'] as const;
 
 export type PdfUploadValidationIssue = 'invalid-type' | 'too-large';
 
-interface PdfUploadCandidate {
+interface UploadCandidate {
   name: string;
   size: number;
 }
 
 export function validatePdfUpload(
-  file: PdfUploadCandidate,
+  file: UploadCandidate,
 ): PdfUploadValidationIssue | null {
   if (!file.name.trim().toLowerCase().endsWith('.pdf')) {
     return 'invalid-type';
   }
   if (file.size > MAX_PDF_UPLOAD_BYTES) {
+    return 'too-large';
+  }
+  return null;
+}
+
+export function validateDocumentUpload(
+  file: UploadCandidate,
+): PdfUploadValidationIssue | null {
+  const extension = file.name.trim().toLowerCase().slice(file.name.lastIndexOf('.'));
+  if (!(SUPPORTED_DOCUMENT_EXTENSIONS as readonly string[]).includes(extension)) {
+    return 'invalid-type';
+  }
+  if (file.size > MAX_DOCUMENT_UPLOAD_BYTES) {
     return 'too-large';
   }
   return null;
@@ -36,19 +51,12 @@ export function formatByteSize(byteSize: number): string {
 }
 
 function mapFilename(filename: string): KnowledgeDocument {
-  const normalized = filename.toLowerCase();
-  const company = normalized.includes('tesla')
-    ? 'Tesla'
-    : normalized.includes('nvidia')
-      ? 'NVIDIA'
-      : normalized.includes('apple')
-        ? 'Apple'
-        : 'Unknown';
-
   return {
     id: filename,
     filename,
-    company,
+    // Legacy filename-only payloads do not provide content-derived issuer
+    // metadata. Never promote a filename into an authoritative company.
+    company: 'Unknown',
     status: 'indexed',
     pages: 0,
     uploadedAt: '',

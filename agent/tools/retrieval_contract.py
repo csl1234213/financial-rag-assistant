@@ -173,7 +173,7 @@ class RetrievalEvidence:
         }
 
     def citation(self, *, rank: int) -> dict[str, JsonValue]:
-        return {
+        citation: dict[str, JsonValue] = {
             "rank": rank,
             "source_filename": self.source_filename,
             "document_id": self.document_id,
@@ -181,6 +181,11 @@ class RetrievalEvidence:
             "page": self.page,
             "similarity_score": self.similarity_score,
         }
+        for metadata_key in ("source_locator", "page_label", "content_type", "source_format"):
+            value = self.metadata.get(metadata_key)
+            if isinstance(value, (str, int, float, bool)):
+                citation[metadata_key] = value
+        return citation
 
 
 @runtime_checkable
