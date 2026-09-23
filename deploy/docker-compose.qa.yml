@@ -1,0 +1,42 @@
+name: financial-rag-qa
+
+# P1.5 isolated QA stack. Do not add production volumes or host uploads here.
+services:
+  financial-api-qa:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "18000:8000"
+    environment:
+      ENVIRONMENT: qa
+      DATABASE_URL: sqlite:////tmp/financial-rag-qa.db
+      CHROMA_PERSIST_DIRECTORY: /app/chroma_db
+      UPLOAD_DIR: /app/storage/uploads
+    volumes:
+      - financial_rag_qa_uploads:/app/storage/uploads
+      - financial_rag_qa_chroma:/app/chroma_db
+      - financial_rag_qa_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  financial-ui-qa:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:18000/api
+    ports:
+      - "13000:3000"
+    depends_on:
+      financial-api-qa:
+        condition: service_healthy
+
+volumes:
+  financial_rag_qa_uploads:
+  financial_rag_qa_chroma:
+  financial_rag_qa_logs:
