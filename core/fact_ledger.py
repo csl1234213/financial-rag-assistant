@@ -137,6 +137,7 @@ class FinancialFact:
     confidence: float
     derivation: str = "direct"
     growth_basis: str | None = None
+    display_unit: str | None = None
 
     @property
     def provenance(self) -> dict[str, object]:
@@ -950,6 +951,16 @@ class FactLedger:
                                     table_scale = Decimal("1000")
                             elif inferred_million_table:
                                 table_scale = Decimal("1000000")
+                            elif re.search(
+                                r"\bQ\d(?:[- ]\d{4}|\s+FY\d{4})\s*:\s*\d[\d,]*",
+                                content,
+                                re.IGNORECASE,
+                            ):
+                                # Explicit period-labelled statement cells
+                                # commonly arrive without the table header;
+                                # comma-grouped financial values use the
+                                # filing's conventional millions scale.
+                                table_scale = Decimal("1000000")
                         if table_scale != 1:
                             values = [
                                 NormalizedNumber(
@@ -1146,6 +1157,23 @@ class FactLedger:
                                     chunk_id=chunk_id,
                                     evidence_text=evidence_text,
                                     confidence=float(item.confidence or metadata.get("similarity", 0.0) or 0.0),
+                                    display_unit=(
+                                        "million"
+                                        if (
+                                            (
+                                                str(metadata.get("content_type", "")).casefold() == "table"
+                                                or re.search(r"\bfinancial\s+table\s+row\b", content, re.IGNORECASE)
+                                            )
+                                            and re.search(
+                                                r"\bQ\d(?:[- ]\d{4}|\s+FY\d{4})\s*:\s*\d[\d,]*",
+                                                content,
+                                                re.IGNORECASE,
+                                            )
+                                            and fact_metric_id != "eps"
+                                            and value.kind == "amount"
+                                        )
+                                        else None
+                                    ),
                                 )
                             )
                             structured_rates = _structured_growth_rates(content, match)

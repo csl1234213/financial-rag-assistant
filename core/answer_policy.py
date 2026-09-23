@@ -585,7 +585,22 @@ def _can_project_verified_facts_only(
     ):
         return False
     statuses = plan.statuses(ledger, "")
-    return bool(statuses) and all(status.available for status in statuses)
+    if not statuses or not all(status.available for status in statuses):
+        return False
+    # A growth requirement may be derivable from two period facts without a
+    # directly stored rate. Keep the provider claim in that case so the
+    # grounding layer can retain the derivable percentage and its two
+    # evidence citations; ledger-only projection would erase it.
+    return not any(
+        status.spec.growth_basis
+        and not ledger.lookup(
+            company=status.spec.company,
+            metric_id=status.spec.metric_id,
+            period=status.spec.period,
+            growth_basis=status.spec.growth_basis,
+        )
+        for status in statuses
+    )
 
 
 def _localize_standard_refusals(question: str, answer: str) -> str:
@@ -989,6 +1004,18 @@ def finalize_grounded_answer(question: str, raw_answer: str, evidence: Iterable[
         grounded = sanitize_answer(question, unavailable, trusted)
         completed = unavailable
         language_removed += (str(raw_answer),) if str(raw_answer).strip() else ()
+    if projection_removed and raw_grounding.unsupported_count:
+        # Keep the rejected provider claims in the audit result even though
+        # the user-facing projection contains only verified facts.
+        grounded = GroundingResult(
+            grounded.answer,
+            grounded.evidence,
+            [*grounded.claims, *[
+                claim for claim in raw_grounding.claims
+                if claim.disposition == "UNSUPPORTED"
+                and extract_normalized_numbers(claim.text)
+            ]],
+        )
     return FinalAnswer(
         grounded, raw_grounding, plan, ledger, added,
         removed + driver_removed + absence_removed + language_removed + projection_removed,

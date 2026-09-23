@@ -20,6 +20,7 @@ from core.fact_ledger import (
 from core.financial_grounding import (
     NormalizedNumber,
     canonical_metrics,
+    derived_growth,
     extract_normalized_numbers,
     numbers_equivalent,
 )
@@ -164,7 +165,7 @@ def _margin_specs_for_available_bases(
 def _growth_specs_for_metrics(
     specs: Iterable[RequiredFactSpec], ledger: FactLedger
 ) -> list[RequiredFactSpec]:
-    """Require only explicitly reported comparison rates for planned metrics."""
+    """Require reported or deterministically derivable comparison rates."""
 
     growth_specs: list[RequiredFactSpec] = []
     for spec in specs:
@@ -182,6 +183,25 @@ def _growth_specs_for_metrics(
                         spec.period,
                         f"explicitly reported {basis.upper()} change for a planned financial metric",
                         growth_basis=basis,
+                    )
+                )
+                continue
+            if basis != "yoy" or not spec.period:
+                continue
+            match = re.fullmatch(r"Q(?P<quarter>[1-4])_(?P<year>20\d{2})", spec.period)
+            if not match:
+                continue
+            prior_period = f"Q{match.group('quarter')}_{int(match.group('year')) - 1}"
+            current = ledger.lookup(company=spec.company, metric_id=spec.metric_id, period=spec.period)
+            prior = ledger.lookup(company=spec.company, metric_id=spec.metric_id, period=prior_period)
+            if current and prior:
+                growth_specs.append(
+                    RequiredFactSpec(
+                        spec.company,
+                        spec.metric_id,
+                        spec.period,
+                        "deterministically derivable YOY change from matching-period operands",
+                        growth_basis="yoy",
                     )
                 )
     return growth_specs
@@ -384,6 +404,7 @@ def infer_required_fact_plan(
                         company, requested_metric, metric_period, "explicit fact request"
                     )
                 )
+        required_specs.extend(_growth_specs_for_metrics(required_specs, ledger))
         return RequiredFactPlan(scope.value, tuple(required_specs))
     if scope == QueryScope.COMPARE:
         comparison_metrics = list(dict.fromkeys(canonical_metrics(intent_question)))
@@ -656,6 +677,13 @@ def _growth_basis_present(line: str, basis: str) -> bool:
 
 def _render_fact(fact: FinancialFact) -> str:
     amount = fact.normalized_value
+    if fact.display_unit == "million":
+        # Explicit period-labelled table cells retain the source statement's
+        # readable scale; narrative and legacy flattened rows use the
+        # magnitude-based rendering below.
+        displayed = amount / Decimal("1000000") if amount >= Decimal("1000000") else amount
+        rendered = f"{int(displayed):,}" if displayed == displayed.to_integral_value() else _plain_decimal(displayed)
+        return f"{rendered} million"
     if fact.unit == "billion":
         return f"{_plain_decimal(amount / Decimal('1000000000'))} billion"
     if fact.unit == "million":
@@ -1037,6 +1065,24 @@ def safe_answer_from_fact_ledger(
                 growth_basis=spec.growth_basis,
             )
         ]
+        if any(value.kind == "percent" for value in values):
+            for spec in plan.required:
+                if spec.growth_basis != "yoy" or not spec.period:
+                    continue
+                match = re.fullmatch(r"Q(?P<quarter>[1-4])_(?P<year>20\d{2})", spec.period)
+                if not match:
+                    continue
+                prior_period = f"Q{match.group('quarter')}_{int(match.group('year')) - 1}"
+                current = ledger.lookup(company=spec.company, metric_id=spec.metric_id, period=spec.period)
+                prior = ledger.lookup(company=spec.company, metric_id=spec.metric_id, period=prior_period)
+                for current_fact in current:
+                    for prior_fact in prior:
+                        derived = derived_growth(
+                            NormalizedNumber(current_fact.normalized_value, "amount", current_fact.currency),
+                            NormalizedNumber(prior_fact.normalized_value, "amount", prior_fact.currency),
+                        )
+                        if derived and any(numbers_equivalent(value, derived) for value in values):
+                            return True
         return all(
             any(_number_matches_fact(value, fact) for fact in candidates)
             for value in values

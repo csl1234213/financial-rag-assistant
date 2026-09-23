@@ -133,6 +133,14 @@ def _close_percentage(left: NormalizedNumber, right: NormalizedNumber) -> bool:
     return abs(left.value - right.value) <= Decimal("0.2")
 
 
+def _close_growth_claim(claim: NormalizedNumber, derived: NormalizedNumber, line: str) -> bool:
+    """Match prose such as ``down 12.5%`` to a signed derived -12.5%."""
+    if _close_percentage(claim, derived):
+        return True
+    negative = bool(_QUALITATIVE_NEGATIVE_TREND.search(line))
+    return negative and _close_percentage(claim, NormalizedNumber(abs(derived.value), derived.kind, derived.currency))
+
+
 def _ordered_growth_operands(
     claims: list[NormalizedNumber], line: str,
 ) -> tuple[NormalizedNumber, NormalizedNumber] | None:
@@ -173,7 +181,7 @@ def _supports_derived(
                 continue
             derived_values.append(derived)
     return all(any(numbers_equivalent(claim, item) for item in evidence)
-               or any(_close_percentage(claim, value) for value in derived_values)
+               or any(_close_growth_claim(claim, value, line) for value in derived_values)
                for claim in percent_claims)
 
 
@@ -780,6 +788,22 @@ def sanitize_answer(
 
     candidates = list(evidence)
     filtered = filter_evidence_for_query(question, candidates)
+    # YoY claims legitimately require the matching quarter from the prior
+    # year. Query-period filtering must not discard that cited operand before
+    # deterministic derivation runs.
+    if re.search(r"(?i)\byoy\b|year[- ]over[- ]year|同比|较上年同期", question):
+        requested = extract_periods(question)
+        prior_periods: set[str] = set()
+        for period in requested:
+            match = re.fullmatch(r"Q(?P<quarter>[1-4])_(?P<year>20\d{2})", period)
+            if match:
+                prior_periods.add(f"Q{match.group('quarter')}_{int(match.group('year')) - 1}")
+        for item in candidates:
+            if any(
+                any(periods_equivalent(found, prior) for prior in prior_periods)
+                for found in extract_periods(item.content)
+            ) and item not in filtered:
+                filtered.append(item)
     trusted = [
         item
         for item in filtered
@@ -1010,6 +1034,12 @@ def _sanitize_fragment(question: str, line: str, trusted: list[Evidence]) -> tup
                         requested_periods=extract_periods(question),
                     )]
     disposition = _line_disposition(line, line_numbers)
+    # The line may state only the current amount plus a signed percentage;
+    # validate a derived rate through the minimal evidence cover, which can
+    # include the matching prior-period operand from another cited chunk.
+    if disposition == "UNSUPPORTED" and any(value.kind == "percent" for value in claim_values):
+        if _numeric_support_items(question, line, trusted):
+            disposition = "DERIVABLE"
     rewritten = _rewrite_chinese_billion_unit(line, line_numbers)
     if rewritten != line:
         rewritten_disposition = _line_disposition(rewritten, line_numbers)
@@ -1076,22 +1106,37 @@ def _numeric_support_items(
                 for current_index in current_indices
                 for prior_index in prior_indices
                 if (derived := derived_growth(current, prior)) is not None
-                and _close_percentage(claim, derived)
+                and _close_growth_claim(claim, derived, line)
             ]
             if not pairs:
                 return []
             selected.update(pairs[0])
             continue
+        # A concise answer often states only the current-period amount and
+        # the derived percentage.  For that case the prior-period operand may
+        # be present in a cited comparative chunk but is intentionally absent
+        # from the question's requested-period filter. Re-scan only the
+        # derivation path without that filter; direct claims remain strict.
+        derivation_numbers = [
+            _numbers_for_line(
+                re.sub(r"\bQ\d(?:[- ]\d{4}|\s+FY\d{4})\b", "", line, flags=re.IGNORECASE),
+                item,
+                metric,
+                allow_guidance=allow_guidance,
+                requested_periods=(),
+            )
+            for item in evidence
+        ]
         derived_pairs: list[tuple[int, int]] = []
-        for left_index, left_values in enumerate(numbers_by_index):
+        for left_index, left_values in enumerate(derivation_numbers):
             for right_index in range(left_index, len(numbers_by_index)):
-                right_values = numbers_by_index[right_index]
+                right_values = derivation_numbers[right_index]
                 for left in left_values:
                     if left.kind != "amount":
                         continue
                     for right in right_values:
                         derived = derived_growth(left, right)
-                        if derived is not None and _close_percentage(claim, derived):
+                        if derived is not None and _close_growth_claim(claim, derived, line):
                             derived_pairs.append((left_index, right_index))
         if not derived_pairs:
             return []
