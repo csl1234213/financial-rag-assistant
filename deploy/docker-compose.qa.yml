@@ -9,7 +9,12 @@ services:
     ports:
       - "18000:8000"
     environment:
+      APP_ENV: qa
       ENVIRONMENT: qa
+      BOOTSTRAP_DEMO_KNOWLEDGE: "false"
+      RUN_DATABASE_MIGRATIONS: "true"
+      REDIS_URL: redis://qa-redis:6379/0
+      REDIS_ENABLED: "true"
       DATABASE_URL: sqlite:////tmp/financial-rag-qa.db
       CHROMA_PERSIST_DIRECTORY: /app/chroma_db
       UPLOAD_DIR: /app/storage/uploads
@@ -17,12 +22,19 @@ services:
       - financial_rag_qa_uploads:/app/storage/uploads
       - financial_rag_qa_chroma:/app/chroma_db
       - financial_rag_qa_logs:/app/logs
+    networks:
+      default:
+        aliases:
+          - backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/ready"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    depends_on:
+      qa-redis:
+        condition: service_started
 
   financial-ui-qa:
     build:
@@ -35,6 +47,13 @@ services:
     depends_on:
       financial-api-qa:
         condition: service_healthy
+
+  qa-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    read_only: true
+    tmpfs:
+      - /data
 
 volumes:
   financial_rag_qa_uploads:
