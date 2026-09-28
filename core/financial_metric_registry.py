@@ -41,6 +41,8 @@ class FinancialMetricDefinition:
     value_type: str
     aggregation_semantics: str
     notes: str = ""
+    query_aliases_zh: tuple[str, ...] = ()
+    query_aliases_en: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +76,17 @@ class MetricNormalization:
     @property
     def scope(self) -> str | None:
         return self.row.scope
+
+
+@dataclass(frozen=True, slots=True)
+class QueryMetricResolution:
+    """A query phrase resolved only through declared registry aliases."""
+
+    canonical_metric: str | None
+    status: MetricMappingStatus
+    matched_alias: str | None = None
+    period_semantics: str | None = None
+    reason: str = ""
 
 
 def normalize_row_label(label: str) -> str:
@@ -143,6 +156,71 @@ class FinancialMetricRegistry:
 
     def get(self, canonical_name: str) -> FinancialMetricDefinition | None:
         return self._definitions.get(canonical_name)
+
+    def resolve_query_metric(self, query: str) -> QueryMetricResolution:
+        """Resolve an explicit query phrase without fuzzy or semantic guessing.
+
+        Longer declared aliases win over aliases contained inside them (for
+        example, ``归母净利润`` over ``净利润``). If equally specific aliases
+        point at different metrics, the result is ambiguous and callers must
+        not select one arbitrarily.
+        """
+
+        normalized_query = unicodedata.normalize("NFKC", query).casefold()
+        matches: list[tuple[int, int, MetricAliasRule]] = []
+        query_rules = [rule for rules in self._rules.values() for rule in rules]
+        for definition in self._definitions.values():
+            query_rules.extend(
+                MetricAliasRule(
+                    alias=alias,
+                    canonical_metric=definition.canonical_name,
+                    statement_types=definition.statement_types,
+                    status=MetricMappingStatus.SUPPORTED,
+                    mapping_rule="registry_query_phrase_alias",
+                )
+                for alias in definition.query_aliases_zh + definition.query_aliases_en
+            )
+        for rule in query_rules:
+            alias = unicodedata.normalize("NFKC", rule.alias).casefold().strip()
+            if not alias:
+                continue
+            if re.search(r"[a-z0-9]", alias):
+                expression = rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])"
+                for match in re.finditer(expression, normalized_query):
+                    matches.append((match.start(), match.end(), rule))
+            else:
+                for match in re.finditer(re.escape(alias), normalized_query):
+                    matches.append((match.start(), match.end(), rule))
+
+        if not matches:
+            return QueryMetricResolution(None, MetricMappingStatus.UNMAPPED, reason="no_registry_query_alias")
+
+        selected: list[tuple[int, int, MetricAliasRule]] = []
+        for candidate in sorted(matches, key=lambda item: item[1] - item[0], reverse=True):
+            start, end, _ = candidate
+            if any(start >= chosen_start and end <= chosen_end for chosen_start, chosen_end, _ in selected):
+                continue
+            selected.append(candidate)
+        targets = {rule.canonical_metric for _, _, rule in selected}
+        if len(targets) != 1:
+            return QueryMetricResolution(
+                None,
+                MetricMappingStatus.AMBIGUOUS,
+                reason="equally_specific_aliases_resolve_to_multiple_metrics",
+            )
+
+        metric = next(iter(targets))
+        definition = self._definitions[metric]
+        matching_rules = [rule for _, _, rule in selected]
+        aliases = {rule.alias for rule in matching_rules}
+        return QueryMetricResolution(
+            metric,
+            MetricMappingStatus.EXACT if any(rule.status == MetricMappingStatus.EXACT for rule in matching_rules)
+            else MetricMappingStatus.SUPPORTED,
+            matched_alias=sorted(aliases, key=lambda value: (len(value), value.casefold()))[0],
+            period_semantics=definition.period_semantics,
+            reason="longest_registry_query_alias",
+        )
 
     def normalize(
         self,
@@ -332,6 +410,7 @@ _DEFINITIONS = (
         "point_in_time",
         "monetary",
         "non_additive",
+        query_aliases_zh=("总资产",),
     ),
     FinancialMetricDefinition(
         "total_liabilities",
@@ -562,6 +641,7 @@ _DEFINITIONS = (
         "monetary",
         "flow",
         "Not free cash flow.",
+        query_aliases_zh=("经营活动现金流量净额", "经营活动现金流净额"),
     ),
     FinancialMetricDefinition(
         "investing_cash_flow",
@@ -679,3 +759,10 @@ def normalize_financial_table_rows(
     """Normalize multiple rows without merging their scope or period."""
 
     return tuple(normalize_financial_table_row(row) for row in rows)
+
+
+def extract_explicit_fiscal_year(query: str) -> str | None:
+    """Return one explicit 20xx year; refuse queries naming multiple years."""
+
+    years = tuple(dict.fromkeys(re.findall(r"(?<!\d)(20\d{2})(?!\d)", unicodedata.normalize("NFKC", query))))
+    return years[0] if len(years) == 1 else None

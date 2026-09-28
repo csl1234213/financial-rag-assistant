@@ -167,8 +167,10 @@ class TestIntentAnalyzerEdgeCases:
     def test_company_in_canonical_entity_catalog_returns_single_company(self):
         analyzer = IntentAnalyzer()
         result = analyzer.analyze("Microsoft revenue 2024")
-        assert result["intent"] == "SINGLE_COMPANY"
+        assert result["intent"] == "FINANCIAL_FACT_QUERY"
         assert result["companies"] == ["Microsoft"]
+        assert result["canonical_metric"] == "revenue"
+        assert result["fiscal_year"] == "2024"
 
     def test_multiple_companies_without_compare_returns_unknown(self):
         analyzer = IntentAnalyzer()

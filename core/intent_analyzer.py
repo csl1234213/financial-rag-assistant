@@ -1,6 +1,11 @@
 import re
 
 from agent.planning.entity_extractor import extract_companies as _extract_company_entities
+from core.financial_metric_registry import (
+    FINANCIAL_METRIC_REGISTRY,
+    MetricMappingStatus,
+    extract_explicit_fiscal_year,
+)
 
 # Financial/research keywords that indicate a query is research-oriented
 # rather than a simple chat. Without these, the query is DIRECT_CHAT.
@@ -67,7 +72,7 @@ _SOURCE_REFERENCE = re.compile(
 
 
 class IntentAnalyzer:
-    def analyze(self, query: str):
+    def analyze(self, query: str, company_context: str | None = None):
         query_lower = query.lower()
 
         # -------------------------
@@ -86,6 +91,22 @@ class IntentAnalyzer:
         companies = self._extract_companies(query)
 
         if len(companies) == 1:
+            structured = self._structured_fact_intent(query)
+            if structured is not None:
+                return {
+                    "intent": "FINANCIAL_FACT_QUERY",
+                    "companies": companies,
+                    "document_ids": None,
+                    **structured,
+                }
+            unsupported_metric = self._unsupported_metric_intent(query)
+            if unsupported_metric is not None:
+                return {
+                    "intent": "FINANCIAL_FACT_QUERY",
+                    "companies": companies,
+                    "document_ids": None,
+                    **unsupported_metric,
+                }
             return {"intent": "SINGLE_COMPANY", "companies": companies, "document_ids": None}
 
         # -------------------------
@@ -93,6 +114,33 @@ class IntentAnalyzer:
         # -------------------------
         if len(companies) > 1:
             return {"intent": "UNKNOWN", "companies": companies, "document_ids": None}
+
+        # A provider/API-supplied issuer is part of the user query contract.
+        # It should route a financial question to that issuer's evidence, but
+        # must not turn a genuine definition into RAG (e.g. “什么叫毛利率”).
+        if company_context:
+            structured = self._structured_fact_intent(query)
+            if structured is not None:
+                return {
+                    "intent": "FINANCIAL_FACT_QUERY",
+                    "companies": [company_context],
+                    "document_ids": None,
+                    **structured,
+                }
+            unsupported_metric = self._unsupported_metric_intent(query)
+            if unsupported_metric is not None:
+                return {
+                    "intent": "FINANCIAL_FACT_QUERY",
+                    "companies": [company_context],
+                    "document_ids": None,
+                    **unsupported_metric,
+                }
+            if not self._is_direct_chat(query_lower):
+                return {
+                    "intent": "SINGLE_COMPANY",
+                    "companies": [company_context],
+                    "document_ids": None,
+                }
 
         # -------------------------
         # 4. No companies — direct chat vs research
@@ -116,6 +164,45 @@ class IntentAnalyzer:
             if signal in query_lower:
                 return False
         return True
+
+    @staticmethod
+    def _structured_fact_intent(query: str) -> dict[str, str] | None:
+        """Recognize only one declared metric plus one explicit fiscal year."""
+
+        normalized = query.casefold().strip()
+        if _GENERAL_CONCEPT_PREFIX.search(normalized) and not _SOURCE_REFERENCE.search(normalized):
+            return None
+        year = extract_explicit_fiscal_year(query)
+        if year is None:
+            return None
+        metric = FINANCIAL_METRIC_REGISTRY.resolve_query_metric(query)
+        if metric.status not in {MetricMappingStatus.EXACT, MetricMappingStatus.SUPPORTED}:
+            return None
+        if metric.canonical_metric is None or metric.period_semantics not in {"point_in_time", "duration"}:
+            return None
+        return {
+            "canonical_metric": metric.canonical_metric,
+            "fiscal_year": year,
+            "period_semantics": metric.period_semantics,
+            "matched_metric_alias": metric.matched_alias or "",
+        }
+
+    @staticmethod
+    def _unsupported_metric_intent(query: str) -> dict[str, str] | None:
+        """Block known ambiguous debt terms from being recast as liabilities."""
+
+        if not re.search(r"(?:总债务|债务|有息负债|total\s+debt|\bdebt\b|\bborrowings\b)", query, re.I):
+            return None
+        metric = FINANCIAL_METRIC_REGISTRY.resolve_query_metric(query)
+        if metric.status in {MetricMappingStatus.EXACT, MetricMappingStatus.SUPPORTED}:
+            return None
+        return {
+            "canonical_metric": "",
+            "fiscal_year": extract_explicit_fiscal_year(query) or "",
+            "period_semantics": "",
+            "matched_metric_alias": "",
+            "query_metric_status": "UNSUPPORTED_METRIC",
+        }
 
     def _extract_companies(self, query: str):
         # Keep the runtime intent router aligned with the planner's canonical

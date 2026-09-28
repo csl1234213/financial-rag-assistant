@@ -520,6 +520,7 @@ class SQLFinancialFactRepository:
         company: str,
         metric: str,
         fiscal_year: int | str | None = None,
+        period_type: str | None = None,
         scope: str | None = None,
         period_start: str | None = None,
         period_end: str | None = None,
@@ -540,6 +541,8 @@ class SQLFinancialFactRepository:
         )
         if fiscal_year is not None:
             statement = statement.where(FinancialFactRecord.fiscal_year == str(fiscal_year))
+        if period_type is not None:
+            statement = statement.where(FinancialFactRecord.period_type == period_type.upper())
         if scope is not None:
             statement = statement.where(FinancialFactRecord.scope == scope.upper())
         if period_start is not None:
@@ -622,6 +625,7 @@ class SQLFinancialFactRepository:
         company: str,
         metric: str,
         fiscal_year: int | str | None = None,
+        period_type: str | None = None,
         scope: str | None = None,
         period_start: str | None = None,
         period_end: str | None = None,
@@ -633,6 +637,7 @@ class SQLFinancialFactRepository:
             company=company,
             metric=metric,
             fiscal_year=fiscal_year,
+            period_type=period_type,
             scope=scope,
             period_start=period_start,
             period_end=period_end,
@@ -647,6 +652,10 @@ class SQLFinancialFactRepository:
             and conflict.identity[3] == metric
             and (scope is None or conflict.identity[5] == scope.upper())
             and (fiscal_year is None or str(fiscal_year) in conflict.identity[6])
+            and (
+                period_type is None
+                or conflict.identity[6].upper().startswith(f"{period_type.upper()}:")
+            )
             and (document_version is None or conflict.document_version == document_version.casefold())
             and (period_start is None or period_start in conflict.identity[6])
             and (period_end is None or period_end in conflict.identity[6])

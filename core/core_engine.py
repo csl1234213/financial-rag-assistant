@@ -54,6 +54,7 @@ from core.required_fact_plan import (
 from core.research_analyzer import analyze_evidence
 from core.retrieval_probes import retrieval_probe_queries, retrieval_probe_top_k
 from core.retrieval_tool_adapter import TenantRetrievalToolExecutor
+from core.structured_financial_query import lookup_persisted_financial_fact
 from document_loader import (
     load_documents,
 )
@@ -426,6 +427,7 @@ def _build_runtime(runtime_router: ModelRouter) -> AgentRuntime:
         dispatcher=dispatcher,
         workflow_engine=WorkflowEngine(),
         workflow_executor=WorkflowExecutor(),
+        structured_fact_lookup=lookup_persisted_financial_fact,
     )
 
 
@@ -466,6 +468,7 @@ def run_rag(
     thread_id: str | None = None,
     conversation_history: Sequence[dict[str, Any]] | None = None,
     llm_settings=None,
+    answer_language: str | None = None,
     deadline: float | None = None,
 ) -> RAGResult:
     research_mode = detect_research_mode(question)
@@ -475,8 +478,27 @@ def run_rag(
         tenant_id=tenant_id,
         thread_id=thread_id,
         conversation_history=list(conversation_history or []),
+        answer_language=answer_language,
     )
     evidence_question = getattr(result, "resolved_question", None) or question
+
+    if result.execution and result.execution.get("strategy") == "structured_financial_fact":
+        # Structured facts are already deterministically verified, tenant
+        # scoped, and adapted to the common citation contract. They do not
+        # need provider generation or vector/BM25/reranker retrieval.
+        return RAGResult(
+            report=result.report,
+            citations=result.citations,
+            context=result.context,
+            research_mode="financial_fact",
+            intent=result.intent_result,
+            evidence=result.evidence,
+            plan=result.plan,
+            routing=result.routing,
+            planning=result.planning,
+            execution=result.execution,
+            workflow=result.workflow,
+        )
 
     is_tool_call = result.execution and result.execution.get("strategy") == "tool_calling"
     if is_tool_call:

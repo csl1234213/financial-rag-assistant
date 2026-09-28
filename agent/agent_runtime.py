@@ -1,6 +1,8 @@
+import inspect
 import logging
+import re
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from agent.execution.execution_context import ExecutionContext
 from agent.execution.execution_dispatcher import ExecutionDispatcher
@@ -33,8 +35,40 @@ from agent.workflow.workflow_engine import WorkflowEngine
 from agent.workflow.workflow_executor import WorkflowExecutor
 from core.context_builder import build_context_from_evidence
 from llm.router import ModelRouter
+from retrieval.periods import extract_annual_periods, extract_periods
 
 logger = logging.getLogger(__name__)
+
+
+def _structured_failure_answer(
+    status: str,
+    answer_language: str | None,
+    query: str = "",
+) -> str:
+    chinese = answer_language == "zh-CN" or (
+        answer_language is None and bool(re.search(r"[\u3400-\u9fff]", query))
+    )
+    messages = {
+        "AMBIGUOUS": (
+            "匹配到多个财报事实或文档版本，无法安全选择。请指定要使用的财报版本。",
+            "Multiple matching financial facts or filing versions were found. Specify the filing version to continue.",
+        ),
+        "CONFLICT": (
+            "结构化财报事实存在冲突，暂不能提供确定数值。",
+            "Conflicting structured filing facts were found; no definitive value is reported.",
+        ),
+        "UNSUPPORTED_METRIC": (
+            "该指标的结构化映射或来源校验未通过，暂不能提供确定数值。",
+            "The stored metric mapping or source validation did not pass; no definitive value is reported.",
+        ),
+    }
+    fallback = (
+        "未找到可通过来源与口径校验的结构化财报事实。"
+        if chinese
+        else "No structured filing fact passed source and scope validation."
+    )
+    pair = messages.get(status)
+    return pair[0 if chinese else 1] if pair else fallback
 
 
 class AgentRuntime:
@@ -73,6 +107,7 @@ class AgentRuntime:
         memory_engine: Optional[MemoryEngine] = None,
         metric_engine: Optional[MetricEngine] = None,
         reliability_engine: Optional[ReliabilityEngine] = None,
+        structured_fact_lookup: Optional[Callable[..., object]] = None,
     ):
         self.planner = planner
         self.executor = executor
@@ -87,6 +122,7 @@ class AgentRuntime:
         self.memory_engine = memory_engine
         self.metric_engine = metric_engine
         self.reliability_engine = reliability_engine
+        self.structured_fact_lookup = structured_fact_lookup
 
     # =========================
     # Main Entry
@@ -100,6 +136,7 @@ class AgentRuntime:
         tenant_id: int = 0,
         thread_id: Optional[str] = None,
         conversation_history: Optional[list[dict]] = None,
+        answer_language: str | None = None,
     ) -> RuntimeResult:
         """
         Execute the full Agent pipeline for one question.
@@ -122,13 +159,106 @@ class AgentRuntime:
             )
         current_companies = extract_companies(question)
 
-        # 1. Intent Analysis (legacy — for backward compat)
-        intent_result = self.intent_analyzer.analyze(resolved_question)
-
-        if company is None and current_companies:
+        if company is None and len(current_companies) == 1:
             company = current_companies[0]
-        if company is None and inherited_companies:
+        if company is None and len(inherited_companies) == 1:
             company = inherited_companies[0]
+
+        # 1. Intent Analysis (legacy — for backward compat)
+        analyze_intent = self.intent_analyzer.analyze
+        try:
+            parameters = inspect.signature(analyze_intent).parameters.values()
+            supports_company_context = any(
+                parameter.name == "company_context"
+                or parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters
+            )
+        except (TypeError, ValueError):
+            supports_company_context = False
+        intent_result = (
+            analyze_intent(resolved_question, company_context=company)
+            if supports_company_context
+            else analyze_intent(resolved_question)
+        )
+
+        structured_trace = None
+        if (
+            intent_result.get("intent") == "FINANCIAL_FACT_QUERY"
+            and self.structured_fact_lookup is not None
+        ):
+            companies = intent_result.get("companies") or []
+            if len(companies) == 1:
+                structured_result = self.structured_fact_lookup(
+                    query=resolved_question,
+                    company=str(companies[0]),
+                    canonical_metric=str(intent_result["canonical_metric"]),
+                    fiscal_year=str(intent_result["fiscal_year"]),
+                    period_semantics=str(intent_result["period_semantics"]),
+                    tenant_id=tenant_id,
+                    response_language=answer_language,
+                )
+                structured_trace = structured_result.trace
+                intent_result = {**intent_result, "structured_fact_lookup": structured_trace}
+                if structured_result.terminal:
+                    structured_status = structured_result.status.value
+                    structured_answer = structured_result.answer or _structured_failure_answer(
+                        structured_status,
+                        answer_language,
+                        resolved_question,
+                    )
+                    structured_evidence = list(structured_result.evidence)
+                    structured_context, structured_citations = build_context_from_evidence(
+                        structured_evidence
+                    )
+                    # A FOUND result is not allowed onto the deterministic
+                    # answer path unless its source row remains citable.
+                    if structured_status == "FOUND" and (
+                        len(structured_citations) != 1
+                        or not structured_citations[0].get("source")
+                        or not structured_citations[0].get("page")
+                        or not structured_citations[0].get("chunk_id")
+                    ):
+                        structured_answer = _structured_failure_answer(
+                            "NOT_FOUND",
+                            answer_language,
+                            resolved_question,
+                        )
+                        structured_evidence = []
+                        structured_context, structured_citations = "", []
+                        structured_trace = {
+                            **structured_trace,
+                            "structured_lookup_status": "NOT_FOUND",
+                            "citation_status": "INVALID",
+                            "fallback_reason": "citation_contract_validation_failed",
+                            "final_route": "STRUCTURED_SAFE_FAILURE",
+                        }
+                        intent_result = {**intent_result, "structured_fact_lookup": structured_trace}
+                    logger.info(
+                        "structured_financial_query status=%s tenant_id=%s metric=%s year=%s",
+                        structured_trace.get("structured_lookup_status"),
+                        tenant_id,
+                        intent_result.get("canonical_metric"),
+                        intent_result.get("fiscal_year"),
+                    )
+                    return RuntimeResult(
+                        context=structured_context,
+                        citations=structured_citations,
+                        report=structured_answer,
+                        evidence=structured_evidence,
+                        intent_result=intent_result,
+                        planning={"structured_financial_query": structured_trace},
+                        execution={
+                            "strategy": "structured_financial_fact",
+                            "status": structured_trace.get("structured_lookup_status"),
+                            "use_retrieval": False,
+                            "provider_calls": 0,
+                        },
+                        workflow={
+                            "type": "structured_financial_fact",
+                            "status": "completed" if structured_status == "FOUND" else "safe_failure",
+                        },
+                        resolved_question=resolved_question,
+                    )
 
         # 2. Memory Retrieve — retrieve historical context
         memory_retrieve_info = None
@@ -238,6 +368,8 @@ class AgentRuntime:
             "complexity_reason": complexity_result.reason,
             "planner_version": "rule-v1",
         }
+        if structured_trace is not None:
+            planning_info["structured_financial_query"] = structured_trace
 
         # ============================================================
         # 7. Workflow — WorkflowEngine → WorkflowExecutor → WorkflowResult
