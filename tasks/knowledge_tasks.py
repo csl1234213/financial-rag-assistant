@@ -11,6 +11,10 @@ from config import (
     OCR_LANGUAGES,
     OCR_MIN_TEXT_CHARS,
 )
+from core.financial_table_rows import (
+    financial_table_rows_from_chunk,
+    financial_table_rows_json,
+)
 from core.usage_events import ResourceType, UsageEvent
 from document_loader import (
     get_company,
@@ -221,6 +225,24 @@ def process_document_task(task_public_id: str):
                         f"tenant_{tenant_id}_{chunk_identity}_"
                         f"{chunk.chunk_index}"
                     ),
+            financial_rows = financial_table_rows_from_chunk(
+                content=chunk.text,
+                content_type=chunk.content_type,
+                document_id=doc_id,
+                company=company,
+                section=chunk.section,
+                table_context=chunk.table_context or "",
+                page=chunk.page,
+                source=filename,
+                source_locator=chunk.source_locator or "",
+            )
+            if financial_rows:
+                # Chroma metadata accepts scalar values; serialize the typed
+                # candidates without flattening away period, scope, or audit
+                # status. P1.5 will consume only VERIFIED rows as facts.
+                metadata["financial_table_rows_json"] = financial_table_rows_json(
+                    financial_rows
+                )
                     company=company,
                     content=chunk.text,
                     embedding=embedding,

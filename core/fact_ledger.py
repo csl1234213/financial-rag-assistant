@@ -1155,6 +1155,13 @@ class FactLedger:
                                     page=metadata.get("page"),
                                     section=metadata.get("section"),
                                     chunk_id=chunk_id,
+            if "financial_table_rows_json" in metadata:
+                # Typed table candidates carry a stricter verification state
+                # and dimensions than this legacy text extractor can retain.
+                # Until the structured-fact adapter lands in P1.5, do not
+                # silently re-parse PARTIAL/VERIFIED row text and lose scope,
+                # statement, unit, or column provenance.
+                continue
                                     evidence_text=evidence_text,
                                     confidence=float(item.confidence or metadata.get("similarity", 0.0) or 0.0),
                                     display_unit=(
