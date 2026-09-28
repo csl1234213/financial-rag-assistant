@@ -519,14 +519,12 @@ class HybridRetriever:
             # are never exposed to the answer model: their column mapping is
             # known to be unreliable, even if their semantic score is high.
             safe_vector_results = [item for item in vector_results if not _is_unverified_table(item)]
-            if query_filters(context.question).get("period"):
-                return self.coverage_aware_rerank(
-                    safe_vector_results,
-                    context.question,
-                    top_k=context.top_k,
-                    company=context.company,
-                )
-            return safe_vector_results[: context.top_k]
+            return self.coverage_aware_rerank(
+                safe_vector_results,
+                context.question,
+                top_k=context.top_k,
+                company=context.company,
+            )
 
         if not self.config.enabled or self.config.lexical_weight == 0:
             return vector_only_results()
@@ -798,7 +796,11 @@ class HybridRetriever:
                     [*priority_segment_driver_evidence, *lexical_results]
                 )
         if not lexical_results:
-            return vector_results[: context.top_k]
+            # A missing lexical channel is not permission to skip the shared
+            # safety and selection stages. Keep the vector-only fallback on
+            # the same path as fused candidates so quarantined table chunks
+            # are isolated and coverage-aware reranking still runs.
+            return vector_only_results()
 
         fused = self._reciprocal_rank_fusion(
             vector_results,
@@ -845,6 +847,10 @@ class HybridRetriever:
         results = [item for item in results if not _is_unverified_table(item)]
         if not results:
             return []
+        has_comparable_vector_scores = any(
+            HybridRetriever._vector_relevance(item) is not None
+            for item in results
+        )
         expected_companies = {item.casefold() for item in extract_companies(question)}
         if company and not expected_companies:
             expected_companies.add(company.casefold())
@@ -1266,7 +1272,17 @@ class HybridRetriever:
                     # facts are excluded from this question's final context.
                     continue
             dims = dimensions(item)
-            score = float(item.score)
+            # Vector-only fallback candidates may expose a distance score
+            # (lower is better), while fused candidates expose relevance
+            # (higher is better). Normalize before the shared reranker so
+            # taking the unified path does not invert vector ranking.
+            score = HybridRetriever._vector_relevance(item)
+            if score is None:
+                # Legacy stores with no score semantics are already ordered
+                # best-first, but scores across tenant scopes are not
+                # comparable. Use a stable tie baseline rather than letting
+                # raw cross-scope values reorder that established ordering.
+                score = float(item.score) if has_comparable_vector_scores else 0.0
             if query_terms:
                 content_terms = {
                     token.casefold()
