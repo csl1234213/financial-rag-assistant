@@ -4,14 +4,12 @@ import type { KnowledgeDocument } from '../../types/knowledge';
 
 interface KnowledgeListProps {
   documents: KnowledgeDocument[];
-  onDocumentClick?: (id: string) => void;
-  onDocumentDelete?: (document: KnowledgeDocument) => void;
+  onDocumentDelete: (document: KnowledgeDocument) => void;
   deletingDocumentId?: string | null;
 }
 
 export function KnowledgeList({
   documents,
-  onDocumentClick,
   onDocumentDelete,
   deletingDocumentId,
 }: KnowledgeListProps) {
@@ -34,22 +32,18 @@ export function KnowledgeList({
       {documents.map((doc) => (
         <DocumentCard
           key={doc.id}
-          id={doc.id}
           filename={doc.filename}
           company={doc.company}
           pages={doc.pages}
           status={doc.status}
           size={doc.size}
           uploadedAt={doc.uploadedAt}
-          onClick={onDocumentClick}
           period={doc.period}
           chunkCount={doc.chunkCount}
           contentSha256={doc.contentSha256}
-          onDelete={
-            onDocumentDelete && doc.canDelete
-              ? () => onDocumentDelete(doc)
-              : undefined
-          }
+          sourceUrl={doc.sourceUrl}
+          sourceType={doc.sourceType}
+          onDelete={doc.canDelete ? () => onDocumentDelete(doc) : undefined}
           deleting={deletingDocumentId === doc.id}
         />
       ))}

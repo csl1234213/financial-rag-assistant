@@ -50,6 +50,7 @@ class AgentGraphContext(TypedDict, total=False):
     trace: Any
     llm_settings: Any
     deadline: float | None
+    answer_language: str | None
 
 
 def _trace_node(
@@ -127,6 +128,7 @@ def _execute_node(
             conversation_history=state.get("history", []),
             llm_settings=(runtime.context or {}).get("llm_settings"),
             deadline=(runtime.context or {}).get("deadline"),
+            answer_language=(runtime.context or {}).get("answer_language"),
         )
     return {
         "report": result.report,
@@ -266,6 +268,7 @@ def run_agent(
     checkpoint_thread_id: str | None = None,
     llm_settings: Any = None,
     deadline: float | None = None,
+    answer_language: str | None = None,
 ) -> dict[str, Any]:
     """Invoke the source-controlled LangGraph agent with request scope."""
     graph = (
@@ -295,6 +298,7 @@ def run_agent(
             "trace": trace,
             "llm_settings": llm_settings,
             "deadline": deadline,
+            "answer_language": answer_language,
         },
         durability="sync" if checkpointer is not None else None,
     )

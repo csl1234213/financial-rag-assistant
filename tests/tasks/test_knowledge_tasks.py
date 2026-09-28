@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import Mock
@@ -11,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 import tasks.knowledge_tasks as knowledge_tasks
 from models.document import Document
+from models.financial_fact import FinancialFactRecord
 from models.task import TaskStatus, TaskType
 from models.tenant import Tenant
 from models.user import User
@@ -73,6 +75,7 @@ def task_database(monkeypatch):
         pdf_path: Path,
         *,
         content_sha256: str | None = None,
+        task_payload: dict | None = None,
     ) -> ProcessingTask:
         document = Document(
             filename=pdf_path.name,
@@ -81,6 +84,7 @@ def task_database(monkeypatch):
             period="Unknown",
             status="processing",
             tenant_id=tenant.id,
+            content_sha256=content_sha256,
         )
         db.add(document)
         db.commit()
@@ -92,6 +96,7 @@ def task_database(monkeypatch):
                 "file_path": str(pdf_path),
                 "document_id": document.id,
                 **({"content_sha256": content_sha256} if content_sha256 is not None else {}),
+                **(task_payload or {}),
             },
             tenant.id,
             user.id,
@@ -259,7 +264,7 @@ def test_successful_processing_batches_embeddings_and_persists_provenance(
     task = TaskRepository(db).get_task(processing_task.public_id)
     document = db.get(Document, processing_task.document_id)
     assert task is not None
-    assert task.status == TaskStatus.SUCCESS.value
+    assert task.status == TaskStatus.SUCCESS.value, task.error_message
     assert document is not None
     assert document.status == "indexed"
     assert document.indexed_chunk_count == 1
@@ -286,6 +291,86 @@ def test_successful_processing_batches_embeddings_and_persists_provenance(
     assert vector_document.metadata["content_sha256"] == content_sha256
     assert document.company == "Tesla"
     assert usage_recorder.call_count == 3
+
+
+def test_real_moutai_pdf_worker_persists_only_verified_structured_facts(
+    monkeypatch,
+    task_database,
+):
+    db, create_task, embedding_loader, store_factory, _usage_recorder = task_database
+    pdf_path = Path(__file__).parents[1] / "fixtures" / "moutai-standard-statements-2025.pdf"
+    content_sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    processing_task = create_task(pdf_path, content_sha256=content_sha256)
+
+    model = Mock()
+    model.encode.side_effect = lambda texts, **_kwargs: [[0.1, 0.2, 0.3] for _ in texts]
+    embedding_loader.side_effect = None
+    embedding_loader.return_value = model
+    store = Mock()
+    store_factory.side_effect = None
+    store_factory.return_value = store
+
+    knowledge_tasks.process_document_task(processing_task.public_id)
+
+    db.expire_all()
+    task = TaskRepository(db).get_task(processing_task.public_id)
+    assert task is not None
+    assert task.status == TaskStatus.SUCCESS.value, task.error_message
+    fact_result = task.result["financial_fact_ingestion"]
+    assert fact_result["status"] == "SUCCESS"
+    assert fact_result["facts_inserted"] > 0
+    assert fact_result["rows_seen"] >= fact_result["rows_verified"]
+    assert fact_result["rows_verified"] >= fact_result["rows_mapped"]
+
+    persisted = (
+        db.query(FinancialFactRecord)
+        .filter(FinancialFactRecord.document_id == processing_task.document_id)
+        .all()
+    )
+    assert len(persisted) == fact_result["facts_inserted"]
+    assert persisted
+    assert all(row.tenant_id == persisted[0].tenant_id for row in persisted)
+    assert all(row.row_verification_status == "VERIFIED" for row in persisted)
+    assert any(row.canonical_metric == "total_assets" for row in persisted)
+
+
+def test_cninfo_discovery_metadata_is_preserved_for_company_retrieval(
+    tmp_path,
+    task_database,
+):
+    db, create_task, embedding_loader, store_factory, _usage_recorder = task_database
+    pdf_path = tmp_path / "public-annual-report.pdf"
+    with fitz.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "Annual report financial statements for the year.")
+        document.save(pdf_path)
+
+    processing_task = create_task(
+        pdf_path,
+        task_payload={
+            "source_type": "cninfo",
+            "source_company": "贵州茅台",
+            "source_report_date": "2025-12-31",
+        },
+    )
+    model = Mock()
+    model.encode.return_value = [[0.1, 0.2, 0.3]]
+    embedding_loader.side_effect = None
+    embedding_loader.return_value = model
+    store = Mock()
+    store_factory.side_effect = None
+    store_factory.return_value = store
+
+    knowledge_tasks.process_document_task(processing_task.public_id)
+
+    db.expire_all()
+    document = db.get(Document, processing_task.document_id)
+    assert document is not None
+    assert document.company == "贵州茅台"
+    assert document.period == "2025-12-31"
+    indexed = store.add_documents.call_args.args[0]
+    assert len(indexed) == 1
+    assert indexed[0].company == "贵州茅台"
 
 
 def test_xlsx_task_uses_body_company_and_persists_row_locator(

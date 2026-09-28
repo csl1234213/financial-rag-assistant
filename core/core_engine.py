@@ -93,6 +93,21 @@ logger = logging.getLogger(__name__)
 PDF_FOLDER = "pdfs/"
 PUBLIC_TENANT_ID = 0
 
+_AUDIT_FACT_QUESTION = re.compile(
+    r"\b(?:auditor|audit firm|audited by|audit opinion)\b|"
+    r"会计师事务所|审计机构|审计意见|审计报告由",
+    re.IGNORECASE,
+)
+_AUDIT_FIRM_EVIDENCE = re.compile(
+    r"\b(?:independent\s+auditor|audit\s+firm|audited\s+by)\b|"
+    r"会计师事务所|审计机构",
+    re.IGNORECASE,
+)
+_POSITIVE_AUDIT_OPINION_EVIDENCE = re.compile(
+    r"\b(?:unmodified|unqualified)\s+opinion\b|标准无保留意见|(?<!非)无保留意见",
+    re.IGNORECASE,
+)
+
 _store = None
 _model = None
 _model_init_lock = Lock()
@@ -120,7 +135,7 @@ def _capture_smoke_grounding(
     grounded_claims = grounded.claims if grounded is not None else []
     grounded_evidence = final_grounded.evidence if final_grounded is not None else []
     safe_metadata_fields = {
-        "chunk_id", "quarter", "periods", "metrics", "page", "section", "table_context",
+        "chunk_id", "document_id", "quarter", "periods", "metrics", "page", "section", "table_context",
         "document_reporting_period", "fact_period", "evidence_row_period", "row_period",
         "table_column_period", "column_period", "semantic_support", "source_authority",
         "period_type", "period_start", "period_end",
@@ -145,11 +160,29 @@ def _capture_smoke_grounding(
             "supported_count": grounded.supported_count if grounded is not None else 0,
             "derivable_count": grounded.derivable_count if grounded is not None else 0,
             "uncertain_count": grounded.uncertain_count if grounded is not None else 0,
+            "judgments": [
+                {
+                    "relation": judgment.relation.value,
+                    "action": judgment.action.value,
+                    "confidence": judgment.confidence,
+                    "reason": judgment.reason,
+                }
+                for judgment in (grounded.judgments if grounded is not None else [])
+            ],
         },
         "final_grounding_result": {
             "claims": [{"text": claim.text, "disposition": claim.disposition}
                        for claim in final_grounded.claims] if final_grounded is not None else [],
             "unsupported_count": final_grounded.unsupported_count if final_grounded is not None else 0,
+            "judgments": [
+                {
+                    "relation": judgment.relation.value,
+                    "action": judgment.action.value,
+                    "confidence": judgment.confidence,
+                    "reason": judgment.reason,
+                }
+                for judgment in (final_grounded.judgments if final_grounded is not None else [])
+            ],
         },
         "retrieved_evidence": [evidence_payload(item) for item in retrieved],
         "final_evidence": [evidence_payload(item) for item in grounded_evidence],
@@ -322,6 +355,68 @@ def _project_answer_citations(
         flags=re.I,
     )
     return compacted_answer, projected
+
+
+def _prioritize_explicit_audit_disclosure(
+    question: str,
+    evidence: Sequence[Evidence],
+) -> list[Evidence]:
+    """Put a source chunk that explicitly states auditor and opinion first."""
+    items = list(evidence)
+    if not _AUDIT_FACT_QUESTION.search(question or ""):
+        return items
+    direct = [
+        item
+        for item in items
+        if _AUDIT_FIRM_EVIDENCE.search(item.content or "")
+        and _POSITIVE_AUDIT_OPINION_EVIDENCE.search(item.content or "")
+    ]
+    direct_ids = {id(item) for item in direct}
+    return [*direct, *(item for item in items if id(item) not in direct_ids)]
+
+
+def _project_explicit_audit_answer(
+    question: str,
+    evidence: Sequence[Evidence],
+    response_language: str | None,
+) -> str | None:
+    """Render audit facts only when one retrieved source explicitly states them."""
+    if not _AUDIT_FACT_QUESTION.search(question or ""):
+        return None
+
+    firm_pattern = re.compile(
+        r"(?P<firm>[\u3400-\u9fffA-Za-z0-9·]{2,32}会计师事务所\s*[（(]\s*特殊普通合伙\s*[）)])",
+        re.IGNORECASE,
+    )
+    opinion_pattern = re.compile(r"标准无保留意见|(?<!非)无保留意见")
+    wants_firm = bool(re.search(r"会计师事务所|审计机构|auditor|audit firm", question, re.I))
+    wants_opinion = bool(re.search(r"审计意见|audit opinion|opinion", question, re.I))
+
+    for rank, item in enumerate(evidence, 1):
+        content = item.content or ""
+        firm_match = firm_pattern.search(content) if wants_firm else None
+        opinion_match = opinion_pattern.search(content) if wants_opinion else None
+        if wants_firm and firm_match is None:
+            continue
+        if wants_opinion and opinion_match is None:
+            continue
+        if not firm_match and not opinion_match:
+            continue
+        citation = f"[Evidence {rank}]"
+        if response_language and response_language.casefold().startswith("en"):
+            parts = []
+            if firm_match:
+                parts.append(f"Auditor: {firm_match.group('firm')}")
+            if opinion_match:
+                parts.append(f"Audit opinion: {opinion_match.group(0)}")
+            return "; ".join(parts) + f" {citation}."
+        parts = []
+        if firm_match:
+            parts.append(f"审计机构为{firm_match.group('firm')}")
+        if opinion_match:
+            parts.append(f"审计意见为{opinion_match.group(0)}")
+        return "；".join(parts) + f" {citation}。"
+    return None
 
 
 def _get_retriever():
@@ -527,6 +622,7 @@ def run_rag(
         prompt = build_direct_chat_prompt(
             question,
             history=conversation_history,
+            response_language=answer_language,
         )
         if result.planning is not None:
             result.planning["prompt"] = prompt_metadata
@@ -535,13 +631,16 @@ def run_rag(
             answer = call_llm(
                 prompt,
                 provider=result.provider_instance,
-                system_prompt=get_prompt_system_prompt(prompt_name),
+                system_prompt=get_prompt_system_prompt(
+                    prompt_name,
+                    response_language=answer_language,
+                ),
                 deadline=deadline,
             )
         finally:
             _log_pipeline_stage("provider_request", provider_started, thread_id=thread_id)
         if not str(answer).strip():
-            answer = _empty_answer_for_question(question)
+            answer = _empty_answer_for_question(question, answer_language)
         _capture_smoke_grounding(
             question=question,
             raw_answer=str(answer),
@@ -564,6 +663,17 @@ def run_rag(
             workflow=result.workflow,
         )
 
+    if company:
+        from agent.planning.entity_extractor import extract_companies
+
+        if not extract_companies(evidence_question):
+            company_context = (
+                f"本次问题的目标公司范围：{company}。"
+                if any("\u3400" <= char <= "\u9fff" for char in str(company))
+                else f"Target company context: {company}."
+            )
+            evidence_question = f"{evidence_question}\n{company_context}"
+
     # Apply deterministic semantic constraints before constructing the LLM
     # prompt.  Structural retrieval can return a real chunk from the wrong
     # company/period/metric; passing it through would invite a plausible but
@@ -572,6 +682,10 @@ def run_rag(
     required_fact_plan = None
     if result.evidence:
         gated_evidence = filter_evidence_for_query(evidence_question, result.evidence)
+        gated_evidence = _prioritize_explicit_audit_disclosure(
+            evidence_question,
+            gated_evidence,
+        )
         result.evidence = gated_evidence
         required_fact_plan = infer_required_fact_plan(evidence_question, gated_evidence)
         result.context, fact_ledger = build_evidence_first_context(
@@ -585,17 +699,27 @@ def run_rag(
         prompt_name = "financial_compare"
         prompt_metadata = get_prompt_metadata(prompt_name)
         prompt = build_compare_prompt(
-            question,
+            # The planner may resolve an entityless follow-up (for example
+            # ``What about its margins?``) against the previous user turn.
+            # Retrieval and grounding already use that resolved question; the
+            # model prompt must use the same contract or the provider can see
+            # an ambiguous latest turn and answer for the wrong company.
+            evidence_question,
             result.context,
             history=conversation_history,
+            response_language=answer_language,
         )
     else:
         prompt_name = "financial_rag"
         prompt_metadata = get_prompt_metadata(prompt_name)
         prompt = build_prompt(
-            question,
+            # Keep generation scope identical to retrieval/grounding.  This
+            # prevents a multi-turn follow-up from losing the inherited
+            # company/period at the final provider boundary.
+            evidence_question,
             result.context,
             history=conversation_history,
+            response_language=answer_language,
         )
 
     if result.planning is not None:
@@ -620,7 +744,7 @@ def run_rag(
         )
 
     if len(result.citations) == 0:  # 计算结果长度
-        no_evidence_answer = no_evidence_response(question)
+        no_evidence_answer = no_evidence_response(question, answer_language)
         return RAGResult(
             report=no_evidence_answer,
             citations=[],
@@ -640,20 +764,39 @@ def run_rag(
         answer = call_llm(
             prompt,
             provider=result.provider_instance,
-            system_prompt=get_prompt_system_prompt(prompt_name),
+            system_prompt=get_prompt_system_prompt(
+                prompt_name,
+                response_language=answer_language,
+            ),
             deadline=deadline,
         )
     finally:
         _log_pipeline_stage("provider_request", provider_started, thread_id=thread_id)
     raw_answer = str(answer)
     if not raw_answer.strip():
-        answer = _empty_answer_for_question(question)
+        answer = _empty_answer_for_question(question, answer_language)
 
     retrieved = list(result.evidence)
+    explicit_audit_answer = _project_explicit_audit_answer(
+        evidence_question,
+        retrieved,
+        answer_language,
+    )
+    grounding_input = explicit_audit_answer or str(answer)
     grounding_started = time.monotonic()
-    final = finalize_grounded_answer(evidence_question, str(answer), retrieved)
+    final = finalize_grounded_answer(
+        evidence_question,
+        grounding_input,
+        retrieved,
+        response_language=answer_language,
+    )
     _log_pipeline_stage("grounding_sanitizer", grounding_started, thread_id=thread_id)
-    answer, result.evidence = _project_answer_citations(final.answer, final.grounded.evidence)
+    final_answer = _nonempty_final_answer(
+        evidence_question,
+        final.answer,
+        answer_language,
+    )
+    answer, result.evidence = _project_answer_citations(final_answer, final.grounded.evidence)
     result.context, result.citations = build_context_from_evidence(result.evidence)
     if result.planning is not None:
         statuses = final.plan.statuses(final.ledger, answer)
@@ -674,7 +817,13 @@ def run_rag(
     # Raw reasoner extracts are retrieval diagnostics, not validated claims.
     # Keep evidence available through citations/context without reintroducing
     # an unchecked numeric appendix into the user-visible answer.
-    report = build_research_report(question, answer, result.citations, evidence_stats)
+    report = build_research_report(
+        question,
+        answer,
+        result.citations,
+        evidence_stats,
+        response_language=answer_language,
+    )
     _capture_smoke_grounding(
         question=evidence_question, raw_answer=raw_answer, grounded=final.raw_grounding,
         retrieved=retrieved, final_grounded=final.grounded, final_report=report,
@@ -696,10 +845,18 @@ def run_rag(
     )
 
 
-def _empty_answer_for_question(question: str) -> str:
+def _empty_answer_for_question(
+    question: str,
+    response_language: str | None = None,
+) -> str:
     """Return a user-visible answer when a provider returns an empty body."""
 
-    if any("\u3400" <= char <= "\u9fff" for char in str(question)):
+    is_chinese = (
+        response_language == "zh-CN"
+        if response_language in {"en", "zh-CN"}
+        else any("\u3400" <= char <= "\u9fff" for char in str(question))
+    )
+    if is_chinese:
         return (
             "当前模型未返回可用内容。已完成检索，但没有获得足够的有效回答。请缩小问题范围，或补充对应公司的财报与期间。"
         )
@@ -708,3 +865,13 @@ def _empty_answer_for_question(question: str) -> str:
         "answer was empty. Please narrow the question or provide the relevant "
         "company filing and reporting period."
     )
+
+
+def _nonempty_final_answer(
+    question: str,
+    answer: str,
+    response_language: str | None = None,
+) -> str:
+    """Never serialize an empty answer if final grounding removed every claim."""
+
+    return answer.strip() or no_evidence_response(question, response_language)

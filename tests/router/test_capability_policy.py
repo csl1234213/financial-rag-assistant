@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent.planning.task_enums import TaskType as PlannedTaskType
 from llm.providers.base_provider import BaseProvider
 from llm.providers.provider_config import ProviderConfig
 from llm.providers.provider_models import (
@@ -231,26 +232,55 @@ class TestCapabilityRoutingPolicy:
 
         assert result.provider == "deepseek"
         assert result.model == "deepseek-v4-flash"
-        assert result.reason == "Default chat provider"
+        assert result.reason == "Default provider"
         assert result.confidence == 0.85
         assert result.fallback_provider is None
 
-    def test_document_qa_routes_by_capability_match(self, policy):
+    def test_document_qa_defaults_to_the_user_selected_provider(self, policy):
         ctx = RoutingContext(task=TaskType.DOCUMENT_QA)
         result = policy.select(ctx)
 
         assert result.provider == "deepseek"
-        assert result.reason == "General purpose"
-        assert result.confidence == 0.5
+        assert result.reason == "Default provider"
+        assert result.confidence == 0.85
         assert result.fallback_provider is None
 
-    def test_unrecognized_task_routes_by_capability_match(self, policy):
+    def test_summarization_defaults_to_the_user_selected_provider(self, policy):
         ctx = RoutingContext(task=TaskType.SUMMARIZATION)
         result = policy.select(ctx)
 
         assert result.provider == "deepseek"
-        assert result.reason == "General purpose"
-        assert result.confidence == 0.5
+        assert result.reason == "Default provider"
+        assert result.confidence == 0.85
+
+    @pytest.mark.parametrize(
+        "task_type",
+        [
+            TaskType.DOCUMENT_QA,
+            PlannedTaskType.RESEARCH,
+            PlannedTaskType.FINANCIAL_ANALYSIS,
+            PlannedTaskType.COMPARISON,
+        ],
+    )
+    def test_configured_local_default_wins_ties_for_financial_tasks(self, task_type):
+        policy = CapabilityRoutingPolicy(
+            default_provider="gemini",
+            default_model="gemini-2.5-flash",
+            provider_models={
+                "deepseek": "deepseek-v4-flash",
+                "gemini": "gemini-2.5-flash",
+            },
+        )
+        # The external provider is deliberately listed first, matching the
+        # production registration order that previously won an equal score.
+        result = policy.select(
+            RoutingContext(task=task_type),
+            providers=["deepseek", "gemini"],
+        )
+
+        assert result.provider == "gemini"
+        assert result.reason == "Default provider"
+        assert result.confidence == 0.85
 
     # =========================
     # select() — custom default_provider
@@ -302,7 +332,7 @@ class TestCapabilityRoutingPolicy:
         result = policy.select(ctx, providers=["deepseek", "gemini"])
 
         assert result.provider == "deepseek"
-        assert result.reason == "Default chat provider"
+        assert result.reason == "Default provider"
         assert result.confidence == 0.85
 
     def test_chat_task_with_non_default(self):

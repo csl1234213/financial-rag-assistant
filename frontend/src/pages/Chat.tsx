@@ -14,14 +14,15 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { sendChatMessage } from '../api/chat';
 import { ApiClientError } from '../api/client';
 import { getHealth } from '../api/health';
-import { uploadDocument } from '../api/knowledge';
+import { discoverCompanyDocument, uploadDocument } from '../api/knowledge';
 import { useLanguage } from '../i18n/LanguageContext';
-import { extractModelIdentity } from '../components/chat/reportPresentation';
+import {
+  extractModelIdentity,
+  getRuntimeFailureKind,
+} from '../components/chat/reportPresentation';
 import type { ChatMessage, ChatResponse } from '../types/api';
 import type { ConversationSummary } from '../types/conversation';
 
-const PROVIDER_CONFIGURATION_ERROR = '[Provider Configuration Error]';
-const AGENT_RUNTIME_FALLBACK = '[Agent Runtime Fallback]';
 const HISTORY_COLLAPSED_STORAGE_KEY = 'financial-rag-history-collapsed';
 
 interface ChatProps {
@@ -82,15 +83,14 @@ export function Chat({
   const [response, setResponse] = useState<ChatResponse | null>(
     () => findLatestResponse(initialMessages),
   );
+  const [discoveryStatus, setDiscoveryStatus] = useState<string | null>(null);
   const [backendConnected, setBackendConnected] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(
     () => window.localStorage.getItem(HISTORY_COLLAPSED_STORAGE_KEY) === 'true',
   );
   const modelIdentity = extractModelIdentity(response?.routing);
-  const runtimeFailed = Boolean(
-    response?.report.startsWith(PROVIDER_CONFIGURATION_ERROR)
-    || response?.report.startsWith(AGENT_RUNTIME_FALLBACK),
-  );
+  const runtimeFailed = response !== null
+    && getRuntimeFailureKind(response.report) !== null;
   const showInsights = loading || response !== null;
 
   let runtimeStatus = t.chat.apiOffline;
@@ -175,19 +175,26 @@ export function Chat({
       commitMessages(messagesWithQuestion);
       setLoading(true);
       setResponse(null);
+      setDiscoveryStatus(null);
 
       try {
         const apiResponse = await sendChatMessage(
           question,
           undefined,
           threadId,
+          language,
         );
-        const isProviderConfigurationError = apiResponse.report.startsWith(
-          PROVIDER_CONFIGURATION_ERROR,
-        );
-        const report = language === 'zh-CN' && isProviderConfigurationError
-          ? `[服务配置错误] ${t.chat.providerConfigurationError}`
-          : apiResponse.report;
+        const failureKind = getRuntimeFailureKind(apiResponse.report);
+        const localizedFailure = failureKind === 'provider-disabled'
+          ? t.chat.providerDisabled
+          : failureKind === 'provider-configuration'
+            ? t.chat.providerConfigurationError
+            : failureKind === 'provider-error'
+              ? t.chat.providerTemporaryError
+              : failureKind === 'agent-runtime-fallback'
+                ? t.chat.runtimeFallbackError
+                : null;
+        const report = localizedFailure ?? apiResponse.report;
 
         setResponse(apiResponse);
         commitMessages([
@@ -201,6 +208,22 @@ export function Chat({
             citationNamespace: `chat-turn-${turnId}`,
           },
         ]);
+        const companies = apiResponse.reasoning?.companies ?? [];
+        if (apiResponse.citations.length === 0 && companies.length === 1) {
+          const company = companies[0];
+          setDiscoveryStatus(t.chat.autoDiscoverySearching(company));
+          void discoverCompanyDocument(company)
+            .then((discovery) => {
+              setDiscoveryStatus(
+                discovery.status === 'downloaded'
+                  ? t.chat.autoDiscoveryDownloaded(company)
+                  : t.chat.autoDiscoveryAlreadyPresent(company),
+              );
+            })
+            .catch(() => {
+              setDiscoveryStatus(t.chat.autoDiscoveryUnavailable(company));
+            });
+        }
         onTurnCompleted(threadId);
       } catch (error: unknown) {
         const detail = error instanceof Error ? error.message : t.chat.connectionError;
@@ -308,6 +331,12 @@ export function Chat({
               demoQuestions={t.chat.demoQuestions}
               onDemoQuestion={handleSend}
             />
+
+            {discoveryStatus && (
+              <div className="chat-discovery-status" role="status" aria-live="polite">
+                {discoveryStatus}
+              </div>
+            )}
 
             <InputBox
               onSubmit={handleSend}

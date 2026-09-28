@@ -27,6 +27,7 @@ class ChatService:
         tenant_id: Optional[int] = None,
         user_id: Optional[int] = None,
         thread_id: Optional[str] = None,
+        answer_language: str | None = None,
         deadline: float | None = None,
     ) -> ChatResponse:
         t0 = time.monotonic()
@@ -43,6 +44,7 @@ class ChatService:
                 "tenant_id": tenant_id,
                 "user_id": user_id,
                 "thread_id": thread_id or "default",
+                "answer_language": answer_language,
             }
             if deadline is not None:
                 run_kwargs["deadline"] = deadline

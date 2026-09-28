@@ -53,9 +53,10 @@ class LLMProviderSetting(Base):
         index=True,
     )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
-    encrypted_api_key: Mapped[str] = mapped_column(Text, nullable=False)
-    key_hint: Mapped[str] = mapped_column(String(4), nullable=False)
+    encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    key_hint: Mapped[str | None] = mapped_column(String(4), nullable=True)
     model: Mapped[str] = mapped_column(String(255), nullable=False)
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_default: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

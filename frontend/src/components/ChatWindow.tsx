@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../types/chat';
+import { SafeMarkdown } from './chat/SafeMarkdown';
 
 interface ChatWindowProps {
   messages: ChatMessage[];
@@ -24,7 +25,9 @@ export function ChatWindow({ messages, loading, labels }: ChatWindowProps) {
           <span className="message__role">
             {message.role === 'user' ? labels.user : labels.assistant}
           </span>
-          <p>{message.content}</p>
+          {message.role === 'assistant'
+            ? <SafeMarkdown content={message.content} />
+            : <p>{message.content}</p>}
         </article>
       ))}
 

@@ -17,7 +17,7 @@ const CLEAR_BATCH_SIZE = 25;
 export async function getConversationHistory(
   limit = 50,
 ): Promise<ConversationList> {
-  const payload = await getJson<unknown>(
+  const payload = await getJson(
     `/v1/agent/sessions?limit=${limit}&offset=0`,
   );
   return parseConversationList(payload);
@@ -27,7 +27,7 @@ export async function getConversation(
   threadId: string,
   messageCount: number,
 ): Promise<ConversationDetail> {
-  const payload = await getJson<unknown>(
+  const payload = await getJson(
     buildConversationDetailPath(threadId, messageCount),
   );
   return parseConversationDetail(payload);
@@ -36,7 +36,7 @@ export async function getConversation(
 export async function deleteConversation(
   threadId: string,
 ): Promise<ConversationDeleteResult> {
-  const payload = await deleteJson<unknown>(
+  const payload = await deleteJson(
     buildConversationDeletePath(threadId),
   );
   return parseConversationDeleteResult(payload);

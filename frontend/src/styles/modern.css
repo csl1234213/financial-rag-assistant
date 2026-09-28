@@ -1023,6 +1023,55 @@
   max-width: 76ch;
 }
 
+.safe-markdown__table-wrap {
+  max-width: 100%;
+  margin: 0.9rem 0 1.1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-primary);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 5%, transparent);
+  scrollbar-width: thin;
+}
+
+.safe-markdown__table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.safe-markdown__table th,
+.safe-markdown__table td {
+  padding: 0.72rem 0.9rem;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+}
+
+.safe-markdown__table th {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-size: 0.84rem;
+  font-weight: 680;
+  white-space: nowrap;
+}
+
+.safe-markdown__table td:first-child {
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+.safe-markdown__table tr:last-child td {
+  border-bottom: 0;
+}
+
+.safe-markdown__table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--bg-secondary) 45%, transparent);
+}
+
 .safe-markdown h1,
 .safe-markdown h2,
 .safe-markdown h3,
@@ -1076,6 +1125,19 @@
   border-radius: 9px 9px 9px 3px;
   background: var(--accent-blue);
   font-size: 0.72rem;
+}
+
+.assistant-report__disclaimer {
+  width: fit-content;
+  max-width: 76ch;
+  margin: 12px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-size: var(--type-caption);
+  line-height: 1.55;
 }
 
 .assistant-report__question {
@@ -2011,6 +2073,7 @@
 .knowledge-header__subtitle,
 .knowledge-error,
 .knowledge-success,
+.chat-discovery-status,
 .doc-card__meta-value,
 .doc-card__date,
 .doc-card__checksum,
@@ -2029,6 +2092,15 @@
 .retrieval-result__content,
 .retrieval-result__meta-value {
   font-size: var(--type-caption);
+}
+
+.chat-discovery-status {
+  margin: 0.75rem 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--color-border, #dbe2ea);
+  border-radius: 0.75rem;
+  color: var(--color-text-secondary, #526173);
+  background: var(--color-surface-muted, #f7f9fb);
 }
 
 .agent-step__duration,

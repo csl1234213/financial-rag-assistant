@@ -1,8 +1,30 @@
 from types import SimpleNamespace
 
+import pytest
+
 from llm.adapters.deepseek_provider import DeepSeekProvider
 from llm.providers.provider_config import ProviderConfig
+from llm.providers.provider_exceptions import ProviderError
 from llm.providers.provider_models import ChatRequest
+
+
+def test_real_provider_guard_blocks_production_process_without_explicit_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persisted DeepSeek route cannot spend while the guard is disabled."""
+
+    monkeypatch.setenv("ALLOW_REAL_PROVIDER", "false")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    provider = DeepSeekProvider(
+        ProviderConfig(
+            provider="deepseek",
+            model="deepseek-v4-flash",
+            api_key="test-only-key",
+        )
+    )
+
+    with pytest.raises(ProviderError, match="Real provider calls are disabled"):
+        provider._get_client()
 
 
 def test_v4_chat_uses_the_official_thinking_request_contract() -> None:

@@ -1,4 +1,5 @@
 import { ApiClientError, toApiUrl } from './client';
+import { parseHealthResponse } from './healthContract';
 import type { HealthResponse } from '../types/api';
 
 const healthEndpoint = '/v1/health';
@@ -10,6 +11,10 @@ function parseJson(text: string): unknown | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export async function getHealth(): Promise<HealthResponse> {
@@ -26,7 +31,7 @@ export async function getHealth(): Promise<HealthResponse> {
 
   if (!response.ok) {
     const fallback = `Health check failed with status ${response.status}.`;
-    const detail = (payload as Record<string, unknown> | undefined)?.detail;
+    const detail = isRecord(payload) ? payload.detail : undefined;
     const message = typeof detail === 'string' ? detail : fallback;
     throw new ApiClientError(message, response.status, payload);
   }
@@ -35,5 +40,5 @@ export async function getHealth(): Promise<HealthResponse> {
     throw new ApiClientError('The API returned an invalid JSON response.', response.status);
   }
 
-  return payload as HealthResponse;
+  return parseHealthResponse(payload);
 }

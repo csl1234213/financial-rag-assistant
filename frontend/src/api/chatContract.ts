@@ -2,14 +2,17 @@ import type {
   ChatResponse,
   Citation,
   Execution,
+  Plan,
   Planning,
   Reasoning,
   Routing,
   Workflow,
 } from '../types/api';
+import type { Language } from '../types/language';
 
 export interface ChatRequest {
   question: string;
+  answer_language?: Language;
   company?: string;
   thread_id?: string;
 }
@@ -49,6 +52,42 @@ function requireFiniteNumber(value: unknown, path: string): number {
   return value;
 }
 
+function optionalString(
+  record: Record<string, unknown>,
+  field: string,
+  path: string,
+): string | undefined {
+  const value = record[field];
+  if (value !== undefined && typeof value !== 'string') {
+    throw new ChatContractError(`${path}.${field} must be a string when present`);
+  }
+  return value;
+}
+
+function optionalNonNegativeInteger(
+  record: Record<string, unknown>,
+  field: string,
+  path: string,
+): number | undefined {
+  const value = record[field];
+  if (
+    value !== undefined
+    && (typeof value !== 'number' || !Number.isInteger(value) || value < 0)
+  ) {
+    throw new ChatContractError(
+      `${path}.${field} must be a non-negative integer when present`,
+    );
+  }
+  return value;
+}
+
+function requireStringArray(value: unknown, path: string): string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    throw new ChatContractError(`${path} must be an array of strings`);
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
 function parseCitation(value: unknown, index: number): Citation {
   const path = `citations[${index}]`;
   const citation = requireRecord(value, path);
@@ -58,22 +97,42 @@ function parseCitation(value: unknown, index: number): Citation {
     throw new ChatContractError(`${path}.rank must be a positive integer`);
   }
 
-  requireString(citation.source, `${path}.source`);
-  requireString(citation.chunk_id, `${path}.chunk_id`);
-  requireString(citation.preview, `${path}.preview`);
+  const source = requireString(citation.source, `${path}.source`);
+  const chunkId = requireString(citation.chunk_id, `${path}.chunk_id`);
+  const preview = requireString(citation.preview, `${path}.preview`);
 
-  const similarity = citation.similarity;
-  if (similarity !== null) {
-    requireFiniteNumber(similarity, `${path}.similarity`);
-  }
+  const similarityValue = citation.similarity;
+  const similarity = similarityValue === null
+    ? null
+    : requireFiniteNumber(similarityValue, `${path}.similarity`);
 
-  return citation as unknown as Citation;
+  const page = optionalNonNegativeInteger(citation, 'page', path);
+  const pageLabel = optionalString(citation, 'page_label', path);
+  const sourceLocator = optionalString(citation, 'source_locator', path);
+  const contentType = optionalString(citation, 'content_type', path);
+  const sourceFormat = optionalString(citation, 'source_format', path);
+
+  return {
+    rank,
+    source,
+    chunk_id: chunkId,
+    similarity,
+    preview,
+    ...(page === undefined ? {} : { page }),
+    ...(pageLabel === undefined ? {} : { page_label: pageLabel }),
+    ...(sourceLocator === undefined ? {} : { source_locator: sourceLocator }),
+    ...(contentType === undefined ? {} : { content_type: contentType }),
+    ...(sourceFormat === undefined ? {} : { source_format: sourceFormat }),
+  };
 }
 
 function parseReasoning(value: unknown): Reasoning {
   const reasoning = requireRecord(value, 'reasoning');
-  requireString(reasoning.intent, 'reasoning.intent');
-  requireString(reasoning.research_mode, 'reasoning.research_mode');
+  const intent = requireString(reasoning.intent, 'reasoning.intent');
+  const researchMode = requireString(
+    reasoning.research_mode,
+    'reasoning.research_mode',
+  );
   const evidenceCount = requireFiniteNumber(
     reasoning.evidence_count,
     'reasoning.evidence_count',
@@ -84,41 +143,67 @@ function parseReasoning(value: unknown): Reasoning {
     );
   }
 
-  if (
-    !Array.isArray(reasoning.companies)
-    || !reasoning.companies.every((company) => typeof company === 'string')
-  ) {
-    throw new ChatContractError('reasoning.companies must be an array of strings');
-  }
+  const companies = requireStringArray(reasoning.companies, 'reasoning.companies');
 
-  return reasoning as unknown as Reasoning;
+  return {
+    intent,
+    research_mode: researchMode,
+    evidence_count: evidenceCount,
+    companies,
+  };
+}
+
+function parsePlan(value: unknown): Plan {
+  const plan = requireRecord(value, 'plan');
+  const steps = plan.steps;
+  if (
+    steps !== undefined
+    && (!Array.isArray(steps) || !steps.every((step) => typeof step === 'string'))
+  ) {
+    throw new ChatContractError('plan.steps must be an array of strings when present');
+  }
+  const queries = plan.queries;
+  if (
+    queries !== undefined
+    && (!Array.isArray(queries) || !queries.every((query) => typeof query === 'string'))
+  ) {
+    throw new ChatContractError('plan.queries must be an array of strings when present');
+  }
+  return {
+    ...plan,
+    ...(steps === undefined ? {} : { steps }),
+    ...(queries === undefined ? {} : { queries }),
+  };
 }
 
 function parseNullableRecord<T>(
   value: unknown,
   path: string,
-  validate: (record: Record<string, unknown>) => void,
+  parse: (record: Record<string, unknown>) => T,
 ): T | null {
   if (value === null) {
     return null;
   }
 
   const record = requireRecord(value, path);
-  validate(record);
-  return record as unknown as T;
+  return parse(record);
 }
 
 export function createChatRequest(
   question: string,
   company?: string,
   threadId?: string,
+  answerLanguage?: Language,
 ): ChatRequest {
   const normalizedQuestion = question.trim();
   if (!normalizedQuestion) {
     throw new ChatContractError('question must not be empty');
   }
 
-  const request: ChatRequest = { question: normalizedQuestion };
+  const request: ChatRequest = {
+    question: normalizedQuestion,
+    ...(answerLanguage ? { answer_language: answerLanguage } : {}),
+  };
   const normalizedCompany = company?.trim();
   if (normalizedCompany) {
     request.company = normalizedCompany;
@@ -145,34 +230,70 @@ export function parseChatResponse(value: unknown): ChatResponse {
   const routing = parseNullableRecord<Routing>(
     response.routing,
     'routing',
-    (record) => requireString(record.provider, 'routing.provider'),
+    (record) => {
+      const agent = optionalString(record, 'agent', 'routing');
+      const pipeline = optionalString(record, 'pipeline', 'routing');
+      const model = optionalString(record, 'model', 'routing');
+      return {
+        provider: requireString(record.provider, 'routing.provider'),
+        ...(agent === undefined ? {} : { agent }),
+        ...(pipeline === undefined ? {} : { pipeline }),
+        ...(model === undefined ? {} : { model }),
+      };
+    },
   );
   const planning = parseNullableRecord<Planning>(
     response.planning,
     'planning',
-    () => undefined,
+    (record) => {
+      const intent = optionalString(record, 'intent', 'planning');
+      const researchMode = optionalString(record, 'research_mode', 'planning');
+      const companies = record.companies;
+      if (
+        companies !== undefined
+        && (!Array.isArray(companies)
+          || !companies.every((company) => typeof company === 'string'))
+      ) {
+        throw new ChatContractError(
+          'planning.companies must be an array of strings',
+        );
+      }
+      return {
+        ...(intent === undefined ? {} : { intent }),
+        ...(researchMode === undefined ? {} : { research_mode: researchMode }),
+        ...(companies === undefined ? {} : { companies }),
+      };
+    },
   );
   const execution = parseNullableRecord<Execution>(
     response.execution,
     'execution',
-    (record) => requireString(record.strategy, 'execution.strategy'),
+    (record) => ({
+      ...record,
+      strategy: requireString(record.strategy, 'execution.strategy'),
+    }),
   );
   const workflow = parseNullableRecord<Workflow>(
     response.workflow,
     'workflow',
     (record) => {
-      requireString(record.type, 'workflow.type');
-      requireString(record.status, 'workflow.status');
+      return {
+        ...record,
+        type: requireString(record.type, 'workflow.type'),
+        status: requireString(record.status, 'workflow.status'),
+      };
     },
   );
 
   return {
-    ...response,
+    report: requireString(response.report, 'report'),
+    plan: parsePlan(response.plan),
+    execution_time: requireFiniteNumber(response.execution_time, 'execution_time'),
     citations,
     reasoning,
     routing,
     planning,
     execution,
     workflow,
-  } as ChatResponse;
+  };
 }

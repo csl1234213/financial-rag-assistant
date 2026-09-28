@@ -95,3 +95,34 @@ def test_runtime_intent_router_keeps_general_finance_concepts_out_of_rag(questio
 )
 def test_explicit_report_or_company_metric_keeps_retrieval(question):
     assert TaskAnalyzer().analyze(PlanningContext(question=question)).task.task_type == TaskType.DOCUMENT_QA
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+        "贵州茅台2025年度财务报表由哪家会计师事务所审计？审计意见是什么？",
+    ],
+)
+def test_moutai_revenue_channel_and_audit_questions_use_document_qa(question):
+    result = TaskAnalyzer().analyze(
+        PlanningContext(question=question, companies=["贵州茅台"])
+    )
+    assert result.task.task_type == TaskType.DOCUMENT_QA
+
+
+def test_legacy_intent_router_uses_api_company_context_for_financial_question():
+    result = IntentAnalyzer().analyze(
+        "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+        company_context="贵州茅台",
+    )
+    assert result["intent"] == "SINGLE_COMPANY"
+    assert result["companies"] == ["贵州茅台"]
+
+
+def test_api_company_context_does_not_turn_general_concept_into_rag():
+    result = IntentAnalyzer().analyze(
+        "什么叫毛利率？", company_context="贵州茅台"
+    )
+    assert result["intent"] == "DIRECT_CHAT"
+    assert result["companies"] is None

@@ -4,6 +4,7 @@ import type { AgentStepData } from './AgentStep';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { Translation } from '../../i18n/translations';
 import type { ChatResponse } from '../../types/api';
+import { getRuntimeFailureKind } from '../chat/reportPresentation';
 
 interface AgentTimelineProps {
   response: ChatResponse | null;
@@ -22,6 +23,7 @@ function buildTimeline(
       response.execution && response.workflow && response.routing,
     );
     if (!hasExecutionContract) {
+      const providerDisabled = getRuntimeFailureKind(response.report) === 'provider-disabled';
       return [
         {
           id: 'runtime',
@@ -32,7 +34,7 @@ function buildTimeline(
         {
           id: 'provider',
           name: labels.provider,
-          description: labels.providerFailed,
+          description: providerDisabled ? labels.providerDisabled : labels.providerFailed,
           status: 'failed',
         },
       ];

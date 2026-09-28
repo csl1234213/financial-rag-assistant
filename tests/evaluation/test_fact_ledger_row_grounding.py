@@ -7,6 +7,11 @@ import pytest
 
 from agent.reasoning_models import Evidence
 from core.fact_ledger import FactLedger
+from core.required_fact_plan import (
+    complete_from_fact_ledger,
+    infer_required_fact_plan,
+    safe_answer_from_fact_ledger,
+)
 
 
 def _ledger(content: str, *, company: str = "Apple", **metadata: object) -> FactLedger:
@@ -71,6 +76,30 @@ def test_real_cash_flow_total_keeps_its_six_month_duration_and_only_its_row() ->
     assert all("taxes" not in fact.evidence_text for fact in facts)
 
 
+def test_explicit_period_labels_are_not_parsed_as_table_amounts():
+    """Table-aware year-like amounts must not corrupt labelled Apple rows."""
+
+    ledger = _ledger(
+        "Financial table row | Resolved financial label: Products net sales | "
+        "Q2 FY2026: $ 80,208 $ | Q2 FY2025: 68,714",
+        company="Apple",
+        quarter="Q2_FY2026",
+        content_type="table",
+        table_context=(
+            "Comparative columns: Q2 FY2026 (three months ended March 28 2026) | "
+            "Q2 FY2025 (three months ended March 29 2025)"
+        ),
+    )
+
+    assert [
+        (fact.fact_period, fact.normalized_value)
+        for fact in ledger.lookup(company="Apple", metric_id="products_revenue")
+    ] == [
+        ("Q2_FY2026", Decimal("80208000000")),
+        ("Q2_FY2025", Decimal("68714000000")),
+    ]
+
+
 def test_nvidia_filing_native_net_cash_label_is_operating_cash_flow() -> None:
     ledger = _ledger(
         "GAAP net cash provided by operating activities $ 50,344 $ 36,190 $ 27,414",
@@ -113,6 +142,106 @@ def test_structured_cost_and_segment_rows_do_not_become_total_revenue() -> None:
     )] == [Decimal("16661000000")]
 
 
+def test_apple_category_rows_and_segment_margins_are_kept_with_table_context() -> None:
+    """Verified Apple rows must cover the full category/margin comparison."""
+
+    from agent.reasoning_models import Evidence
+
+    revenue_context = (
+        "Comparative columns: Q2 FY2026 | Q2 FY2025 (in millions)"
+    )
+    margin_context = (
+        "Comparative columns: Q2 FY2026 | Q2 FY2025 (dollars in millions)"
+        " | Verified statement group: Gross margin percentage."
+    )
+    rows = [
+        Evidence(
+            content=(
+                "Financial table row — Metric: iPhone® | "
+                "Q2 FY2026: $ 56,994 $ | Q2 FY2025: 46,841"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "iphone", "quarter": "Q2_FY2026", "content_type": "table", "table_context": revenue_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: Mac® | "
+                "Q2 FY2026: 8,399 | Q2 FY2025: 7,949"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "mac", "quarter": "Q2_FY2026", "content_type": "table", "table_context": revenue_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: iPad® | "
+                "Q2 FY2026: 6,914 | Q2 FY2025: 6,402"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "ipad", "quarter": "Q2_FY2026", "content_type": "table", "table_context": revenue_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: Wearables, Home and Accessories | "
+                "Q2 FY2026: 7,901 | Q2 FY2025: 7,522"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "wearables", "quarter": "Q2_FY2026", "content_type": "table", "table_context": revenue_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: Services net sales | "
+                "Q2 FY2026: 30,976 | Q2 FY2025: 26,645"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "services", "quarter": "Q2_FY2026", "content_type": "table", "table_context": revenue_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: Products | "
+                "Q2 FY2026: 38.7% | Q2 FY2025: 35.9%"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "products-margin", "quarter": "Q2_FY2026", "content_type": "table", "table_context": margin_context},
+        ),
+        Evidence(
+            content=(
+                "Financial table row — Metric: Services | "
+                "Q2 FY2026: 76.7% | Q2 FY2025: 75.7%"
+            ),
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"chunk_id": "services-margin", "quarter": "Q2_FY2026", "content_type": "table", "table_context": margin_context},
+        ),
+    ]
+
+    ledger = FactLedger.from_evidence(rows)
+    expected = {
+        "iphone_revenue": Decimal("56994000000"),
+        "mac_revenue": Decimal("8399000000"),
+        "ipad_revenue": Decimal("6914000000"),
+        "wearables_revenue": Decimal("7901000000"),
+        "services_revenue": Decimal("30976000000"),
+        "products_gross_margin": Decimal("38.7"),
+        "services_gross_margin": Decimal("76.7"),
+    }
+    for metric_id, value in expected.items():
+        facts = ledger.lookup(company="Apple", metric_id=metric_id, period="Q2_FY2026")
+        assert [fact.normalized_value for fact in facts] == [value], metric_id
+        if metric_id.endswith("_revenue"):
+            assert facts[0].period_type == "fiscal_quarter", metric_id
+
+    # The net-sales Services row must not be reclassified as a 30,976% margin.
+    assert [fact.normalized_value for fact in ledger.lookup(
+        company="Apple", metric_id="services_gross_margin", period="Q2_FY2026"
+    )] == [Decimal("76.7")]
+
+
 def test_structured_yoy_cell_binds_only_to_its_comparison_period() -> None:
     ledger = _ledger(
         "Financial table row | Metric: Total revenues | Q4-2024: 25,707 | "
@@ -134,6 +263,79 @@ def test_structured_yoy_cell_binds_only_to_its_comparison_period() -> None:
         company="Tesla", metric_id="revenue", period="Q4_2025", growth_basis="yoy"
     )
     assert {fact.normalized_value for fact in q4_growth} == {Decimal("-3")}
+    assert all(fact.unit == "percent" and fact.display_unit is None for fact in q4_growth)
+
+
+def test_cninfo_annual_yoy_cell_binds_to_latest_fy_period() -> None:
+    evidence = Evidence(
+        content=(
+            "Financial table row — Metric: Revenue | "
+            "FY2025: 168838102514.79 CNY | FY2024: 170899152276.34 CNY | "
+            "FY2023: 147693604994.14 CNY | YoY: -1.21%"
+        ),
+        source="贵州茅台2025年年度报告.pdf",
+        company="贵州茅台",
+        metadata={
+            "chunk_id": "moutai-annual-revenue",
+            "quarter": "FY2025",
+            "content_type": "table",
+            "table_context": "CNINFO annual summary; Comparative columns: FY2025 | FY2024 | FY2023; Currency: CNY",
+        },
+    )
+    ledger = FactLedger.from_evidence([evidence])
+
+    yoy = ledger.lookup(company="贵州茅台", metric_id="revenue", period="FY2025", growth_basis="yoy")
+    assert [fact.normalized_value for fact in yoy] == [Decimal("-1.21")]
+    assert ledger.lookup(company="贵州茅台", metric_id="revenue", period="FY2024", growth_basis="yoy") == ()
+
+
+def test_chinese_annual_revenue_comparison_requires_prior_year_and_reported_yoy() -> None:
+    evidence = Evidence(
+        content=(
+            "Financial table row — Metric: Revenue | "
+            "FY2025: 168838102514.79 CNY | FY2024: 170899152276.34 CNY | "
+            "FY2023: 147693604994.14 CNY | YoY: -1.21%"
+        ),
+        source="贵州茅台2025年年度报告.pdf",
+        company="贵州茅台",
+        metadata={
+            "chunk_id": "moutai-annual-revenue",
+            "quarter": "FY2025",
+            "content_type": "table",
+            "table_context": "CNINFO annual summary; Comparative columns: FY2025 | FY2024 | FY2023; Currency: CNY",
+        },
+    )
+    ledger = FactLedger.from_evidence([evidence])
+    question = "贵州茅台2025年度营业收入是多少？与2024年相比增长还是下降，幅度是多少？"
+
+    plan = infer_required_fact_plan(question, [evidence], ledger)
+    required = {(spec.period, spec.growth_basis) for spec in plan.required if spec.metric_id == "revenue"}
+
+    assert ("FY2025", None) in required
+    assert ("FY2024", None) in required
+    assert ("FY2025", "yoy") in required
+    # The comparison operand is not itself an instruction to report FY2024 YoY.
+    assert ("FY2024", "yoy") not in required
+    assert all(status.available for status in plan.statuses(ledger))
+
+    initial_answer = "贵州茅台2025年度营业收入为人民币168,838,102,514.79元 [Evidence 1]。"
+    completed, added_fact_ids, additions = complete_from_fact_ledger(
+        initial_answer, plan, ledger, question=question, evidence=[evidence]
+    )
+    assert added_fact_ids
+    assert any("170.89915227634" in item for item in additions)
+    assert any("同比变化: -1.21%" in item for item in additions)
+    assert all("[Evidence 1]" in item for item in additions)
+    assert "168,838,102,514.79" in completed
+
+    from core.answer_policy import finalize_grounded_answer
+
+    finalized = finalize_grounded_answer(question, initial_answer, [evidence])
+    assert "168,838,102,514.79" in finalized.answer
+    assert "170.89915227634 billion CNY" in finalized.answer
+    assert "-1.21%" in finalized.answer
+    assert finalized.answer.count("[Evidence 1]") >= 3
+    assert finalized.grounded.unsupported_count == 0
 
 
 def test_tesla_sample_pdf_yoy_column_is_not_misattributed_to_q2_2025() -> None:
@@ -195,6 +397,40 @@ def test_eps_does_not_borrow_net_income_numerator_or_share_count_rows() -> None:
     assert [fact.normalized_value for fact in ledger.lookup(
         company="Tesla", metric_id="eps", period="Q2_2025"
     )] == [Decimal("0.33")]
+
+
+def test_eps_alias_earnings_per_diluted_share_is_parsed_from_narrative_release() -> None:
+    ledger = _ledger(
+        "For the quarter, GAAP and non-GAAP earnings per diluted share were "
+        "$2.39 and $1.87, respectively.",
+        company="NVIDIA",
+        quarter="Q1_FY2027",
+        content_type="narrative",
+    )
+
+    assert [fact.normalized_value for fact in ledger.lookup(
+        company="NVIDIA", metric_id="eps", period="Q1_FY2027"
+    )] == [Decimal("2.39"), Decimal("1.87")]
+
+
+def test_paired_gaap_and_non_gaap_net_income_keeps_basis_per_value() -> None:
+    from core.required_fact_plan import _preferred_fact
+
+    ledger = _ledger(
+        "For the quarter, GAAP and non-GAAP net income were $840 million and "
+        "$1,761 million, respectively.",
+        company="Tesla",
+        quarter="Q4_2025",
+        content_type="narrative",
+    )
+
+    facts = ledger.lookup(company="Tesla", metric_id="net_income", period="Q4_2025")
+    assert {fact.normalized_value for fact in facts} == {
+        Decimal("840000000"), Decimal("1761000000")
+    }
+    assert any(fact.evidence_text.startswith("GAAP net income:") for fact in facts)
+    assert any(fact.evidence_text.startswith("Non-GAAP net income:") for fact in facts)
+    assert _preferred_fact(facts, "net_income").normalized_value == Decimal("840000000")
 
 
 def test_gaap_net_income_attributable_to_common_is_preferred_over_non_gaap() -> None:
@@ -264,6 +500,108 @@ def test_quarter_query_prefers_quarter_fact_over_same_period_ytd_subtotal() -> N
         "net_income",
         question="Summarize Apple's first six months of FY2026",
     ).fact_id == "six-months"
+
+
+def test_revenue_yoy_operand_ignores_cumulative_duplicate_in_flattened_table() -> None:
+    from core.required_fact_plan import _preferred_fact
+
+    quarter = SimpleNamespace(
+        evidence_text="Metric: Total net sales 95,359",
+        section="Three Months Ended Six Months Ended",
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period="Q2_FY2025",
+        fact_period="Q2_FY2025",
+        confidence=1.0,
+        normalized_value=Decimal("95359000000"),
+        fact_id="quarter",
+    )
+    cumulative_duplicate = SimpleNamespace(
+        evidence_text="Metric: Total net sales 254,940",
+        section="Three Months Ended Six Months Ended",
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period="Q2_FY2025",
+        fact_period="Q2_FY2025",
+        confidence=1.0,
+        normalized_value=Decimal("254940000000"),
+        fact_id="flattened-ytd",
+    )
+
+    assert _preferred_fact(
+        (quarter, cumulative_duplicate),
+        "revenue",
+        question="Compare Apple's Q2 FY2026 revenue",
+        requested_period="Q2_FY2025",
+    ).fact_id == "quarter"
+
+
+def test_consolidated_revenue_row_beats_geographic_subtotal_for_same_period() -> None:
+    from core.required_fact_plan import _preferred_fact
+
+    geographic = SimpleNamespace(
+        evidence_text="Net sales $ 92,963 $ 58,315 $ 34,515",
+        section=None,
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period="Q2_2026",
+        fact_period="Q2_2026",
+        confidence=1.0,
+        normalized_value=Decimal("92963000000"),
+        fact_id="geographic-americas",
+    )
+    consolidated = SimpleNamespace(
+        evidence_text="Metric: Total net sales 111,184 95,359 254,940 219,659",
+        section=None,
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period="Q2_2026",
+        fact_period="Q2_2026",
+        confidence=1.0,
+        normalized_value=Decimal("111184000000"),
+        fact_id="consolidated-total",
+    )
+
+    assert _preferred_fact(
+        (geographic, consolidated),
+        "revenue",
+        question="Compare Apple's Q2 FY2026 revenue",
+        requested_period="Q2_FY2026",
+    ).fact_id == "consolidated-total"
+
+
+def test_consolidated_revenue_beats_foreign_exchange_risk_threshold() -> None:
+    from core.required_fact_plan import _preferred_fact
+
+    risk_fact = SimpleNamespace(
+        evidence_text="revenue and inventory purchases, typically for up to 12 m",
+        section="Foreign Exchange Rate Risk",
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period=None,
+        fact_period="Q2_FY2026",
+        confidence=1.0,
+        normalized_value=Decimal("12000000"),
+        fact_id="fx-risk-threshold",
+    )
+    consolidated = SimpleNamespace(
+        evidence_text="Metric: Total net sales 111,184 95,359",
+        section="Three Months Ended Six Months Ended",
+        period_type="fiscal_quarter",
+        table_row_period=None,
+        table_column_period="Q2_FY2026",
+        fact_period="Q2_FY2026",
+        confidence=1.0,
+        normalized_value=Decimal("111184000000"),
+        fact_id="consolidated-revenue",
+    )
+
+    assert _preferred_fact(
+        (risk_fact, consolidated),
+        "revenue",
+        question="Summarize Apple's financial performance in Q2 2026",
+        requested_period="Q2_FY2026",
+    ).fact_id == "consolidated-revenue"
 
 
 def test_apple_gross_margin_amount_is_gross_profit_not_margin_percent() -> None:
@@ -576,6 +914,46 @@ def test_unit_scale_is_inherited_from_nearby_pdf_header_after_introductory_text(
     ] == [Decimal("81615000000")]
 
 
+def test_guidance_value_does_not_inherit_actuals_table_period() -> None:
+    # A common PDF extraction shape puts Q1 actuals and a later Q2 outlook in
+    # one chunk while metadata only says ``Unknown``.  The outlook amount must
+    # stay Q2, rather than being misbound to the first Q1 table column.
+    ledger = _ledger(
+        "NVIDIA Q1 FY27 Summary\n"
+        "($ in millions, except earnings per share) Q1 FY27 Q4 FY26 Q1 FY26 Q/Q Y/Y\n"
+        "Revenue $81,615 $68,127 $44,062 20% 85%\n"
+        "NVIDIA's outlook for the second quarter of fiscal 2027 is as follows:\n"
+        "Revenue is expected to be $91.0 billion.",
+        company="NVIDIA",
+        quarter="Unknown",
+        table_context="($ in millions, except earnings per share) Q1 FY27 Q4 FY26 Q1 FY26 Q/Q Y/Y",
+    )
+
+    assert [fact.normalized_value for fact in ledger.lookup(metric_id="revenue", period="Q1_FY2027")] == [
+        Decimal("81615000000")
+    ]
+    assert [fact.normalized_value for fact in ledger.lookup(metric_id="revenue", period="Q2_FY2027")] == [
+        Decimal("91000000000")
+    ]
+
+
+def test_undated_guidance_does_not_borrow_comparative_period() -> None:
+    ledger = _ledger(
+        "Q1 FY27 Q4 FY26 Q1 FY26 Revenue $81,615 $68,127 $44,062. "
+        "Revenue is expected to be $91.0 billion.",
+        company="NVIDIA",
+        quarter="Unknown",
+        table_context="Q1 FY27 Q4 FY26 Q1 FY26",
+    )
+
+    assert [fact.normalized_value for fact in ledger.lookup(metric_id="revenue", period="Q1_FY2027")] == [
+        Decimal("81615000000")
+    ]
+    assert [fact.normalized_value for fact in ledger.lookup(metric_id="revenue") if fact.fact_period is None] == [
+        Decimal("91000000000")
+    ]
+
+
 def test_tesla_eps_rows_are_distinguished_from_income_used_to_compute_eps() -> None:
     ledger = _ledger(
         "In millions of USD or shares as applicable, except per share data "
@@ -655,3 +1033,218 @@ def test_revenue_under_data_center_section_is_not_misclassified_as_total_revenue
     data_center = ledger.lookup(metric_id="data_center_revenue", period="Q1_FY2027")
     assert [fact.normalized_value for fact in data_center] == [Decimal("75200000000")]
     assert ledger.lookup(metric_id="revenue", period="Q1_FY2027") == ()
+
+
+def test_flattened_gaap_and_non_gaap_margin_headers_preserve_basis() -> None:
+    ledger = _ledger(
+        "Q1 Fiscal 2027 Summary GAAP ($ in millions, except earnings per share) "
+        "Q1 FY27 Q4 FY26 Q1 FY26 Q/Q Y/Y "
+        "Gross margin 74.9% 75.0% 60.5% (0.1) pts 14.4 pts "
+        "Non-GAAP ($ in millions, except earnings per share) "
+        "Q1 FY27 Q4 FY26 Q1 FY26 Q/Q Y/Y "
+        "Gross margin 75.0% 75.1% 60.8% (0.1) pts 14.2 pts",
+        company="NVIDIA",
+        quarter="Unknown",
+    )
+
+    q1 = ledger.lookup(company="NVIDIA", metric_id="gross_margin", period="Q1_FY2027")
+    assert {fact.normalized_value for fact in q1} == {Decimal("74.9"), Decimal("75.0")}
+    assert any(fact.evidence_text.startswith("GAAP gross margin:") for fact in q1)
+    assert any(fact.evidence_text.startswith("Non-GAAP gross margin:") for fact in q1)
+
+
+# 回归：产品与地区行同时出现时，计划、删除和补全都必须保留各自的类别边界。
+def test_moutai_product_dimension_is_preserved_and_scoped_in_required_fact_plan() -> None:
+    rows = [
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: product; Category: 茅台酒 | "
+                "Metric: Revenue | FY2025: 146499906480.49 CNY\n"
+                "Structured financial table row — Dimension: product; Category: 茅台酒 | "
+                "Metric: Gross Margin | FY2025: 93.53%"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "moutai-product", "content_type": "mixed"},
+        ),
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: product; Category: 其他系列酒 | "
+                "Metric: Revenue | FY2025: 22274678707.16 CNY\n"
+                "Structured financial table row — Dimension: product; Category: 其他系列酒 | "
+                "Metric: Gross Margin | FY2025: 76.11%"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "other-product", "content_type": "mixed"},
+        ),
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: region; Category: 国外 | "
+                "Metric: Revenue | FY2025: 4850142322.68 CNY"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "overseas-region", "content_type": "mixed"},
+        ),
+    ]
+    question = "2025年茅台酒和其他系列酒各自实现多少收入？各自毛利率是多少？"
+    ledger = FactLedger.from_evidence(rows)
+    plan = infer_required_fact_plan(question, rows, ledger)
+
+    assert {(fact.dimension, fact.category, fact.metric_id, fact.normalized_value) for fact in ledger.facts} >= {
+        ("product", "茅台酒", "revenue", Decimal("146499906480.49")),
+        ("product", "茅台酒", "gross_margin", Decimal("93.53")),
+        ("product", "其他系列酒", "revenue", Decimal("22274678707.16")),
+        ("product", "其他系列酒", "gross_margin", Decimal("76.11")),
+        ("region", "国外", "revenue", Decimal("4850142322.68")),
+    }
+    assert {(spec.category, spec.metric_id) for spec in plan.required} == {
+        ("茅台酒", "revenue"),
+        ("茅台酒", "gross_margin"),
+        ("其他系列酒", "revenue"),
+        ("其他系列酒", "gross_margin"),
+    }
+
+    wrong = (
+        "茅台酒收入为22,274,678,707.16元 [Evidence 2]；"
+        "茅台酒毛利率为76.11% [Evidence 2]；"
+        "其他系列酒收入为4,850,142,322.68元 [Evidence 3]。"
+    )
+    # 把其他系列酒值贴到茅台酒，或把国外收入当产品收入，都必须被安全过滤。
+    safe, removed = safe_answer_from_fact_ledger(wrong, plan, ledger)
+    assert not any(number in safe for number in ("22,274,678,707.16", "76.11", "4,850,142,322.68"))
+    assert "证据不足" in safe
+    assert removed
+
+    completed, fact_ids, _ = complete_from_fact_ledger(
+        "", plan, ledger, question=question, evidence=rows,
+    )
+    assert all(expected in completed for expected in (
+        "茅台酒毛利率: 93.53%",
+        "茅台酒营收: 146.49990648049 billion CNY",
+        "其他系列酒毛利率: 76.11%",
+        "其他系列酒营收: 22.27467870716 billion CNY",
+    ))
+    assert len(fact_ids) == 4
+
+
+def test_moutai_region_and_sales_mode_questions_plan_the_matching_table_dimensions() -> None:
+    rows = [
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: region; Category: 国内 | "
+                "Metric: Revenue | FY2025: 163924442864.97 CNY"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "moutai-domestic", "content_type": "mixed"},
+        ),
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: region; Category: 国外 | "
+                "Metric: Revenue | FY2025: 4850142322.68 CNY"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "moutai-overseas", "content_type": "mixed"},
+        ),
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: sales_mode; Category: 直销 | "
+                "Metric: Revenue | FY2025: 84543031854.63 CNY | YoY: 12.96%"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "moutai-direct-sales", "content_type": "mixed"},
+        ),
+        Evidence(
+            content=(
+                "Structured financial table row — Dimension: sales_mode; Category: 批发代理 | "
+                "Metric: Revenue | FY2025: 84231553333.02 CNY | YoY: -12.05%"
+            ),
+            source="贵州茅台_2025年度报告.pdf",
+            company="贵州茅台",
+            metadata={"chunk_id": "moutai-wholesale", "content_type": "mixed"},
+        ),
+    ]
+    ledger = FactLedger.from_evidence(rows)
+    region_plan = infer_required_fact_plan(
+        "2025年贵州茅台国内和国外主营业务收入分别是多少？", rows, ledger
+    )
+    assert {(spec.dimension, spec.category, spec.metric_id) for spec in region_plan.required} == {
+        ("region", "国内", "revenue"),
+        ("region", "国外", "revenue"),
+    }
+    assert all(status.available for status in region_plan.statuses(ledger))
+    region_answer, region_fact_ids, _ = complete_from_fact_ledger(
+        "", region_plan, ledger,
+        question="2025年贵州茅台国内和国外主营业务收入分别是多少？",
+        evidence=rows,
+    )
+    assert "163.92444286497 billion CNY" in region_answer
+    assert "4.85014232268 billion CNY" in region_answer
+    assert len(region_fact_ids) == 2
+    from core.answer_policy import finalize_grounded_answer
+
+    corrected_refusal = finalize_grounded_answer(
+        "2025年贵州茅台国内和国外主营业务收入分别是多少？",
+        "当前可检索的上传财报中没有找到足以支持该问题的证据。",
+        rows,
+        response_language="zh-CN",
+    )
+    assert corrected_refusal.answer, (
+        corrected_refusal.prepared_answer,
+        corrected_refusal.grounded.claims,
+        corrected_refusal.grounded.judgments,
+        corrected_refusal.removed_lines,
+    )
+    assert "1639.24亿元人民币" in corrected_refusal.answer
+    assert "48.5亿元人民币" in corrected_refusal.answer
+    assert len(corrected_refusal.grounded.evidence) >= 2
+    assert all(
+        judgment.action.value == "ACCEPT"
+        for judgment in corrected_refusal.grounded.judgments
+    )
+    assert corrected_refusal.removed_lines
+
+    misattributed = finalize_grounded_answer(
+        "2025年贵州茅台国内和国外主营业务收入分别是多少？",
+        "国内营收为48.5亿元人民币 [Evidence 1]；国外营收为1639.24亿元人民币 [Evidence 2]。",
+        rows,
+        response_language="zh-CN",
+    )
+    answer_lines = misattributed.answer.splitlines()
+    assert any("国内营收" in line and "1639.24亿元人民币" in line for line in answer_lines)
+    assert any("国外营收" in line and "48.5亿元人民币" in line for line in answer_lines)
+
+    channel_plan = infer_required_fact_plan(
+        "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+        rows,
+        ledger,
+    )
+    required_channels = {
+        (spec.dimension, spec.category, spec.metric_id, spec.growth_basis)
+        for spec in channel_plan.required
+    }
+    assert {
+        ("sales_mode", "直销", "revenue", None),
+        ("sales_mode", "批发代理", "revenue", None),
+        ("sales_mode", "直销", "revenue", "yoy"),
+        ("sales_mode", "批发代理", "revenue", "yoy"),
+    } <= required_channels
+    assert all(
+        status.available
+        for status in channel_plan.statuses(ledger)
+        if status.spec.growth_basis == "yoy"
+    )
+    channel_answer, channel_fact_ids, _ = complete_from_fact_ledger(
+        "", channel_plan, ledger,
+        question="2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+        evidence=rows,
+    )
+    assert "84.54303185463 billion CNY" in channel_answer
+    assert "12.96%" in channel_answer
+    assert "84.23155333302 billion CNY" in channel_answer
+    assert "-12.05%" in channel_answer
+    assert len(channel_fact_ids) == 4

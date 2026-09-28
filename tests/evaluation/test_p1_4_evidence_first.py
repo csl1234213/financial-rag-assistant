@@ -327,6 +327,49 @@ def test_compare_plan_ignores_unknown_tenant_reporting_period() -> None:
     ]
 
 
+def test_compare_plan_uses_validated_document_identity_for_mismatched_filing_quarters() -> None:
+    """A Q4 update can still provide the canonical Tesla Q2 comparison column."""
+
+    evidence = [
+        Evidence(
+            content=(
+                "Structured financial table row | Metric: Total revenues | "
+                "Q4 2024 (ended Q4-2024): 25,707 | "
+                "Q1 2025 (ended Q1-2025): 19,335 | "
+                "Q2 2025 (ended Q2-2025): 22,496 | "
+                "Q4 2025 (ended Q4-2025): 24,901"
+            ),
+            source="Tesla_Q2_2025.pdf",
+            company="Tesla",
+            metadata={
+                "chunk_id": "tesla-q2-column",
+                "document_id": "tesla_q2_2025",
+                "quarter": "Q4_2025",
+                "table_context": "Comparative columns: Q4-2024 | Q1-2025 | Q2-2025 | Q4-2025",
+                "content_type": "table",
+            },
+        ),
+        Evidence(
+            content="NVIDIA Q1 FY2027 revenue was $81.6 billion.",
+            source="NVIDIA_Q1_FY2027.pdf",
+            company="NVIDIA",
+            metadata={
+                "chunk_id": "nvidia-q1",
+                "document_id": "nvidia_q1_fy2027",
+                "quarter": "Q1_FY2027",
+            },
+        ),
+    ]
+
+    ledger = FactLedger.from_evidence(evidence)
+    plan = infer_required_fact_plan("Compare Tesla and NVIDIA revenue performance.", evidence, ledger)
+
+    assert [(spec.company, spec.period) for spec in plan.required] == [
+        ("tesla", "Q2_2025"),
+        ("nvidia", "Q1_FY2027"),
+    ]
+
+
 def test_broad_financial_performance_comparison_plans_shared_headline_metrics() -> None:
     evidence = [
         Evidence(
@@ -369,6 +412,67 @@ def test_broad_financial_performance_comparison_plans_shared_headline_metrics() 
         ("tesla", "revenue"),
         ("tesla", "net_income"),
     }
+
+
+def test_broad_comparison_aligns_historical_quarter_in_q4_update_table() -> None:
+    """Do not pair Apple's Q2 with Tesla's Q4 when Tesla's table has Q2 rows."""
+
+    evidence = [
+        Evidence(
+            content="Apple Q2 FY2026 total net sales were $111,184 million.",
+            source="Apple_Q2_2026.pdf",
+            company="Apple",
+            metadata={"chunk_id": "apple-q2", "quarter": "Q2_FY2026"},
+        ),
+        Evidence(
+            content=(
+                "Tesla Q4/FY2025 update. TABLE COLUMNS: Q4-2024 Q1-2025 Q2-2025 "
+                "Q3-2025 Q4-2025. Total revenues 25,707 19,335 22,496 28,095 24,901."
+            ),
+            source="Tesla_sample.pdf",
+            company="Tesla",
+            metadata={
+                "chunk_id": "tesla-q4-table",
+                "quarter": "Q4_2025",
+                "periods": "Q4_2024|Q1_2025|Q2_2025|Q3_2025|Q4_2025",
+                "table_context": "Q4-2024 Q1-2025 Q2-2025 Q3-2025 Q4-2025",
+                "content_type": "table",
+            },
+        ),
+    ]
+    ledger = FactLedger.from_evidence(evidence)
+    plan = infer_required_fact_plan("Compare Apple and Tesla's financial performance.", evidence, ledger)
+
+    assert {
+        (item.company, item.metric_id, item.period)
+        for item in plan.required
+        if item.metric_id == "revenue"
+    } == {("apple", "revenue", "Q2_FY2026"), ("tesla", "revenue", "Q2_2025")}
+
+
+def test_followup_financial_comparison_inherits_prior_report_scope() -> None:
+    evidence = [
+        Evidence(
+            content="Apple Q2 FY2026 net sales were $111,184 million; net income was $29,578 million.",
+            source="Apple_Q2_2026.pdf",
+            company="Apple",
+            metadata={"chunk_id": "apple-followup", "quarter": "Q2_FY2026"},
+        ),
+        Evidence(
+            content="Tesla Q4 2025 total revenue was $24,901 million; net income was $840 million.",
+            source="Tesla_Q4_2025.pdf",
+            company="Tesla",
+            metadata={"chunk_id": "tesla-followup", "quarter": "Q4_2025"},
+        ),
+    ]
+    question = (
+        "Now compare it with Tesla.\n"
+        "Relevant prior user request for reference resolution: Analyze Apple's report."
+    )
+    plan = infer_required_fact_plan(question, evidence)
+
+    assert {item.company for item in plan.required} == {"apple", "tesla"}
+    assert {item.metric_id for item in plan.required} >= {"revenue", "net_income"}
 
 
 def test_explicit_missing_fact_remains_in_the_plan_as_unavailable() -> None:

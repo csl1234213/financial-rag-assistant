@@ -33,8 +33,11 @@ import { buildApiUrl } from '../src/api/url.ts';
 import {
   buildCitationDomId,
   extractModelIdentity,
+  getRuntimeFailureKind,
+  localizeCnyAmounts,
   localizeReportHeading,
   parseRestrictedMarkdown,
+  shouldShowAnswerDisclaimer,
   splitResearchReport,
 } from '../src/components/chat/reportPresentation.ts';
 
@@ -95,10 +98,67 @@ test('creates the backend request with question, never message', () => {
   );
 });
 
+test('sends the selected UI language as the requested answer language', () => {
+  assert.deepEqual(
+    createChatRequest('贵州茅台收入是多少？', undefined, undefined, 'en'),
+    { question: '贵州茅台收入是多少？', answer_language: 'en' },
+  );
+  assert.deepEqual(
+    createChatRequest('What is revenue?', undefined, undefined, 'zh-CN'),
+    { question: 'What is revenue?', answer_language: 'zh-CN' },
+  );
+});
+
 test('keeps thread id optional for non-interactive API callers', () => {
   assert.deepEqual(createChatRequest('What is AI?'), {
     question: 'What is AI?',
   });
+});
+
+test('classifies runtime failures without treating them as generated answers', () => {
+  assert.equal(
+    getRuntimeFailureKind('[Provider Disabled] External calls are blocked.'),
+    'provider-disabled',
+  );
+  assert.equal(
+    getRuntimeFailureKind('[Agent Runtime Fallback] Unable to process.'),
+    'agent-runtime-fallback',
+  );
+  assert.equal(getRuntimeFailureKind('贵州茅台2025年营收为1688亿元。'), null);
+  assert.equal(shouldShowAnswerDisclaimer('贵州茅台2025年营收为1688亿元。'), true);
+  assert.equal(shouldShowAnswerDisclaimer('[Agent Runtime Fallback] No answer.'), false);
+});
+
+test('formats explicit CNY amounts using Chinese or English conventions', () => {
+  const answer = '贵州茅台 FY2025 净利润: 82.32006710168 billion CNY [1].';
+  assert.equal(
+    localizeCnyAmounts(answer, 'zh-CN'),
+    '贵州茅台 2025财年 净利润: 823.20 亿元人民币 [1].',
+  );
+  assert.equal(
+    localizeCnyAmounts('CNY 0.75 million [1]', 'zh-CN'),
+    '75.00 万元人民币 [1]',
+  );
+  assert.equal(
+    localizeCnyAmounts('$82.32 billion USD', 'zh-CN'),
+    '$82.32 billion USD',
+  );
+  assert.equal(
+    localizeCnyAmounts(answer, 'en'),
+    '贵州茅台 FY2025 净利润: CNY 82.32 billion [1].',
+  );
+  assert.equal(
+    localizeCnyAmounts('CNY 0.75 million [1]', 'en'),
+    'CNY 750 thousand [1]',
+  );
+  assert.equal(
+    localizeCnyAmounts('FY2025 revenue: 168,838,102,514.79元人民币 [1]', 'zh-CN'),
+    '2025财年 revenue: 1,688.38 亿元人民币 [1]',
+  );
+  assert.equal(
+    localizeCnyAmounts('FY2025 revenue: 168,838,102,514.79元人民币 [1]', 'en'),
+    'FY2025 revenue: CNY 168.84 billion [1]',
+  );
 });
 
 test('builds the canonical Docker and Vite proxy chat URL', () => {
@@ -134,6 +194,33 @@ test('rejects the obsolete frontend-only citation shape', () => {
     (error: unknown) => (
       error instanceof ChatContractError
       && error.message.includes('citations[0].rank')
+    ),
+  );
+});
+
+test('rejects malformed typed reasoning and routing fields at the API boundary', () => {
+  const reasoningPayload = currentBackendResponse();
+  reasoningPayload.reasoning = {
+    intent: 'SINGLE_COMPANY',
+    companies: ['Tesla', 42],
+    research_mode: 'default',
+    evidence_count: 1,
+  };
+  assert.throws(
+    () => parseChatResponse(reasoningPayload),
+    (error: unknown) => (
+      error instanceof ChatContractError
+      && error.message.includes('reasoning.companies')
+    ),
+  );
+
+  const routingPayload = currentBackendResponse();
+  routingPayload.routing = { provider: 'deepseek', model: 42 };
+  assert.throws(
+    () => parseChatResponse(routingPayload),
+    (error: unknown) => (
+      error instanceof ChatContractError
+      && error.message.includes('routing.model')
     ),
   );
 });
@@ -271,6 +358,55 @@ test('restricted Markdown keeps raw HTML as ordinary escaped render data', () =>
   });
   assert.equal(blocks[2].type, 'unordered-list');
   assert.equal(blocks.some((block) => 'html' === block.type), false);
+});
+
+test('restricted Markdown parses pipe tables into structured table blocks', () => {
+  const blocks = parseRestrictedMarkdown(`
+“有多少钱”需要先明确口径。按当前可用证据，能确定的是：
+| 口径 | 含义 | 当前证据下能否回答 |
+|---|---|---|
+| 一年赚多少钱 | 净利润 | 可以：FY2025 净利润约 **823.20 亿元** |
+| 账上货币资金 | 资产负债表“货币资金” | 当前证据不足 |
+`);
+
+  assert.deepEqual(blocks[1], {
+    type: 'table',
+    headers: ['口径', '含义', '当前证据下能否回答'],
+    rows: [
+      ['一年赚多少钱', '净利润', '可以：FY2025 净利润约 **823.20 亿元**'],
+      ['账上货币资金', '资产负债表“货币资金”', '当前证据不足'],
+    ],
+  });
+  assert.equal(blocks.some((block) => (
+    block.type === 'paragraph' && block.text.includes('|---|')
+  )), false);
+});
+
+test('restricted Markdown groups rectangular headerless pipe rows without inventing headers', () => {
+  const blocks = parseRestrictedMarkdown(`
+当前检索到的证据不足以确认该信息。
+| 汽车总收入 | 19,798百万美元 | 13,967百万美元 | -5,831百万美元，约-29.5% | [2]
+| 能源发电与储能收入 | 3,061百万美元 | 2,730百万美元 | -331百万美元，约-10.8% | [4]
+| 服务及其他收入 | 2,848百万美元 | 2,638百万美元 | -210百万美元，约-7.4% | [1]
+事实：2025年第一季度总营收为19,335百万美元。 [3]
+`);
+
+  assert.equal(blocks[0].type, 'paragraph');
+  assert.deepEqual(blocks[1], {
+    type: 'table',
+    rows: [
+      ['汽车总收入', '19,798百万美元', '13,967百万美元', '-5,831百万美元，约-29.5%', '[2]'],
+      ['能源发电与储能收入', '3,061百万美元', '2,730百万美元', '-331百万美元，约-10.8%', '[4]'],
+      ['服务及其他收入', '2,848百万美元', '2,638百万美元', '-210百万美元，约-7.4%', '[1]'],
+    ],
+  });
+  assert.equal(blocks[2].type, 'paragraph');
+});
+
+test('a single prose line with pipes is not promoted to a headerless table', () => {
+  assert.deepEqual(parseRestrictedMarkdown('口径 | 当前证据 | 结论'), [
+    { type: 'paragraph', text: '口径 | 当前证据 | 结论' },
+  ]);
 });
 
 test('builds unique, sanitized citation DOM ids for each chat turn', () => {

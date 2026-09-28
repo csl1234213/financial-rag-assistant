@@ -75,6 +75,18 @@ DOCUMENT_QA_KEYWORDS = [
     "pe ratio",
     "增长率",
     "营收",
+    "收入",
+    "主营业务收入",
+    "直销",
+    "批发代理",
+    "国内",
+    "国外",
+    "地区",
+    "渠道",
+    "审计",
+    "审计意见",
+    "会计师事务所",
+    "财务报表",
     "利润",
     "净利润",
     "毛利率",
@@ -141,7 +153,8 @@ _PERIOD_REFERENCE = re.compile(
 )
 _BUSINESS_PERFORMANCE = re.compile(
     r"\b(?:business|performance|growth|drivers?|segments?|financially|datacentre|datacenter)\b"
-    r"|data[ -]cent(?:er|re)|业务|表现|业绩|增长|动力|驱动|发展"
+    r"|data[ -]cent(?:er|re)|业务|表现|业绩|增长|动力|驱动|发展|收入|营收|直销|批发代理"
+    r"|国内|国外|地区|渠道|审计|会计师事务所|审计意见|财务报表"
 )
 
 

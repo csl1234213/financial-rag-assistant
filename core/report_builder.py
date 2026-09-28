@@ -32,8 +32,13 @@ _REPORT_LABELS = {
 }
 
 
-def _labels_for_question(question: object) -> dict[str, str]:
-    language = "zh-CN" if _CHINESE_CHARACTER.search(str(question)) else "en"
+def _labels_for_question(
+    question: object,
+    response_language: str | None = None,
+) -> dict[str, str]:
+    language = response_language or (
+        "zh-CN" if _CHINESE_CHARACTER.search(str(question)) else "en"
+    )
     return _REPORT_LABELS[language]
 
 
@@ -43,8 +48,10 @@ def build_research_report(
     citations,
     evidence_stats,
     reasoning_result: ReasoningResult = None,
+    *,
+    response_language: str | None = None,
 ):
-    labels = _labels_for_question(question)
+    labels = _labels_for_question(question, response_language)
     coverage_text = ""
 
     for source, count in evidence_stats.items():

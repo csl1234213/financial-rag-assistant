@@ -6,8 +6,8 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 const MAX_CONCURRENT_UPLOADS = 3;
 
 interface UploadPanelProps {
-  onUploadSuccess?: (file: File) => Promise<void>;
-  onUploadComplete?: () => Promise<void>;
+  onUploadSuccess: (file: File) => Promise<void>;
+  onUploadComplete: () => Promise<void>;
 }
 
 export function UploadPanel({ onUploadSuccess, onUploadComplete }: UploadPanelProps) {
@@ -49,45 +49,39 @@ export function UploadPanel({ onUploadSuccess, onUploadComplete }: UploadPanelPr
 
     setUploadStatus('uploading');
 
-    if (onUploadSuccess) {
-      const uploadFailures: string[] = [];
-      let nextIndex = 0;
-      const uploadWorker = async () => {
-        while (nextIndex < validFiles.length) {
-          const file = validFiles[nextIndex];
-          nextIndex += 1;
-          try {
-            await onUploadSuccess(file);
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : t.upload.fallbackError;
-            uploadFailures.push(`${file.name}: ${message}`);
-          }
+    const uploadFailures: string[] = [];
+    let nextIndex = 0;
+    const uploadWorker = async () => {
+      while (nextIndex < validFiles.length) {
+        const file = validFiles[nextIndex];
+        nextIndex += 1;
+        try {
+          await onUploadSuccess(file);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : t.upload.fallbackError;
+          uploadFailures.push(`${file.name}: ${message}`);
         }
-      };
-      await Promise.all(
-        Array.from(
-          { length: Math.min(MAX_CONCURRENT_UPLOADS, validFiles.length) },
-          () => uploadWorker(),
-        ),
-      );
-
-      if (onUploadComplete) {
-        await onUploadComplete();
       }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(MAX_CONCURRENT_UPLOADS, validFiles.length) },
+        () => uploadWorker(),
+      ),
+    );
 
-      const successCount = validFiles.length - uploadFailures.length;
-      const failures = [...validationFailures, ...uploadFailures];
-      if (failures.length === 0) {
-        setUploadStatus('success');
-        setSelectedFile(t.upload.batchSuccess(successCount));
-      } else {
-        setUploadStatus('error');
-        setUploadError(
-          `${t.upload.batchPartial(successCount, failures.length)}\n${failures.join('\n')}`,
-        );
-      }
+    await onUploadComplete();
+
+    const successCount = validFiles.length - uploadFailures.length;
+    const failures = [...validationFailures, ...uploadFailures];
+    if (failures.length === 0) {
+      setUploadStatus('success');
+      setSelectedFile(t.upload.batchSuccess(successCount));
     } else {
-      setTimeout(() => setUploadStatus('success'), 1500);
+      setUploadStatus('error');
+      setUploadError(
+        `${t.upload.batchPartial(successCount, failures.length)}\n${failures.join('\n')}`,
+      );
     }
   };
 

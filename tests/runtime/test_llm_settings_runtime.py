@@ -7,6 +7,14 @@ from services.agent_runtime import graph, runtime
 from services.llm_settings_service import RuntimeLLMSettings
 
 
+def test_response_language_is_part_of_chat_cache_key():
+    common = ("Moutai FY2025 revenue?", [], "贵州茅台")
+    english = runtime._cache_key(*common, answer_language="en")
+    chinese = runtime._cache_key(*common, answer_language="zh-CN")
+
+    assert english != chinese
+
+
 def _settings(revision: str, api_key: str) -> RuntimeLLMSettings:
     return RuntimeLLMSettings(
         provider_configs={
@@ -158,6 +166,18 @@ def test_graph_places_request_settings_in_langgraph_context(monkeypatch):
     assert invocation["state"]["user_id"] == 42
     assert invocation["context"]["llm_settings"] is llm_settings
     assert invocation["durability"] is None
+
+
+def test_disabled_real_provider_returns_specific_secret_free_fallback():
+    result = runtime._fallback_response(
+        "用户问题不应被回显",
+        "disabled-provider-test",
+        "Real provider calls are disabled; set ALLOW_REAL_PROVIDER=true only for an explicit live run",
+    )
+
+    assert result["answer"].startswith("[Provider Disabled]")
+    assert "No AI answer was generated" in result["answer"]
+    assert "用户问题不应被回显" not in result["answer"]
 
 
 def test_execute_node_forwards_context_settings_to_core_runtime(monkeypatch):

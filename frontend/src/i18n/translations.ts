@@ -113,6 +113,14 @@ export interface Translation {
     assistant: string;
     connectionError: string;
     providerConfigurationError: string;
+    providerDisabled: string;
+    providerTemporaryError: string;
+    runtimeFallbackError: string;
+    answerDisclaimer: string;
+    autoDiscoverySearching: (company: string) => string;
+    autoDiscoveryDownloaded: (company: string) => string;
+    autoDiscoveryAlreadyPresent: (company: string) => string;
+    autoDiscoveryUnavailable: (company: string) => string;
     demoQuestions: Array<{ label: string; question: string }>;
   };
   agent: {
@@ -125,6 +133,7 @@ export interface Translation {
     runtimeFailed: string;
     provider: string;
     providerFailed: string;
+    providerDisabled: string;
     intentAnalyzer: string;
     queryPlanner: string;
     hybridRetriever: string;
@@ -192,6 +201,8 @@ export interface Translation {
     period: string;
     chunks: string;
     checksum: string;
+    viewSource: string;
+    viewCninfoSource: string;
     delete: string;
     deleting: string;
     deleteDocument: (filename: string) => string;
@@ -302,11 +313,21 @@ export interface Translation {
     configured: string;
     notConfigured: string;
     defaultProvider: string;
-    setDefault: string;
-    selectingDefault: string;
-    defaultSelected: string;
-    defaultError: string;
+    defaultSelectionTitle: string;
+    defaultSelectionDescription: string;
+    defaultSelectionLabel: string;
+    defaultSelectionValue: (provider: string, index: number, total: number) => string;
+    defaultSelectionSaving: string;
+    defaultSelectionSaved: string;
+    defaultSelectionFailed: string;
+    defaultSelectionUseSingle: string;
     keyHint: string;
+    localEndpointLabel: string;
+    localEndpointPlaceholder: string;
+    localEndpointHelp: string;
+    localModelLabel: string;
+    localModelPlaceholder: string;
+    localModelHelp: string;
     apiKeyLabel: string;
     apiKeyPlaceholder: string;
     modelLabel: string;
@@ -319,6 +340,7 @@ export interface Translation {
     clear: string;
     clearing: string;
     confirmClear: string;
+    confirmClearLocal: string;
     confirmClearDescription: string;
     cancel: string;
     cleared: string;
@@ -455,6 +477,17 @@ export const translations: Record<Language, Translation> = {
       connectionError: 'Connection error',
       providerConfigurationError:
         'AI provider credentials are not configured on the backend. Contact the deployment administrator and retry after provider authentication is enabled.',
+      providerDisabled:
+        'External AI calls are disabled by the runtime policy. No AI answer was generated. Ask an administrator to enable an approved provider or configure a local model.',
+      providerTemporaryError:
+        'The configured AI provider is temporarily unavailable. No answer was generated; check provider access and retry later.',
+      runtimeFallbackError:
+        'The agent could not complete this request. No verified answer was generated; check the runtime status before trying again.',
+      answerDisclaimer: 'AI-generated results may be inaccurate. Please verify important data.',
+      autoDiscoverySearching: (company) => `No filing evidence was found for ${company}. Searching SEC EDGAR...`,
+      autoDiscoveryDownloaded: (company) => `The official filing for ${company} was downloaded and queued for indexing.`,
+      autoDiscoveryAlreadyPresent: (company) => `${company} already has a filing in the knowledge base.`,
+      autoDiscoveryUnavailable: (company) => `No trusted SEC filing could be downloaded for ${company}.`,
       demoQuestions: [
         {
           label: 'Tesla revenue growth',
@@ -488,6 +521,7 @@ export const translations: Record<Language, Translation> = {
       runtimeFailed: 'The request stopped before a complete execution trace was produced.',
       provider: 'LLM Provider',
       providerFailed: 'Provider authentication or configuration is unavailable.',
+      providerDisabled: 'External provider calls are disabled by runtime policy.',
       intentAnalyzer: 'Intent Analyzer',
       queryPlanner: 'Query Planner',
       hybridRetriever: 'Hybrid Retriever',
@@ -558,6 +592,8 @@ export const translations: Record<Language, Translation> = {
       period: 'Period',
       chunks: 'Chunks',
       checksum: 'SHA-256',
+      viewSource: 'View SEC source',
+      viewCninfoSource: 'View CNINFO audited annual report',
       delete: 'Delete',
       deleting: 'Deleting...',
       deleteDocument: (filename) => `Delete ${filename}`,
@@ -673,12 +709,22 @@ export const translations: Record<Language, Translation> = {
       noProviders: 'No supported LLM providers are available.',
       configured: 'Configured',
       notConfigured: 'Not configured',
-      defaultProvider: 'Current default',
-      setDefault: 'Use by default',
-      selectingDefault: 'Selecting...',
-      defaultSelected: 'This provider is now used by default.',
-      defaultError: 'Could not select the default provider.',
+      defaultProvider: 'Default for new chats',
+      defaultSelectionTitle: 'Default provider for new chats',
+      defaultSelectionDescription: 'Configured means the connection details are saved; it does not mean the model process is running. This control chooses the provider used for new chats.',
+      defaultSelectionLabel: 'Choose the default provider for new chats',
+      defaultSelectionValue: (provider, index, total) => `${provider}, ${index} of ${total}`,
+      defaultSelectionSaving: 'Updating default provider…',
+      defaultSelectionSaved: 'Default provider updated.',
+      defaultSelectionFailed: 'Could not update the default provider. The previous choice is still active.',
+      defaultSelectionUseSingle: 'Use this configured provider for new chats',
       keyHint: 'Stored key',
+      localEndpointLabel: 'Local Ollama endpoint',
+      localEndpointPlaceholder: 'http://host.docker.internal:11434',
+      localEndpointHelp: 'For Docker Desktop, use host.docker.internal to reach Ollama running on the host. Local HTTP endpoints only.',
+      localModelLabel: 'Installed model tag',
+      localModelPlaceholder: 'For example: qwen3.8:latest',
+      localModelHelp: 'Enter the exact tag shown by `ollama list` on the machine running Ollama.',
       apiKeyLabel: 'API key',
       apiKeyPlaceholder: 'Enter a new API key',
       modelLabel: 'Model',
@@ -687,10 +733,11 @@ export const translations: Record<Language, Translation> = {
       neverUpdated: 'Never',
       save: 'Save changes',
       saving: 'Saving...',
-      saved: 'Provider settings saved. The key field has been cleared.',
-      clear: 'Clear key',
+      saved: 'Provider settings saved.',
+      clear: 'Clear configuration',
       clearing: 'Clearing...',
       confirmClear: 'Clear this API key?',
+      confirmClearLocal: 'Clear this local model configuration?',
       confirmClearDescription:
         'Requests using this provider will stop working until a new key is saved.',
       cancel: 'Cancel',
@@ -825,6 +872,17 @@ export const translations: Record<Language, Translation> = {
       connectionError: '连接错误',
       providerConfigurationError:
         '后端尚未配置 AI 服务凭证。请联系部署管理员完成服务认证后重试。',
+      providerDisabled:
+        '当前运行策略已禁用外部 AI 服务调用，本次没有生成 AI 答案。请联系管理员启用获准的模型服务，或配置本地模型。',
+      providerTemporaryError:
+        '当前 AI 服务暂不可用，本次没有生成答案。请检查服务状态后再试。',
+      runtimeFallbackError:
+        '智能体未能完成本次请求，因此没有生成经过核实的答案。请先检查运行状态再重试。',
+      answerDisclaimer: 'AI生成结果可能有误，请核实重要数据',
+      autoDiscoverySearching: (company) => `未找到 ${company} 的财报证据，正在从 SEC EDGAR 查找...`,
+      autoDiscoveryDownloaded: (company) => `已下载 ${company} 的官方财报并排队索引。`,
+      autoDiscoveryAlreadyPresent: (company) => `知识库中已有 ${company} 的财报。`,
+      autoDiscoveryUnavailable: (company) => `未能从可信 SEC 来源下载 ${company} 的财报。`,
       demoQuestions: [
         {
           label: '特斯拉营收增长',
@@ -858,6 +916,7 @@ export const translations: Record<Language, Translation> = {
       runtimeFailed: '请求在生成完整执行轨迹前终止。',
       provider: '大模型服务',
       providerFailed: '大模型服务认证或配置不可用。',
+      providerDisabled: '外部模型调用已被当前运行策略禁用。',
       intentAnalyzer: '意图分析',
       queryPlanner: '查询规划',
       hybridRetriever: '混合检索',
@@ -927,6 +986,8 @@ export const translations: Record<Language, Translation> = {
       period: '报告期',
       chunks: '文本块',
       checksum: 'SHA-256',
+      viewSource: '查看 SEC 来源',
+      viewCninfoSource: '查看巨潮资讯审计年报',
       delete: '删除',
       deleting: '正在删除...',
       deleteDocument: (filename) => `删除 ${filename}`,
@@ -1039,12 +1100,22 @@ export const translations: Record<Language, Translation> = {
       noProviders: '当前没有可配置的大模型服务。',
       configured: '已配置',
       notConfigured: '未配置',
-      defaultProvider: '当前默认',
-      setDefault: '设为默认',
-      selectingDefault: '正在设置...',
-      defaultSelected: '已将此服务设为默认服务。',
-      defaultError: '无法设置默认服务。',
+      defaultProvider: '新对话默认',
+      defaultSelectionTitle: '新对话默认服务',
+      defaultSelectionDescription: '“已配置”表示服务参数已保存，不代表模型进程正在运行。此处选择新对话使用的服务。',
+      defaultSelectionLabel: '选择新对话默认使用的服务',
+      defaultSelectionValue: (provider, index, total) => `${provider}，第 ${index} 项，共 ${total} 项`,
+      defaultSelectionSaving: '正在更新默认服务…',
+      defaultSelectionSaved: '新对话默认服务已更新。',
+      defaultSelectionFailed: '无法更新默认服务，原选择保持不变。',
+      defaultSelectionUseSingle: '将此已配置服务用于新对话',
       keyHint: '已保存密钥',
+      localEndpointLabel: '本地 Ollama 服务地址',
+      localEndpointPlaceholder: 'http://host.docker.internal:11434',
+      localEndpointHelp: 'Docker Desktop 中连接宿主机 Ollama 通常使用 host.docker.internal。仅允许本地 HTTP 地址。',
+      localModelLabel: '已安装的模型标签',
+      localModelPlaceholder: '例如：qwen3.8:latest',
+      localModelHelp: '请填写 Ollama 所在机器上 `ollama list` 显示的完整模型标签。',
       apiKeyLabel: 'API Key',
       apiKeyPlaceholder: '输入新的 API Key',
       modelLabel: '模型',
@@ -1053,13 +1124,14 @@ export const translations: Record<Language, Translation> = {
       neverUpdated: '从未',
       save: '保存更改',
       saving: '正在保存...',
-      saved: '服务配置已保存，密钥输入框已清空。',
-      clear: '清除密钥',
+      saved: '服务配置已保存。',
+      clear: '清除配置',
       clearing: '正在清除...',
       confirmClear: '确认清除此 API Key？',
+      confirmClearLocal: '确认清除此本地模型配置？',
       confirmClearDescription: '保存新密钥前，使用此服务的请求将无法执行。',
       cancel: '取消',
-      cleared: '服务密钥已清除。',
+      cleared: '服务配置已清除。',
       saveError: '无法保存服务配置。',
       clearError: '无法清除服务密钥。',
     },

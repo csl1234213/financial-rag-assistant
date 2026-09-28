@@ -13,11 +13,38 @@ from prompt_builder import (
     build_compare_prompt,
     build_direct_chat_prompt,
     build_prompt,
+    get_prompt_system_prompt,
 )
 
 
 @pytest.mark.unit
 class TestBuildPrompt:
+    def test_explicit_ui_language_overrides_question_language(self):
+        english = build_prompt(
+            "贵州茅台2025年营收是多少？",
+            "Revenue was CNY 168.84 billion.",
+            response_language="en",
+        )
+        chinese = build_prompt(
+            "What was Guizhou Moutai's FY2025 revenue?",
+            "Revenue was CNY 168.84 billion.",
+            response_language="zh-CN",
+        )
+
+        assert "regardless of the question or conversation language" in english
+        assert "English number/currency conventions" in english
+        assert "Simplified Chinese, regardless of the question" in chinese
+        assert "Chinese financial number/currency conventions" in chinese
+
+        assert "system-level requirement" in get_prompt_system_prompt(
+            "financial_rag",
+            response_language="en",
+        )
+        assert "Chinese financial units" in get_prompt_system_prompt(
+            "direct_chat",
+            response_language="zh-CN",
+        )
+
     def test_prompt_contains_question(self):
         prompt = build_prompt(
             question="What is Apple's revenue?",

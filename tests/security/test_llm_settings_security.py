@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from agent.planning.task_enums import TaskType as PlannedTaskType
 from api.app import app
 from auth.jwt import create_access_token
 from models.llm_provider_setting import LLMProviderSetting
@@ -257,6 +258,70 @@ def test_provider_and_model_allowlist_is_enforced(client, principals):
         assert db.query(LLMProviderSetting).count() == 0
 
 
+def test_ollama_can_be_configured_without_key_and_runtime_uses_local_endpoint(
+    client,
+    principals,
+):
+    headers = _auth_headers(principals["user_a"])
+    endpoint = "http://host.docker.internal:11434/"
+    response = client.put(
+        "/api/v1/settings/llm/ollama",
+        headers=headers,
+        json={"model": "qwen3.8:latest", "base_url": endpoint},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["configured"] is True
+    assert body["is_default"] is True
+    assert body["key_hint"] is None
+    assert body["model"] == "qwen3.8:latest"
+    assert body["base_url"] == "http://host.docker.internal:11434"
+    assert "api_key" not in body
+
+    with TestingSessionLocal() as db:
+        setting = db.query(LLMProviderSetting).one()
+        assert setting.encrypted_api_key is None
+        assert setting.key_hint is None
+        runtime_settings = get_runtime_llm_settings(
+            db,
+            tenant_id=principals["tenant_a"],
+            user_id=principals["user_a"],
+        )
+    assert runtime_settings.default_provider == "ollama"
+    assert runtime_settings.provider_models["ollama"] == "qwen3.8:latest"
+    assert runtime_settings.provider_configs["ollama"] == {
+        "api_key": "",
+        "base_url": "http://host.docker.internal:11434",
+    }
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://example.com:11434",
+        "http://169.254.169.254/latest/meta-data",
+        "http://host.docker.internal:11434/admin",
+        "http://user:password@ollama:11434",
+        "https://localhost:11434",
+    ],
+)
+def test_ollama_rejects_nonlocal_or_ambiguous_endpoints(
+    client,
+    principals,
+    endpoint,
+):
+    response = client.put(
+        "/api/v1/settings/llm/ollama",
+        headers=_auth_headers(principals["user_a"]),
+        json={"model": "qwen3.8:latest", "base_url": endpoint},
+    )
+
+    assert response.status_code == 422
+    with TestingSessionLocal() as db:
+        assert db.query(LLMProviderSetting).count() == 0
+
+
 def test_missing_encryption_key_returns_secret_free_503(
     client,
     principals,
@@ -365,7 +430,7 @@ def test_default_provider_selection_is_user_scoped_and_key_free(
             TaskType,
         )
 
-        routed = ModelRouter(
+        request_router = ModelRouter(
             policy=RoutingPolicy(
                 CapabilityRoutingPolicy(
                     default_provider=runtime_settings.default_provider,
@@ -374,10 +439,16 @@ def test_default_provider_selection_is_user_scoped_and_key_free(
             ),
             provider_configs=runtime_settings.provider_configs,
             available_providers=list(runtime_settings.provider_configs),
-        ).route(RoutingContext(task=TaskType.CHAT))
-        assert routed["routing"].provider == "openai"
-        assert routed["routing"].model == "gpt-5.5"
-        assert routed["provider"].provider_name == "openai"
+        )
+        for task_type in (
+            TaskType.CHAT,
+            TaskType.DOCUMENT_QA,
+            PlannedTaskType.FINANCIAL_ANALYSIS,
+        ):
+            routed = request_router.route(RoutingContext(task=task_type))
+            assert routed["routing"].provider == "openai"
+            assert routed["routing"].model == "gpt-5.5"
+            assert routed["provider"].provider_name == "openai"
 
     peer_selection = client.put(
         "/api/v1/settings/llm/default",

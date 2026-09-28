@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from llm.adapters.ollama_provider import OllamaProvider
 from llm.providers.base_provider import BaseProvider
 from llm.providers.provider_config import ProviderConfig
 from llm.providers.provider_models import (
@@ -116,6 +117,22 @@ class TestModelRouter:
         assert result["routing"].reason == "Default provider"
         assert result["routing"].confidence == 0.7
 
+    def test_available_provider_allowlist_rejects_policy_escape(self, context):
+        policy = MagicMock()
+        policy.select.return_value = RoutingResult(
+            provider="gemini",
+            model="gemini-test",
+            reason="unexpected selection",
+            confidence=1.0,
+        )
+        router = ModelRouter(
+            policy=RoutingPolicy(policy),
+            available_providers=["deepseek"],
+        )
+
+        with pytest.raises(ValueError, match="outside the configured allowlist"):
+            router.route(context)
+
     # =========================
     # _build_config()
     # =========================
@@ -140,6 +157,29 @@ class TestModelRouter:
 
         provider = result["provider"]
         assert provider._config.api_key == "test-gemini-key"
+
+    def test_ollama_read_timeout_matches_total_deadline_without_widening_remote_defaults(
+        self, router, monkeypatch,
+    ):
+        import llm.router.model_router as model_router_module
+
+        monkeypatch.setattr(model_router_module, "LLM_TIMEOUT", 60)
+        monkeypatch.setattr(model_router_module, "LLM_READ_TIMEOUT", 45)
+        monkeypatch.setattr(model_router_module, "LLM_TOTAL_DEADLINE", 120)
+
+        local_config = router._build_config(
+            RoutingResult("ollama", "qwen3.8", "test", 1.0),
+        )
+        remote_config = router._build_config(
+            RoutingResult("deepseek", "deepseek-v4-flash", "test", 1.0),
+        )
+
+        assert local_config.timeout == 120
+        assert local_config.read_timeout == 120
+        assert local_config.connect_timeout == 10
+        assert local_config.total_deadline == 120
+        assert remote_config.timeout == 60
+        assert remote_config.read_timeout == 45
 
     def test_build_config_falls_back_to_default(self):
         policy = MagicMock()
@@ -186,6 +226,31 @@ class TestModelRouter:
 
         assert result["provider"]._config.api_key == "custom-key"
         assert result["provider"]._config.base_url == "https://custom.deepseek.com"
+
+    def test_routes_local_ollama_with_saved_endpoint_and_model(self, context):
+        ProviderRegistry.register("ollama", OllamaProvider)
+        policy = MagicMock()
+        policy.select.return_value = RoutingResult(
+            provider="ollama",
+            model="qwen3.8:latest",
+            reason="Configured local model",
+            confidence=1.0,
+        )
+        router = ModelRouter(
+            policy=RoutingPolicy(policy),
+            provider_configs={
+                "ollama": {
+                    "api_key": "",
+                    "base_url": "http://host.docker.internal:11434",
+                },
+            },
+        )
+
+        result = router.route(context)
+
+        assert result["provider"]._config.provider == "ollama"
+        assert result["provider"]._config.model == "qwen3.8:latest"
+        assert result["provider"]._config.base_url == "http://host.docker.internal:11434"
 
     # =========================
     # decision_time_ms

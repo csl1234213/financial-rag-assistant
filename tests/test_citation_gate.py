@@ -27,6 +27,30 @@ def test_gate_rejects_wrong_company_and_period_evidence():
     assert [item.source for item in filtered] == ["Tesla_Q2_2025.pdf"]
 
 
+def test_explicit_source_only_constraint_fails_closed_on_disallowed_company():
+    evidence = [
+        Evidence(
+            content="NVIDIA Q1 FY2027 revenue was $81.6 billion.",
+            source="NVIDIA_Q1_FY2027.pdf",
+            company="NVIDIA",
+            metadata={"page": 1},
+        ),
+        Evidence(
+            content="Apple Q2 FY2026 net sales were $111,184 million.",
+            source="Apple_Q2_2026.pdf",
+            company="Apple",
+            metadata={"page": 1},
+        ),
+    ]
+
+    filtered = filter_evidence_for_query(
+        "What was NVIDIA's Q1 FY2027 revenue? Use only Apple's financial reports.",
+        evidence,
+    )
+
+    assert filtered == []
+
+
 def test_gate_keeps_an_explicit_unverified_fallback_instead_of_empty_context():
     evidence = [
         Evidence(
@@ -39,6 +63,132 @@ def test_gate_keeps_an_explicit_unverified_fallback_instead_of_empty_context():
     filtered = filter_evidence_for_query("Tesla Q2 2025 gross margin", evidence)
     assert len(filtered) == 1
     assert filtered[0].metadata["semantic_support"] == "unverified"
+
+
+def test_risk_question_keeps_document_level_risk_context_with_period_caveat():
+    evidence = [
+        Evidence(
+            content=(
+                "Forward-looking statements identify risks relating to tariffs, "
+                "regulations, indebtedness and adverse foreign exchange movements."
+            ),
+            source="Tesla_Q4_FY2025_Update.pdf",
+            company="Tesla",
+            metadata={"page": 34, "chunk_id": "tesla-risk-factors"},
+        )
+    ]
+
+    filtered = filter_evidence_for_query(
+        "What risks or challenges are mentioned in Tesla's Q2 2025 report?",
+        evidence,
+    )
+
+    assert len(filtered) == 1
+    assert filtered[0].metadata["semantic_support"] == "related_context"
+    assert "requested reporting period" in filtered[0].metadata["semantic_support_reason"]
+
+
+def test_risk_question_keeps_known_period_document_context_without_filename_period():
+    evidence = [
+        Evidence(
+            content=(
+                "Forward-looking statements identify risks relating to tariffs, "
+                "regulations, indebtedness and adverse foreign exchange movements."
+            ),
+            source="Tesla_sample.pdf",
+            company="Tesla",
+            metadata={"page": 34, "chunk_id": "tesla-risk-factors", "quarter": "Q4_2025"},
+        )
+    ]
+
+    filtered = filter_evidence_for_query(
+        "What risks or challenges are mentioned in Tesla's Q2 2025 report?",
+        evidence,
+    )
+
+    assert len(filtered) == 1
+    assert filtered[0].metadata["semantic_support"] == "related_context"
+
+
+def test_risk_context_answer_discloses_that_period_is_not_specific():
+    from core.answer_policy import finalize_grounded_answer
+
+    row = Evidence(
+        content=(
+            "Forward-looking statements identify risks relating to tariffs, "
+            "regulations, indebtedness and adverse foreign exchange movements."
+        ),
+        source="Tesla_Q4_FY2025_Update.pdf",
+        company="Tesla",
+        metadata={"page": 34, "chunk_id": "tesla-risk-factors"},
+    )
+    filtered = filter_evidence_for_query(
+        "What risks or challenges are mentioned in Tesla's Q2 2025 report?",
+        [row],
+    )
+    result = finalize_grounded_answer(
+        "What risks or challenges are mentioned in Tesla's Q2 2025 report?",
+        "The report mentions risks relating to tariffs and regulations [Evidence 1].",
+        filtered,
+    )
+
+    assert "general risk disclosures" in result.answer
+    assert "not identify risks specific" in result.answer
+    assert result.grounded.unsupported_count == 0
+
+
+def test_risk_context_wrong_language_rebuilds_a_cited_source_excerpt():
+    from core.answer_policy import finalize_grounded_answer
+
+    row = Evidence(
+        content=(
+            "Forward-looking statements identify risks relating to tariffs, "
+            "regulations, indebtedness and adverse foreign exchange movements."
+        ),
+        source="Tesla_Q4_FY2025_Update.pdf",
+        company="Tesla",
+        metadata={"page": 34, "chunk_id": "tesla-risk-factors"},
+    )
+    question = "What risks or challenges are mentioned in Tesla's Q2 2025 report?"
+    filtered = filter_evidence_for_query(question, [row])
+    result = finalize_grounded_answer(
+        question,
+        "财报提到监管、关税和融资风险。[Evidence 1]",
+        filtered,
+    )
+
+    assert "Related general risk disclosures" in result.answer
+    assert "tariffs" in result.answer
+    assert "not period-specific" in result.answer
+    assert result.grounded.unsupported_count == 0
+
+
+def test_related_risk_context_keeps_excerpt_when_chinese_model_draft_cannot_be_grounded():
+    from core.answer_policy import finalize_grounded_answer
+
+    row = Evidence(
+        content=(
+            "Forward-looking statements identify risks relating to tariffs, "
+            "regulations, indebtedness and adverse foreign exchange movements."
+        ),
+        source="Tesla_Q4_FY2025_Update.pdf",
+        company="Tesla",
+        metadata={
+            "page": 34,
+            "chunk_id": "tesla-related-risk",
+            "semantic_support": "related_context",
+        },
+    )
+    question = "特斯拉 2025 年第二季度财报提到了哪些风险或挑战？"
+    result = finalize_grounded_answer(
+        question,
+        "Evidence-grounded risk answer: 监管、关税、融资和汇率风险。",
+        [row],
+    )
+
+    assert "财报风险背景" in result.answer
+    assert "tariffs" in result.answer
+    assert result.grounded.unsupported_count == 0
 
 
 def test_stale_document_period_cannot_ground_a_conflicting_quarter_claim():

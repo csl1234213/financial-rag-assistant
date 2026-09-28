@@ -4,6 +4,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +42,7 @@ def test_fresh_database_upgrades_to_head_without_schema_drift(
     monkeypatch.setenv("DATABASE_URL", database_url)
 
     config = _alembic_config()
+    expected_revision = ScriptDirectory.from_config(config).get_current_head()
     command.upgrade(config, "head")
     command.check(config)
 
@@ -85,6 +87,6 @@ def test_fresh_database_upgrades_to_head_without_schema_drift(
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        assert revision == "20260729_07"
+        assert revision == expected_revision
     finally:
         engine.dispose()

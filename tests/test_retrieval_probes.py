@@ -72,6 +72,63 @@ def test_bilingual_comparisons_share_company_scoped_metric_probes():
     assert company_metric_probes <= set(chinese)
 
 
+def test_growth_narrative_comparison_probes_headline_and_growth_for_each_issuer():
+    evidence = [
+        Evidence(
+            content="Apple Q2 FY2026 filing excerpt.",
+            source="Apple.pdf",
+            company="Apple",
+            metadata={"quarter": "Q2_FY2026", "chunk_id": "apple-q2"},
+        ),
+        Evidence(
+            content="NVIDIA Q1 FY2027 filing excerpt.",
+            source="NVIDIA.pdf",
+            company="NVIDIA",
+            metadata={"quarter": "Q1_FY2027", "chunk_id": "nvidia-q1"},
+        ),
+        Evidence(
+            content="Tesla Q4 2025 filing excerpt.",
+            source="Tesla.pdf",
+            company="Tesla",
+            metadata={"quarter": "Q4_2025", "chunk_id": "tesla-q4"},
+        ),
+    ]
+    for question in (
+        "Which of Apple, NVIDIA and Tesla reports the strongest growth narrative?",
+        "苹果、英伟达和特斯拉中，哪一家财报体现出的增长势头最强？",
+    ):
+        probes = set(retrieval_probe_queries(question, QueryScope.COMPARE, evidence))
+        assert {
+            "Apple total revenues Q2_FY2026",
+            "Apple revenue growth Q2_FY2026",
+            "NVIDIA total revenues Q1_FY2027",
+            "NVIDIA revenue growth Q1_FY2027",
+            "Tesla total revenues Q4_2025",
+            "Tesla revenue growth Q4_2025",
+        } <= probes
+
+
+def test_segment_comparison_probes_cover_verified_category_and_margin_rows():
+    english = set(retrieval_probe_queries(
+        "Compare Apple and NVIDIA's major business segments.", QueryScope.COMPARE
+    ))
+    chinese = set(retrieval_probe_queries(
+        "比较苹果和英伟达的主要业务分部。", QueryScope.COMPARE
+    ))
+
+    expected = {
+        "Apple iphone®",
+        "Apple mac®",
+        "Apple ipad®",
+        "Apple wearables, home and accessories",
+        "Apple products gross margin",
+        "Apple services gross margin",
+        "NVIDIA data center revenue",
+    }
+    assert expected <= english
+    assert expected <= chinese
+
+
 def test_bilingual_financial_comparison_has_identical_per_company_summary_probes():
     english = set(retrieval_probe_queries(
         "Compare Apple and Tesla's financial performance.", QueryScope.COMPARE
@@ -243,3 +300,34 @@ def test_canonical_company_metric_probe_uses_deeper_bounded_top_k():
         "Summarize Tesla financial performance.",
         "Summarize Tesla financial performance. financial summary",
     ) == 3
+
+
+def test_causal_financial_change_probes_use_observed_company_context():
+    question = "年报中2025年经营活动现金流净额下降主要归因于什么？"
+    row = Evidence(
+        content=(
+            "Structured financial table row — Metric: Operating Cash Flow | "
+            "FY2025: 61522204989.35 CNY | FY2024: 92463692168.43 CNY"
+        ),
+        source="贵州茅台_2025年度报告.pdf",
+        company="贵州茅台",
+        metadata={
+            "content_type": "table",
+            "quarter": "2025-12-31",
+            "chunk_id": "moutai-cash-flow-row",
+        },
+    )
+
+    probes = retrieval_probe_queries(
+        question,
+        QueryScope.ANALYSIS,
+        [row],
+    )
+
+    assert any(
+        "贵州茅台" in probe
+        and "经营活动产生的现金流量净额" in probe
+        and "变化原因" in probe
+        and "2025" in probe
+        for probe in probes
+    )

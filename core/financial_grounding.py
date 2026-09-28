@@ -108,8 +108,19 @@ def _parse_match(match: re.Match[str]) -> NormalizedNumber | None:
     return NormalizedNumber(value=value, kind="amount", currency=currency, quantum=quantum)
 
 
-def extract_normalized_numbers(text: str) -> list[NormalizedNumber]:
-    """Extract financial numbers while preserving scale and sign."""
+def extract_normalized_numbers(
+    text: str,
+    *,
+    allow_year_like_amount: bool = False,
+) -> list[NormalizedNumber]:
+    """Extract financial numbers while preserving scale and sign.
+
+    Comparative financial table rows can legitimately contain a comma-grouped
+    amount such as ``2,034``. The default year guard is still correct for
+    prose, but callers that have already isolated a verified table row may
+    explicitly allow that amount-shaped value instead of treating it as the
+    year 2034.
+    """
 
     values: list[NormalizedNumber] = []
     for match in _NUMBER_RE.finditer(text or ""):
@@ -159,7 +170,11 @@ def extract_normalized_numbers(text: str) -> list[NormalizedNumber]:
         # Years and bare single digits are usually labels, not claims.
         if parsed.kind == "amount" and parsed.value == parsed.value.to_integral_value():
             integer = int(parsed.value)
-            if 1900 <= abs(integer) <= 2100 and not match.group("scale"):
+            if (
+                1900 <= abs(integer) <= 2100
+                and not match.group("scale")
+                and not allow_year_like_amount
+            ):
                 continue
             if abs(integer) < 10 and not match.group("currency") and not match.group("scale"):
                 continue
@@ -214,9 +229,47 @@ _METRIC_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "服务分部",
         ),
     ),
+    (
+        "energy_revenue",
+        (
+            "energy generation and storage revenue",
+            "energy generation and storage",
+            "energy revenue",
+            "能源发电与储能收入",
+            "能源发电和储能收入",
+            "能源收入",
+        ),
+    ),
     ("edge_computing_revenue", (
         "edge computing revenue", "edge revenue", "边缘计算收入", "边缘计算营收", "边缘计算业务",
     )),
+    (
+        "iphone_revenue",
+        (
+            "iphone®", "iphone net sales", "iphone revenue",
+            "iphone 销售额", "iphone收入", "iphone 收入", "iphone销售额",
+        ),
+    ),
+    ("products_revenue", ("products net sales", "products revenue", "产品净销售额", "产品收入")),
+    ("mac_revenue", ("mac®", "mac net sales", "mac revenue", "mac销售额", "mac收入")),
+    ("ipad_revenue", ("ipad®", "ipad net sales", "ipad revenue", "ipad销售额", "ipad收入")),
+    (
+        "wearables_revenue",
+        (
+            "wearables, home and accessories",
+            "wearables net sales",
+            "wearables revenue",
+            "可穿戴设备、家居和配件",
+        ),
+    ),
+    (
+        "products_gross_margin",
+        ("products gross margin", "metric: products", "产品毛利率"),
+    ),
+    (
+        "services_gross_margin",
+        ("services gross margin", "metric: services", "服务毛利率"),
+    ),
     ("data_center_revenue", (
         "data center revenue", "data-center revenue", "datacenter revenue",
         "data center business", "data-center business", "datacenter business",
@@ -245,6 +298,7 @@ _METRIC_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("cash_paid_for_taxes", ("cash paid for income taxes", "cash paid for taxes", "所得税支付现金", "支付的所得税")),
     ("cash_flow", ("cash flow", "operating cash", "现金流")),
+    ("main_business_revenue", ("main business revenue", "core business revenue", "主营业务收入")),
     ("revenue", ("total revenue", "total revenues", "net sales", "revenue", "revenues", "营收", "收入")),
 )
 
@@ -289,7 +343,10 @@ def canonical_metrics(text: str) -> tuple[str, ...]:
         # is not safe to silently interpret it as gross margin alone.
         matched.extend(metric for metric in ("operating_margin", "gross_margin") if metric not in matched)
     specific_revenue = {
-        "automotive_revenue", "services_revenue", "data_center_revenue", "edge_computing_revenue"
+        "automotive_revenue", "services_revenue", "energy_revenue",
+        "data_center_revenue", "edge_computing_revenue", "iphone_revenue",
+        "products_revenue", "mac_revenue", "ipad_revenue", "wearables_revenue",
+        "main_business_revenue",
     }
     if specific_revenue.intersection(matched):
         matched = [metric for metric in matched if metric != "revenue"]
@@ -300,7 +357,8 @@ def canonical_metrics(text: str) -> tuple[str, ...]:
         for term in ("breakdown", "by segment", "segments", "components", "composition", "分项", "构成", "拆分", "分部")
     ):
         for metric in (
-            "automotive_revenue", "services_revenue", "data_center_revenue", "edge_computing_revenue"
+            "automotive_revenue", "services_revenue", "energy_revenue",
+            "data_center_revenue", "edge_computing_revenue",
         ):
             if metric not in matched:
                 matched.append(metric)

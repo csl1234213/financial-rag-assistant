@@ -6,7 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from agent.planning.entity_extractor import extract_companies
+from agent.planning.entity_extractor import (
+    extract_allowed_source_companies,
+    extract_companies,
+)
 from agent.reasoning_models import Evidence
 from core.fact_ledger import canonical_company, periods_equivalent
 from retrieval.periods import extract_periods
@@ -25,7 +28,28 @@ _GROWTH_DRIVER_QUESTION = re.compile(
     r"增长(?:的)?[\s，,、]*(?:主要|核心|关键)?(?:驱动(?:因素)?|动力|原因)|"
     r"增长的主要原因|为何增长|为什么.{0,20}(?:增长|上升|提升|扩大|加速)|"
     r"(?:业务|营收|收入).{0,12}为什么(?:增长|上升|提升|扩大)|"
-    r"(?:什么|哪些).{0,12}推动.{0,20}(?:增长|业务|营收|收入)",
+    r"(?:什么|哪些).{0,12}推动.{0,20}(?:增长|业务|营收|收入)|"
+    r"\bbusiness\s+factors?\b.{0,40}\b(?:driv\w*|behind|affect\w*)\b|"
+    r"\bfactors?\s+(?:driv\w*|behind)\s+(?:their\s+)?(?:reported\s+)?performance\b|"
+    r"业务因素.{0,24}(?:驱动|影响|导致)|"
+    r"(?:下降|减少|下滑|降低|收窄).{0,20}(?:主要)?(?:原因|归因|因素)|"
+    r"(?:归因于|主要归因于|主要原因|原因在于)|"
+    r"(?:reason|cause|attribution).{0,24}(?:declin|decreas|drop|fall)|"
+    r"(?:declin|decreas|drop|fall).{0,24}(?:reason|cause|attribution)",
+    re.IGNORECASE,
+)
+_FINANCIAL_CHANGE_CAUSE_QUESTION = re.compile(
+    r"(?:declin|decreas|drop|fall|reduce).{0,28}(?:reason|cause|attribution)|"
+    r"(?:reason|cause|attribution).{0,28}(?:declin|decreas|drop|fall|reduce)|"
+    r"(?:下降|减少|下滑|降低|收窄).{0,20}(?:主要)?(?:原因|归因|因素)|"
+    r"(?:归因于|主要归因于|主要原因|原因在于)",
+    re.IGNORECASE,
+)
+_GROWTH_NARRATIVE_QUESTION = re.compile(
+    r"\b(?:growth\s+(?:narrative|story|momentum|trajectory|profile)|"
+    r"strongest\s+growth(?:\s+narrative)?|growth\s+momentum)\b|"
+    r"增长(?:势头|叙事|故事|动能|轨迹|表现)|"
+    r"增长(?:最|哪家|哪一家公司).{0,12}(?:强|快|好|显著)",
     re.IGNORECASE,
 )
 _FINANCIAL_SUMMARY_REQUEST = re.compile(
@@ -39,6 +63,13 @@ _FINANCIAL_SUMMARY_REQUEST = re.compile(
     r"(?:财报|报告).{0,30}(?:营收|收入|销售额).{0,12}(?:表现|业绩|情况)",
     re.IGNORECASE,
 )
+_SEGMENT_COMPARISON_REQUEST = re.compile(
+    r"\b(?:compare|comparison)\b.{0,120}\b(?:major\s+)?(?:business\s+)?segments?\b|"
+    r"\b(?:summari[sz]e|overview)\b.{0,120}\b(?:major\s+)?(?:business\s+)?segments?\b|"
+    r"比较.{0,40}(?:主要)?业务(?:板块|分部)|"
+    r"(?:总结|概览).{0,40}(?:主要)?业务(?:板块|分部)",
+    re.IGNORECASE,
+)
 _FORWARD_LOOKING = re.compile(
     r"certain statements in this (?:press release|report|update)|"
     r"forward[- ]looking statements within the meaning|"
@@ -48,22 +79,22 @@ _FORWARD_LOOKING = re.compile(
 _DRIVER_CUE = re.compile(
     r"\b(?:driven\s+by|due\s+to|attribut\w*\s+to|because\s+of|"
     r"result\w*\s+from|fueled\s+by|led\s+by|primarily\s+from|"
-    r"growth\s+drivers?|drivers?\s+(?:include|were|are)|"
+    r"growth\s+drivers?|drivers?\s+(?:include|were|are)|positive\s+offset|"
     r"accelerat\w*|scal(?:ing|ed)\s+rapidly|generat\w+\s+real\s+value)\b|"
     r"由于|主要源于|主要因为|归因于|推动|带动|增长动力|增长驱动(?:因素)?|"
-    r"快速扩张|迅速增长",
+    r"快速扩张|迅速增长|主要是.{0,120}(?:减少|增加|下降|上升)|主要与.{0,120}有关",
     re.IGNORECASE,
 )
 _DRIVER_SUBJECT = re.compile(
     r"\b(?:revenue|revenues|net sales|sales|growth|demand|volume|"
-    r"business|segment|product mix|AI factories|agentic AI|advertising|"
+    r"business|segment|cash flow|product mix|AI factories|agentic AI|advertising|"
     r"App Store|cloud services)\b|营收|收入|增长|需求|销量|业务|分部|产品组合|"
-    r"AI工厂|AI 工厂|智能体 AI|Agentic AI",
+    r"现金流|AI工厂|AI 工厂|智能体 AI|Agentic AI",
     re.IGNORECASE,
 )
 _DRIVER_CHANGE = re.compile(
     r"\b(?:increas\w*|grow\w*|rose|risen|accelerat\w*|expand\w*|"
-    r"improv\w*|record|higher|declin\w*|up\s+by|scal(?:ing|ed)|"
+    r"improv\w*|record|higher|declin\w*|decreas\w*|up\s+by|scal(?:ing|ed)|"
     r"generat\w+\s+real\s+value)\b|增长|上升|提升|扩大|加速|改善|增加|下降|"
     r"创造实际价值|快速规模化",
     re.IGNORECASE,
@@ -77,14 +108,17 @@ _AI_DRIVER_NARRATIVE = re.compile(
 )
 _FINANCIAL_OUTCOME = re.compile(
     r"\b(?:revenue|revenues|net sales|sales|net income|operating income|"
-    r"net profit|gross profit|earnings|gross margin|operating margin|deliveries)\b|"
-    r"营收|收入|销售额|净利润|营业利润|毛利率|营业利润率|交付量|销量",
+    r"net profit|gross profit|earnings|gross margin|operating margin|cash flow|"
+    r"deliveries|deployment|deployments|production|subscriptions|"
+    r"average selling price|ASP|volume)\b|"
+    r"营收|收入|销售额|净利润|营业利润|毛利率|营业利润率|现金流|交付量|销量|部署量|产量|订阅量",
     re.IGNORECASE,
 )
 _EXPLICIT_CAUSAL_LINK = re.compile(
     r"\b(?:due to|because of|driven by|attributable to|resulting from|"
     r"resulted from|primarily from|primarily due to|led by|fueled by|"
-    r"as a result of)\b|由于|因为|归因于|主要源于|主要由|导致",
+    r"as a result of|positive offset)\b|由于|因为|归因于|主要源于|主要由|导致|"
+    r"主要是.{0,120}(?:减少|增加|下降|上升)|主要与.{0,120}有关",
     re.IGNORECASE,
 )
 _DRIVER_ABSENCE = re.compile(
@@ -114,18 +148,36 @@ class GrowthDriverPassage:
     text: str
     evidence_rank: int
     explicit_financial_attribution: bool = False
+    company: str = ""
 
 
 def is_explicit_growth_driver_question(question: str) -> bool:
-    """Return whether the user explicitly asks for causes/drivers of growth.
+    """Return whether the user explicitly asks for financial causes/drivers.
 
     Retrieval uses this narrower intent to decide whether to filter out
-    financial-statement evidence. A broad financial summary may also benefit
-    from extractive growth-driver passages, but must not be reduced to driver
-    commentary alone.
+    financial-statement evidence. It includes stated causes of financial
+    declines as well as growth drivers. A broad financial summary may also
+    benefit from extractive commentary, but must not be reduced to prose alone.
     """
 
-    return bool(_GROWTH_DRIVER_QUESTION.search(question or ""))
+    query = question or ""
+    return bool(
+        _GROWTH_DRIVER_QUESTION.search(query)
+        or _FINANCIAL_CHANGE_CAUSE_QUESTION.search(query)
+    )
+
+
+def is_growth_narrative_question(question: str) -> bool:
+    """Return whether a comparison asks for growth narrative/evidence.
+
+    This is intentionally broader than the causal-driver classifier. A
+    ranking such as "which company has the strongest growth narrative" still
+    needs reported growth facts and management commentary for every issuer,
+    but it must not be treated as a driver-only question that discards
+    financial statement evidence.
+    """
+
+    return bool(_GROWTH_NARRATIVE_QUESTION.search(question or ""))
 
 
 def is_growth_driver_question(question: str) -> bool:
@@ -139,8 +191,16 @@ def is_growth_driver_question(question: str) -> bool:
     query = question or ""
     return bool(
         is_explicit_growth_driver_question(query)
+        or is_growth_narrative_question(query)
         or _FINANCIAL_SUMMARY_REQUEST.search(query)
+        or _SEGMENT_COMPARISON_REQUEST.search(query)
     )
+
+
+def is_segment_comparison_question(question: str) -> bool:
+    """Return whether a broad segment comparison can use bounded driver context."""
+
+    return bool(_SEGMENT_COMPARISON_REQUEST.search(question or ""))
 
 
 def _driver_sentences(content: str) -> list[str]:
@@ -181,6 +241,19 @@ def _is_explicit_financial_attribution(text: str) -> bool:
     )
 
 
+def has_explicit_financial_growth_driver_evidence(content: str) -> bool:
+    """Return whether a passage explicitly attributes a financial outcome.
+
+    General macroeconomic/risk commentary can contain words such as
+    ``growth`` and ``impact`` without explaining a reported issuer result.
+    Narrative comparisons should prefer this stricter signal, while retaining
+    the separate AI-strategy narrative path for non-numeric management
+    commentary.
+    """
+
+    return any(_is_explicit_financial_attribution(sentence) for sentence in _driver_sentences(content))
+
+
 def extract_growth_driver_passages(
     question: str,
     evidence: Iterable[Evidence],
@@ -197,8 +270,36 @@ def extract_growth_driver_passages(
     requested_companies = {
         canonical_company(company) for company in extract_companies(question)
     }
+    # A source-only instruction can mention one issuer as the permitted filing
+    # set while asking about a different issuer (for example, "use only
+    # Apple's filing to answer NVIDIA").  The allowed source is not the
+    # answer target; otherwise its valid driver prose could incorrectly clear
+    # a refusal for the off-scope issuer.  When the same issuer is both source
+    # and target, retain it as the target normally.
+    allowed_sources = {
+        canonical_company(company)
+        for company in extract_allowed_source_companies(question)
+    }
+    target_companies = requested_companies - allowed_sources
+    if target_companies:
+        requested_companies = target_companies
     requested_periods = extract_periods(question)
     result: list[GrowthDriverPassage] = []
+    # A narrative comparison needs at least one cited driver/context passage
+    # per named issuer.  Explicit multi-company driver questions have the same
+    # coverage requirement even when they do not use the word "narrative";
+    # otherwise the first two ranked chunks (often Apple + NVIDIA) crowd out
+    # Tesla entirely.  A single-company explicit driver question also needs a
+    # larger bounded pool so a first chunk's iPhone/Mac rows do not crowd out
+    # a later Services driver paragraph.
+    explicit_driver = is_explicit_growth_driver_question(question)
+    narrative = (
+        is_growth_narrative_question(question)
+        or is_segment_comparison_question(question)
+        or (explicit_driver and len(requested_companies) > 1)
+    )
+    max_passages = 8 if narrative else (6 if explicit_driver else 2)
+    covered_companies: set[str] = set()
     seen: set[tuple[int, str]] = set()
     for rank, item in enumerate(evidence, 1):
         source_company = canonical_company(
@@ -221,6 +322,13 @@ def extract_growth_driver_passages(
         ):
             continue
         for sentence in _driver_sentences(content):
+            explicit = _is_explicit_financial_attribution(sentence)
+            # Narrative comparisons must not promote an arbitrary risk/table
+            # sentence to a growth story merely because it contains the word
+            # "growth". Keep explicit financial attribution and the dedicated
+            # AI-strategy narrative; otherwise fail closed for that issuer.
+            if narrative and not explicit and not _AI_DRIVER_NARRATIVE.search(sentence):
+                continue
             key = rank, sentence.casefold()
             if key in seen:
                 continue
@@ -229,10 +337,20 @@ def extract_growth_driver_passages(
                 GrowthDriverPassage(
                     sentence[:360],
                     rank,
-                    _is_explicit_financial_attribution(sentence),
+                    explicit,
+                    source_company,
                 )
             )
-            if len(result) >= 2:
+            if source_company:
+                covered_companies.add(source_company)
+            if not narrative and len(result) >= max_passages:
+                return tuple(result)
+            # Do not stop immediately after seeing every issuer.  The first
+            # passage for an issuer can be a PDF-split table fragment that the
+            # citation sanitizer correctly rejects; continuing through a
+            # small bounded pool lets a later complete passage represent the
+            # same issuer without weakening the safety gate.
+            if narrative and len(result) >= max_passages:
                 return tuple(result)
     return tuple(result)
 

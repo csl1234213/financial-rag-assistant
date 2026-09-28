@@ -31,6 +31,11 @@ _COMPANY_MAP = {
     "超威": "AMD",
     "microsoft": "Microsoft",
     "微软": "Microsoft",
+    "贵州茅台酒股份有限公司": "贵州茅台",
+    "贵州茅台": "贵州茅台",
+    "kweichow moutai": "贵州茅台",
+    "moutai": "贵州茅台",
+    "茅台": "贵州茅台",
     "google": "Google",
     "alphabet": "Alphabet",
     "谷歌": "Google",
@@ -107,6 +112,24 @@ _FOLLOWUP_REFERENCE_PATTERN = re.compile(
     r"它(?:的)?|那份|这份|同一(?:家公司|份)|现在(?:再)?|那么|继续",
     re.IGNORECASE,
 )
+_FINANCIAL_CONTEXT_FOLLOWUP_PATTERN = re.compile(
+    r"(?:收入|营收|营业额|净利润|利润|毛利率|经营现金流|经营利润|资产|负债|"
+    r"每股收益|营收|revenue|net income|gross margin|operating income|eps)"
+    r".*(?:20\d{2}|Q[1-4]|FY\d{4}|年度|季度|同比|环比|增长|变化|分别|各自|"
+    r"分地区|分产品|销售模式|直销|批发代理|国内|国外)|"
+    r"(?:20\d{2}|Q[1-4]|FY\d{4}|年度|季度|同比|环比|增长|变化|分别|各自|"
+    r"分地区|分产品|销售模式|直销|批发代理|国内|国外).*"
+    r"(?:收入|营收|营业额|净利润|利润|毛利率|经营现金流|经营利润|资产|负债|"
+    r"每股收益|revenue|net income|gross margin|operating income|eps)",
+    re.IGNORECASE,
+)
+_SOURCE_CONSTRAINT_PATTERN = re.compile(
+    r"(?:\bonly\s+(?:use|using|from)\b|\buse\s+only\b|"
+    r"\bbased\s+only\s+on\b|\busing\s+only\b|"
+    r"(?:仅|只)(?:使用|根据)|只能使用|仅限于)"
+    r".{0,140}?(?:financial\s+reports?|filings?|reports?|财报|报告|资料|文档)",
+    re.IGNORECASE,
+)
 
 
 def extract_companies(question: str) -> list[str]:
@@ -133,6 +156,24 @@ def extract_companies(question: str) -> list[str]:
     return result
 
 
+def extract_allowed_source_companies(question: str) -> list[str]:
+    """Extract issuers explicitly allowed by a source-only constraint.
+
+    This is deliberately opt-in and narrow. Ordinary company mentions remain
+    query targets; only wording such as ``use only Apple's financial reports``
+    creates an evidence-source allow-list.
+    """
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for match in _SOURCE_CONSTRAINT_PATTERN.finditer(question or ""):
+        for company in extract_companies(match.group(0)):
+            if company not in seen:
+                seen.add(company)
+                result.append(company)
+    return result
+
+
 def prior_user_context_for_followup(
     question: str,
     history: list[dict] | None,
@@ -147,7 +188,13 @@ def prior_user_context_for_followup(
     followed backward until the nearest topic boundary or entity-bearing turn.
     """
 
-    if not _FOLLOWUP_REFERENCE_PATTERN.search(question or ""):
+    question_is_referential = bool(
+        _FOLLOWUP_REFERENCE_PATTERN.search(question or "")
+    )
+    question_is_financial_scope_followup = bool(
+        _FINANCIAL_CONTEXT_FOLLOWUP_PATTERN.search(question or "")
+    )
+    if not question_is_referential and not question_is_financial_scope_followup:
         return None
     for message in reversed(history or []):
         if not isinstance(message, dict) or str(message.get("role", "")).casefold() != "user":

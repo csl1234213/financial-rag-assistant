@@ -38,6 +38,34 @@ METRIC_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        "iphone_revenue",
+        (
+            "iphone®", "iphone net sales", "iphone revenue",
+            "iphone 销售额", "iphone收入", "iphone 收入", "iphone销售额",
+        ),
+    ),
+    (
+        "products_revenue",
+        ("products net sales", "products revenue", "产品净销售额", "产品收入"),
+    ),
+    (
+        "mac_revenue",
+        ("mac®", "mac net sales", "mac revenue", "Mac销售额", "Mac收入"),
+    ),
+    (
+        "ipad_revenue",
+        ("ipad®", "ipad net sales", "ipad revenue", "iPad销售额", "iPad收入"),
+    ),
+    (
+        "wearables_revenue",
+        (
+            "wearables, home and accessories",
+            "wearables net sales",
+            "wearables revenue",
+            "可穿戴设备、家居和配件",
+        ),
+    ),
+    (
         "edge_computing_revenue",
         ("edge computing revenue", "edge revenue", "边缘计算收入", "边缘计算营收", "边缘计算业务"),
     ),
@@ -72,13 +100,33 @@ METRIC_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "服务分部",
         ),
     ),
+    (
+        "energy_revenue",
+        (
+            "energy generation and storage revenue",
+            "energy generation and storage",
+            "energy revenue",
+            "能源发电与储能收入",
+            "能源发电和储能收入",
+            "能源收入",
+        ),
+    ),
     ("free_cash_flow", ("free cash flow", "fcf", "自由现金流")),
+    ("main_business_revenue", ("main business revenue", "core business revenue", "主营业务收入")),
     ("net_income", ("net income", "net profit", "net earnings", "净利润")),
     ("operating_income", ("income from operations", "operating income", "营业利润")),
     ("gross_profit", ("gross profit", "毛利额", "毛利润")),
     (
         "automotive_gross_margin",
         ("automotive gross margin", "汽车业务毛利率"),
+    ),
+    (
+        "products_gross_margin",
+        ("products gross margin", "metric: products", "产品毛利率"),
+    ),
+    (
+        "services_gross_margin",
+        ("services gross margin", "metric: services", "服务毛利率"),
     ),
     ("gross_margin", ("gross margin", "毛利率", "毛利")),
     ("operating_margin", ("operating margin", "operating profit margin", "营业利润率")),
@@ -88,6 +136,8 @@ METRIC_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "eps",
             "eps attributable to common stockholders, diluted",
             "diluted earnings per share",
+            "earnings per diluted share",
+            "diluted net income per share",
             "earnings per share",
             "diluted eps",
             "每股收益",
@@ -107,6 +157,9 @@ _COMPANY_ALIASES = {
     "apple": {"apple", "苹果", "苹果公司"},
     "tesla": {"tesla", "特斯拉"},
     "microsoft": {"microsoft", "微软"},
+    "moutai": {
+        "moutai", "kweichow moutai", "贵州茅台", "贵州茅台酒股份有限公司", "茅台", "600519",
+    },
 }
 
 
@@ -138,11 +191,15 @@ class FinancialFact:
     derivation: str = "direct"
     growth_basis: str | None = None
     display_unit: str | None = None
-
-    # Structured statement facts extend, rather than replace, the narrative ledger schema.
+    # Stable ingestion identity (for example ``tesla_q2_2025``).  This is
+    # deliberately kept separate from the filing/reporting period: the latter
+    # remains content-derived, while the identity can provide a comparison
+    # anchor only after the printed evidence proves that period exists.
     document_id: str | None = None
     dimension: str | None = None
     category: str | None = None
+    # Structured statement-fact dimensions are optional so the established
+    # narrative extraction path remains backwards compatible.
     company_id: str | None = None
     company_name: str | None = None
     accounting_standard: str = "UNKNOWN"
@@ -179,10 +236,10 @@ class FinancialFact:
             "period_start": self.period_start,
             "period_end": self.period_end,
             "document": self.document,
+            "document_id": self.document_id,
             "page": self.page,
             "section": self.section,
             "chunk_id": self.chunk_id,
-            "document_id": self.document_id,
             "dimension": self.dimension,
             "category": self.category,
             "company_id": self.company_id,
@@ -386,6 +443,27 @@ _PAIRED_MARGIN_BASIS = re.compile(
 )
 
 
+_PAIRED_EPS_BASIS = re.compile(
+    r"\bGAAP\s+and\s+non[-\s\u2010-\u2014]?GAAP\s+"
+    r"(?P<metric>(?:diluted\s+)?earnings\s+per\s+(?:diluted\s+)?share)\s+"
+    r"(?:were|was)\s+(?P<gaap>(?:US\$|\$)?\s*-?\d[\d,]*(?:\.\d+)?)\s+and\s+"
+    r"(?P<non_gaap>(?:US\$|\$)?\s*-?\d[\d,]*(?:\.\d+)?)\s*,?\s*respectively\b",
+    re.IGNORECASE,
+)
+
+
+_PAIRED_INCOME_BASIS = re.compile(
+    r"\bGAAP\s+and\s+non[-\s\u2010-\u2014]?GAAP\s+"
+    r"(?P<metric>net\s+income|operating\s+income)\s+"
+    r"(?:were|was)\s+(?P<gaap>(?:US\$|\$)?\s*-?\d[\d,]*(?:\.\d+)?"
+    r"\s*(?:thousand|million|billion|trillion|[KMBT])?(?:\s*(?:USD|US\$|EUR|CNY|RMB))?)\s+"
+    r"and\s+(?P<non_gaap>(?:US\$|\$)?\s*-?\d[\d,]*(?:\.\d+)?"
+    r"\s*(?:thousand|million|billion|trillion|[KMBT])?(?:\s*(?:USD|US\$|EUR|CNY|RMB))?)\s*"
+    r",?\s*respectively\b",
+    re.IGNORECASE,
+)
+
+
 def _paired_margin_match(
     content: str, metric_match: re.Match[str], metric_id: str
 ) -> re.Match[str] | None:
@@ -395,6 +473,29 @@ def _paired_margin_match(
             if pair_match.group("metric").casefold().startswith("gross")
             else "operating_margin"
         )
+        if paired_metric == metric_id and pair_match.start() <= metric_match.start() < pair_match.end():
+            return pair_match
+    return None
+
+
+def _paired_eps_match(
+    content: str, metric_match: re.Match[str], metric_id: str
+) -> re.Match[str] | None:
+    if metric_id != "eps":
+        return None
+    for pair_match in _PAIRED_EPS_BASIS.finditer(content):
+        if pair_match.start() <= metric_match.start() < pair_match.end():
+            return pair_match
+    return None
+
+
+def _paired_income_match(
+    content: str, metric_match: re.Match[str], metric_id: str
+) -> re.Match[str] | None:
+    if metric_id not in {"net_income", "operating_income"}:
+        return None
+    for pair_match in _PAIRED_INCOME_BASIS.finditer(content):
+        paired_metric = "net_income" if pair_match.group("metric").casefold() == "net income" else "operating_income"
         if paired_metric == metric_id and pair_match.start() <= metric_match.start() < pair_match.end():
             return pair_match
     return None
@@ -429,11 +530,140 @@ def _qualify_paired_margin_basis(
         basis = "Non-GAAP" if qualifier.casefold() != "gaap" else "GAAP"
         metric = "gross margin" if metric_id == "gross_margin" else "operating margin"
         return f"{basis} {metric}: {evidence_text}"
+
+    # Flattened filing tables often put the accounting basis in the section
+    # header rather than on the metric row itself, for example:
+    # ``GAAP (...) ... Gross margin 74.9%`` followed by
+    # ``Non-GAAP (...) ... Gross margin 75.0%``.  The row window intentionally
+    # stops at the next metric label, so inspect the nearby preceding table
+    # header before treating both values as one unqualified metric.  Use the
+    # nearest header: this preserves the distinction when GAAP and non-GAAP
+    # tables share a chunk and does not rely on a question or document name.
+    header_prefix = content[max(0, match.start() - 420) : match.start()]
+    headers = list(
+        re.finditer(
+            r"\b(?P<basis>non[-\s\u2010-\u2014]?gaap|gaap)\b"
+            r"(?=\s*(?:\([^\n)]*\))?\s*(?:q\d|fy\d{2,4}|\$|\n|$))",
+            header_prefix,
+            re.IGNORECASE,
+        )
+    )
+    if headers:
+        qualifier = headers[-1].group("basis")
+        basis = "Non-GAAP" if qualifier.casefold() != "gaap" else "GAAP"
+        metric = "gross margin" if metric_id == "gross_margin" else "operating margin"
+        return f"{basis} {metric}: {evidence_text}"
     return evidence_text
+
+
+def _qualify_accounting_basis(
+    content: str,
+    match: re.Match[str],
+    metric_id: str,
+    value: NormalizedNumber,
+    evidence_text: str,
+) -> str:
+    """Keep an explicit GAAP/non-GAAP label attached to one parsed value.
+
+    ``_metric_window`` deliberately starts at the metric alias so that a
+    nearby heading cannot leak into an unrelated fact.  In prose this also
+    removes a qualifier that is part of the same clause, e.g. ``GAAP net
+    income was $840 million``.  Without the qualifier, preferred-fact
+    selection can mistake a pair of GAAP/non-GAAP values for duplicate facts
+    and choose by magnitude.  Restore only the nearest qualifier in the same
+    sentence/line; do not infer a basis from document names or question text.
+    """
+
+    evidence_text = _qualify_paired_margin_basis(
+        content, match, metric_id, value, evidence_text
+    )
+    if metric_id not in {"net_income", "operating_income", "eps"}:
+        return evidence_text
+    if value.kind not in {"amount", "per_share"}:
+        return evidence_text
+    pair_match = _paired_income_match(content, match, metric_id) or _paired_eps_match(
+        content, match, metric_id
+    )
+    if pair_match:
+        paired_values = [
+            item.value
+            for item in extract_normalized_numbers(pair_match.group(0))
+            if item.kind == "amount"
+        ]
+        for basis, paired_value in zip(("gaap", "non_gaap"), paired_values, strict=False):
+            if paired_value == value.value:
+                label = "GAAP" if basis == "gaap" else "Non-GAAP"
+                metric = (
+                    "earnings per share"
+                    if metric_id == "eps"
+                    else re.sub(r"\s+", " ", pair_match.group("metric")).casefold()
+                )
+                return f"{label} {metric}: {evidence_text}"
+
+    if re.match(r"\s*(?:non[-\s\u2010-\u2014]?gaap|gaap)\b", evidence_text, re.I):
+        return evidence_text
+
+    line_start = max(content.rfind("\n", 0, match.start()), content.rfind(".", 0, match.start())) + 1
+    prefix = content[line_start : match.start()]
+    qualifiers = list(
+        re.finditer(r"\bnon[-\s\u2010-\u2014]?gaap\b|\bgaap\b", prefix, re.I)
+    )
+    if not qualifiers:
+        return evidence_text
+    qualifier = qualifiers[-1].group(0)
+    basis = "Non-GAAP" if qualifier.casefold() != "gaap" else "GAAP"
+    metric = {
+        "net_income": "net income",
+        "operating_income": "operating income",
+        "eps": "earnings per share",
+    }[metric_id]
+    return f"{basis} {metric}: {evidence_text}"
 
 
 def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
+
+
+_GUIDANCE_CUE = re.compile(
+    r"\b(?:guidance|outlook|forecast|expected|projected|anticipates?|"
+    r"estimates?|targets?)\b|指引|展望|预计|预期|预测",
+    re.IGNORECASE,
+)
+
+
+def _guidance_period_for_window(
+    content: str,
+    start: int,
+    window: str,
+) -> tuple[str | None, bool]:
+    """Bind guidance values to a nearby explicit period, never a table header.
+
+    A single PDF chunk often contains an actuals table followed by a guidance
+    paragraph.  ``periods`` for the whole chunk therefore describes the table
+    columns, not necessarily the value in the prose paragraph.  If the value
+    is in a guidance clause, prefer a period written in that clause; when none
+    is written, return an undated fact so downstream policy can fail closed.
+    """
+
+    before = content[max(0, start - 700) : start]
+    cue_matches = list(_GUIDANCE_CUE.finditer(before))
+    if not cue_matches:
+        cue_matches = list(_GUIDANCE_CUE.finditer(window))
+        if not cue_matches:
+            return None, False
+        scope = window[cue_matches[-1].start() :]
+    else:
+        cue = cue_matches[-1]
+        # A cue from an earlier, unrelated section must not contaminate a new
+        # metric row after a paragraph/table boundary.
+        before_start = max(0, start - 700)
+        scope_start = before_start + cue.start()
+        scope = content[scope_start : min(len(content), start + 320)]
+
+    periods = extract_periods(scope)
+    if periods:
+        return periods[0], True
+    return None, True
 
 
 def _metric_window(
@@ -485,6 +715,10 @@ def _metric_window(
             # Retain the complete structured label for downstream grounding
             # and preferred-fact selection (e.g. GAAP vs non-GAAP net income).
             return structured_metric.group(0).strip() + " " + " ".join(cell_values)
+    if metric_id == "eps":
+        paired_eps = _paired_eps_match(content, match, metric_id)
+        if paired_eps:
+            return paired_eps.group(0)
     if metric_id == "eps" and re.search(
         r"\bnet\s+income\s+used\s+in\s+computing\b",
         content[max(line_start, start - 120) : start],
@@ -499,7 +733,7 @@ def _metric_window(
         return ""
     if metric_id == "revenue" and re.search(
         r"(?:cost\s+of|automotive|services(?:\s+and\s+other)?|regulatory\s+credit|data\s+center|edge(?:\s+computing)?|"
-        r"deferred|disaggregated|energy\s+generation\s+and\s+storage|"
+        r"deferred|disaggregated|energy\s+generation\s+and\s+storage|主营业务|"
         r"portion\s+of(?:\s+total)?|proportion\s+of|product[s]?|iphone|ipad|mac)\s*$",
         prefix,
     ):
@@ -661,6 +895,10 @@ def _growth_fact(base_fact: FinancialFact, basis: str, value: Decimal, evidence_
         normalized_value=value,
         unit="percent",
         currency=None,
+        # The base fact may be rendered in the statement's display scale
+        # (for example ``million``). Growth values are percentages and must
+        # never inherit that amount-only display hint.
+        display_unit=None,
         evidence_text=evidence_text[:420],
         derivation="reported_growth",
         growth_basis=basis,
@@ -691,7 +929,7 @@ def _structured_growth_rates(
         return None
 
     fields = line[metric_label.start() :].split("|")
-    latest_period: str | None = None
+    explicit_periods: list[str] = []
     rates: list[tuple[str, Decimal, str]] = []
     found_growth_column = False
     for field in fields:
@@ -700,9 +938,9 @@ def _structured_growth_rates(
             continue
         label = field[:separator].strip()
         raw_value = field[separator + 1 :].strip()
-        periods = extract_periods(label)
+        periods = extract_periods(label) or extract_annual_periods(label)
         if periods:
-            latest_period = periods[-1]
+            explicit_periods.extend(periods)
             continue
 
         normalized_label = re.sub(r"\s+", " ", label).strip().casefold()
@@ -722,7 +960,29 @@ def _structured_growth_rates(
             for value in extract_normalized_numbers(raw_value)
             if value.kind == "percent"
         ]
-        if latest_period and len(values) == 1:
+        if explicit_periods and len(values) == 1:
+            # Comparative rows are not required to list the current period
+            # last. Choose the newest explicitly labelled period rather than
+            # binding a rate to the last token seen. This works for both
+            # quarter tables and annual FY columns.
+            def period_key(value: str) -> tuple[int, int, int]:
+                match = re.fullmatch(
+                    r"Q(?P<quarter>[1-4])_(?P<fiscal>FY)?(?P<year>20\d{2})",
+                    str(value),
+                    re.IGNORECASE,
+                )
+                if match:
+                    return (
+                        int(match.group("year")),
+                        int(match.group("quarter")),
+                        1 if match.group("fiscal") else 0,
+                    )
+                annual = re.fullmatch(r"FY(?P<year>20\d{2})", str(value), re.IGNORECASE)
+                if annual:
+                    return (int(annual.group("year")), 0, 1)
+                return (-1, -1, -1)
+
+            latest_period = max(explicit_periods, key=period_key)
             rates.append((basis, values[0], latest_period))
 
     return tuple(rates) if found_growth_column else None
@@ -797,15 +1057,58 @@ def _preceding_section_heading(content: str, position: int) -> str:
     )
 
 
+def _structured_row_dimension(content: str, position: int) -> tuple[str | None, str | None]:
+    """Return the explicit dimension/category on the structured row at position."""
+    # 同一文本块可能紧邻产品、地区或销售渠道多行；只取当前数值所在行的标签，避免跨行借用类别。
+    marker = "structured financial table row"
+    lowered = content.casefold()
+    row_start = lowered.rfind(marker, 0, position)
+    if row_start < 0:
+        return None, None
+    row_end = lowered.find(marker, position)
+    if row_end < 0:
+        row_end = len(content)
+    row = content[row_start:row_end]
+    match = re.search(
+        r"\bDimension\s*:\s*(?P<dimension>[^;|]+?)\s*;\s*"
+        r"Category\s*:\s*(?P<category>[^|\n]+)",
+        row,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None, None
+    return match.group("dimension").strip() or None, match.group("category").strip() or None
+
+
 def _period_type(context: str, index: int, column_count: int, default: str) -> str:
     """Keep cumulative statement durations distinct from quarter columns."""
 
     lowered = context.casefold()
-    months = re.findall(r"(three|six|nine|twelve)[ -]months?(?:\s+ended)?", lowered)
+    compound = re.search(
+        r"(three|six|nine|twelve)\s*-\s*and\s*"
+        r"(three|six|nine|twelve)\s*-\s*months?",
+        lowered,
+    )
+    if compound:
+        months = [compound.group(1), compound.group(2)]
+    else:
+        months = re.findall(r"(three|six|nine|twelve)[ -]months?(?:\s+ended)?", lowered)
     months = list(dict.fromkeys(months))
+    comparative = re.search(
+        r"comparative\s+columns\s*:\s*(.*)", lowered, re.DOTALL,
+    )
+    if comparative:
+        labelled_columns = re.findall(
+            r"\b(?:ytd\s+)?q[1-4]\s*(?:fy\s*)?20\d{2}\b",
+            comparative.group(1),
+        )
+        column_count = max(column_count, len(labelled_columns))
     if len(months) > 1 and column_count:
         # SEC income statements place all quarter columns before YTD columns.
-        duration = months[min(index // max(column_count, 1), len(months) - 1)]
+        # ``column_count`` is the total number of comparative cells, so each
+        # duration owns a contiguous group (e.g. Q2/Q1 then YTD Q2/YTD Q1).
+        group_size = max(1, (column_count + len(months) - 1) // len(months))
+        duration = months[min(index // group_size, len(months) - 1)]
     elif months:
         duration = months[0]
     else:
@@ -823,6 +1126,47 @@ def periods_equivalent(left: str | None, right: str | None) -> bool:
         return re.sub(r"_FY", "_", value.upper().replace("-", "_"))
 
     return normalize(left) == normalize(right)
+
+
+def _is_table_header_metric_match(
+    content: str, start: int, *, content_type: str,
+) -> bool:
+    """Reject metric aliases that occur only in a statement header.
+
+    Apple 10-Q chunks carry a ``TABLE COLUMNS`` header such as
+    ``net income in millions and shares in thousands`` before the actual
+    rows.  Treating that header as a financial row creates a bogus negative
+    value (``-2.026`` from the fiscal-year token) for every metric alias in
+    the same chunk.  Only skip the match when the containing line is clearly
+    header metadata and does not itself contain a labelled table row.
+    """
+
+    if content_type != "table":
+        return False
+    line_start = content.rfind("\n", 0, start) + 1
+    line_end = content.find("\n", start)
+    if line_end < 0:
+        line_end = len(content)
+    line = content[line_start:line_end]
+    if re.search(r"\bfinancial\s+table\s+row\b|\bmetric\s*:", line, re.IGNORECASE):
+        return False
+    header = re.search(
+        r"\btable\s+columns\b|\bcomparative\s+columns\b|"
+        r"\bnet\s+income\s+in\s+millions\b|"
+        r"\bshares\s+in\s+thousands\b",
+        line,
+        re.IGNORECASE,
+    )
+    if not header:
+        return False
+    # PDF extraction can flatten a table header and its first row onto one
+    # physical line (``TABLE COLUMNS: ... Q4-2025. Total revenues ...``).
+    # The metric after a sentence/column delimiter is a real row, not header
+    # metadata.  Header-only aliases remain rejected.
+    suffix_before_match = line[header.end() : start]
+    if re.search(r"[.!?;|]\s*$|:\s*$", suffix_before_match):
+        return False
+    return True
 
 
 class FactLedger:
@@ -848,13 +1192,15 @@ class FactLedger:
         for fact in fact_items:
             if fact.structured_identity in conflicting_identities:
                 continue
-            key = (
-                ("structured", fact.structured_identity)
-                if fact.structured_identity is not None
-                else (
-                    fact.company, fact.metric_id, fact.fact_period, fact.normalized_value,
-                    fact.chunk_id, fact.growth_basis, fact.dimension, fact.category,
-                )
+            key = ("structured", fact.structured_identity) if fact.structured_identity is not None else (
+                fact.company,
+                fact.metric_id,
+                fact.fact_period,
+                fact.normalized_value,
+                fact.chunk_id,
+                fact.growth_basis,
+                fact.dimension,
+                fact.category,
             )
             unique.setdefault(key, fact)
         self.facts = tuple(unique.values())
@@ -873,7 +1219,9 @@ class FactLedger:
             if str(metadata.get("content_type", "")).casefold() == "unverified_table":
                 continue
             if "financial_table_rows_json" in metadata:
-                # Structured facts can enter only through the P1.5 fail-closed gate.
+                # Structured facts are created only from typed rows through
+                # the P1.5 fail-closed gate. Legacy text extraction is never
+                # used as a fallback for rejected or incomplete rows.
                 from core.financial_facts import (
                     EligibilityStatus,
                     FinancialDocumentContext,
@@ -910,7 +1258,8 @@ class FactLedger:
                     try:
                         facts.append(factory.create(row, context=context, normalization=decision.normalization))
                     except ValueError:
-                        # Invalid period/unit metadata must not fall back to text parsing.
+                        # A malformed unit/period remains ineligible; do not
+                        # demote it to narrative extraction.
                         continue
                 continue
             company = canonical_company(str(item.company or metadata.get("company", "")))
@@ -926,12 +1275,23 @@ class FactLedger:
             periods = printed_periods or table_periods or extract_periods(content)
             document_period, fallback_period, row_period, column_period = _period_from_metadata(metadata, content)
             chunk_id = str(metadata.get("chunk_id", ""))
+            document_id = str(metadata.get("document_id", "")) or None
             source = str(item.source or metadata.get("source", ""))
             for metric_id, aliases in METRIC_ALIASES:
                 for alias in aliases:
                     for match in re.finditer(re.escape(alias), content, re.IGNORECASE):
                         start = match.start()
-                        paired_margin = _paired_margin_match(content, match, metric_id)
+                        if _is_table_header_metric_match(
+                            content,
+                            start,
+                            content_type=str(metadata.get("content_type", "")).casefold(),
+                        ):
+                            continue
+                        paired_margin = (
+                            _paired_margin_match(content, match, metric_id)
+                            or _paired_eps_match(content, match, metric_id)
+                            or _paired_income_match(content, match, metric_id)
+                        )
                         # The normal single-metric window intentionally stops
                         # at another metric label. In a filing's explicit
                         # "GAAP and non-GAAP ... were X and Y, respectively"
@@ -989,6 +1349,19 @@ class FactLedger:
                                 fallback_period=fallback_period,
                             )
                             continue
+                        if metric_id in {"products_gross_margin", "services_gross_margin"}:
+                            # The structured Apple row label is simply
+                            # ``Metric: Services``/``Metric: Products`` and
+                            # therefore also appears in the net-sales table.
+                            # Require the surrounding verified statement group
+                            # to be a gross-margin table before accepting the
+                            # percentage as a segment-margin fact.
+                            if not re.search(
+                                r"\bgross\s+margin(?:\s+percentage)?\b",
+                                f"{table_context}\n{content[:900]}",
+                                re.IGNORECASE,
+                            ):
+                                continue
                         if metric_id == "eps" and re.search(
                             r"shares\s+used\s+in\s+computing\s+earnings\s+per\s+share",
                             content[max(0, start - 90) : start + len(alias)],
@@ -997,7 +1370,27 @@ class FactLedger:
                             # A share-count table contains the phrase
                             # "earnings per share" but its values are not EPS.
                             continue
-                        values = extract_normalized_numbers(window)
+                        values = extract_normalized_numbers(
+                            window,
+                            allow_year_like_amount=(
+                                str(metadata.get("content_type", "")).casefold() == "table"
+                                and bool(table_context)
+                                # Explicit period-labelled cells such as
+                                # ``Q2 FY2026: $80,208`` already give the
+                                # normalizer a reliable year token.  Keeping
+                                # that token as an amount would create a
+                                # bogus -2.026 billion fact before the real
+                                # cell.  The opt-in is only for flattened
+                                # verified rows (e.g. Tesla's ``2,034 664
+                                # 146`` FCF row) whose table context carries
+                                # the columns separately.
+                                and not re.search(
+                                    r"\b(?:Q[1-4]|FY\s*20\d{2}|20\d{2})\b",
+                                    window,
+                                    re.IGNORECASE,
+                                )
+                            ),
+                        )
                         values = [value for value in values if value.kind in {"amount", "percent", "basis_points"}]
                         unit_context = _unit_context_for_metric(
                             content,
@@ -1091,7 +1484,12 @@ class FactLedger:
                             # thousands or millions. Keep them as per-share
                             # amounts and do not magnitude-filter them.
                             values = [value for value in values if value.kind == "amount"]
-                        elif metric_id in {"gross_margin", "automotive_gross_margin"}:
+                        elif metric_id in {
+                            "gross_margin",
+                            "automotive_gross_margin",
+                            "products_gross_margin",
+                            "services_gross_margin",
+                        }:
                             # Some filings label the gross-profit dollar total
                             # "Total gross margin" and report the actual
                             # percentage in a separate row. Only preserve an
@@ -1159,14 +1557,39 @@ class FactLedger:
                             content_type=str(metadata.get("content_type", "")),
                             table_context=table_context,
                         )
+                        guidance_period, is_guidance = _guidance_period_for_window(
+                            content,
+                            start,
+                            window,
+                        )
                         value_limit = 2 if paired_margin else max(len(periods), 1)
                         for index, value in enumerate(values[:value_limit]):
                             period_index = 0 if paired_margin else index
-                            fact_period = (
-                                inline_annual_period
-                                if index == 0 and inline_annual_period
-                                else _period_for_value(periods, period_index, fallback_period)
-                            )
+                            if guidance_period:
+                                # Guidance/outlook values belong to the
+                                # explicit period in that clause, not to the
+                                # first comparative table column in the same
+                                # chunk.  An explicit metadata period remains
+                                # a valid fallback for legacy isolated chunks.
+                                fact_period = guidance_period
+                            elif is_guidance:
+                                # Do not silently borrow Q1 (or any other
+                                # table period) when guidance has no explicit
+                                # period.  This fact remains auditable but is
+                                # ineligible for a period-specific answer.
+                                fact_period = (
+                                    fallback_period
+                                    if fallback_period
+                                    and fallback_period.casefold()
+                                    not in {"unknown", "undated", "none", "null", "n_a", "na"}
+                                    else None
+                                )
+                            else:
+                                fact_period = (
+                                    inline_annual_period
+                                    if index == 0 and inline_annual_period
+                                    else _period_for_value(periods, period_index, fallback_period)
+                                )
                             is_fiscal_year = bool(
                                 fact_period and re.fullmatch(r"FY20\d{2}", fact_period, re.IGNORECASE)
                             )
@@ -1222,9 +1645,11 @@ class FactLedger:
                                     content, match, fact_metric_id, include_growth_context=True
                                 )
                             )[:420]
-                            evidence_text = _qualify_paired_margin_basis(
+                            evidence_text = _qualify_accounting_basis(
                                 content, match, fact_metric_id, value, evidence_text
                             )
+                            dimension, category = _structured_row_dimension(content, start)
+                            # 把维度与类别存进事实本身，后续查找和数值校验才能沿用原表格口径。
                             facts.append(
                                 base_fact := FinancialFact(
                                     fact_id=fact_id,
@@ -1284,6 +1709,9 @@ class FactLedger:
                                         )
                                         else None
                                     ),
+                                    document_id=document_id,
+                                    dimension=dimension,
+                                    category=category,
                                 )
                             )
                             structured_rates = _structured_growth_rates(content, match)
@@ -1328,7 +1756,10 @@ class FactLedger:
         metric_id: str | None = None,
         period: str | None = None,
         growth_basis: str | None = None,
+        dimension: str | None = None,
+        category: str | None = None,
     ) -> tuple[FinancialFact, ...]:
+        """按公司、指标、期间及可选表格维度筛选事实；未指定维度表示不增加该项约束。"""
         wanted_company = canonical_company(company or "") if company else None
         results = tuple(
             fact
@@ -1336,12 +1767,16 @@ class FactLedger:
             if (wanted_company is None or fact.company == wanted_company)
             and (metric_id is None or fact.metric_id == metric_id)
             and fact.growth_basis == growth_basis
+            and (dimension is None or fact.dimension == dimension)
+            and (category is None or fact.category == category)
             and (
                 period is None
                 or periods_equivalent(fact.fact_period, period)
                 or periods_equivalent(fact.table_column_period, period)
             )
         )
+        # Source-backed statement observations outrank weaker narrative
+        # extraction when both describe the same requested metric.
         return tuple(sorted(results, key=lambda fact: 0 if fact.source_kind == "FINANCIAL_STATEMENT" else 1))
 
     def get(self, fact_id: str) -> FinancialFact | None:
@@ -1356,31 +1791,120 @@ class FactLedger:
             for fact in self.facts
         ]
 
-    def prompt_context(self) -> str:
+    def prompt_context(self, facts: Iterable[FinancialFact] | None = None) -> str:
         lines = ["VERIFIED FINANCIAL FACT LEDGER", "Only these structured facts may supply financial numbers."]
-        for company in self.companies():
+        visible_facts = tuple(self.facts if facts is None else facts)
+        companies = tuple(dict.fromkeys(fact.company for fact in visible_facts if fact.company))
+        for company in companies:
             lines.append(f"\nCOMPANY PARTITION: {company}")
-            for fact in self.lookup(company=company):
+            for fact in visible_facts:
+                if fact.company != company:
+                    continue
                 lines.append(
                     f"- fact_id={fact.fact_id}; metric_id={fact.metric_id}; value={fact.normalized_value} "
                     f"{fact.currency or ''}; fact_period={fact.fact_period or 'undated'}; "
+                    f"dimension={fact.dimension or 'unspecified'}; category={fact.category or 'unspecified'}; "
                     f"document={fact.document}; page={fact.page}; chunk_id={fact.chunk_id}"
                 )
         return "\n".join(lines)
 
 
+def _estimated_context_tokens(text: str) -> int:
+    """Conservatively estimate mixed English/Chinese prompt token usage.
+
+    A tokenizer is intentionally not imported into the retrieval path.  A
+    one-character upper bound is deliberately conservative for mixed CJK/
+    English prompt text and leaves room for the surrounding prompt template.
+    The bound prevents an 8192-context local model from receiving an oversized
+    request even when its tokenizer differs from the backend's estimator.
+    """
+    return max(1, len(str(text or "")))
+
+
 def build_evidence_first_context(
-    question: str, evidence: Iterable[Evidence], plan: object | None = None
+    question: str,
+    evidence: Iterable[Evidence],
+    plan: object | None = None,
+    *,
+    max_context_tokens: int | None = None,
 ) -> tuple[str, FactLedger]:
-    """Render partitioned verified facts followed by bounded narrative evidence."""
+    """Render verified facts followed by bounded, relevance-first evidence.
+
+    ``max_context_tokens`` is optional to preserve the historical unlimited
+    behaviour for providers with large context windows.  When set, required
+    fact chunks are retained first and narrative chunks are added in their
+    original order until the budget is reached.  The ledger remains complete,
+    so dropping narrative overflow cannot drop a required numeric fact.
+    """
 
     items = list(evidence)
     ledger = FactLedger.from_evidence(items)
-    sections = [ledger.prompt_context()]
+    visible_ledger_facts: tuple[FinancialFact, ...] | None = None
+    if max_context_tokens is not None and plan is not None:
+        required_specs = getattr(plan, "required", ())
+        selected_facts: list[FinancialFact] = []
+        seen_fact_ids: set[str] = set()
+        for spec in required_specs:
+            for fact in ledger.lookup(
+                company=getattr(spec, "company", None),
+                metric_id=getattr(spec, "metric_id", None),
+                period=getattr(spec, "period", None),
+                growth_basis=getattr(spec, "growth_basis", None),
+            ):
+                if fact.fact_id not in seen_fact_ids:
+                    selected_facts.append(fact)
+                    seen_fact_ids.add(fact.fact_id)
+        visible_ledger_facts = tuple(selected_facts)
+    sections = [ledger.prompt_context(visible_ledger_facts)]
     if plan is not None and hasattr(plan, "prompt_context"):
         sections.append(plan.prompt_context(ledger))
     sections.append("\nRELEVANT NARRATIVE EVIDENCE")
-    for index, item in enumerate(items, 1):
+    if max_context_tokens is None:
+        selected = items
+    else:
+        budget = max(512, int(max_context_tokens))
+        reserved_tokens = _estimated_context_tokens("\n\n".join(sections))
+        remaining = max(0, budget - reserved_tokens)
+        required_chunk_ids: set[str] = set()
+        required_specs = getattr(plan, "required", ()) if plan is not None else ()
+        for spec in required_specs:
+            for fact in ledger.lookup(
+                company=getattr(spec, "company", None),
+                metric_id=getattr(spec, "metric_id", None),
+                period=getattr(spec, "period", None),
+                growth_basis=getattr(spec, "growth_basis", None),
+            ):
+                if fact.chunk_id:
+                    required_chunk_ids.add(str(fact.chunk_id))
+        priority = [
+            item for item in items
+            if str(item.metadata.get("chunk_id", "")) in required_chunk_ids
+        ]
+        rest = [item for item in items if item not in priority]
+        selected = []
+        for item in (*priority, *rest):
+            rendered = (
+                f"[Evidence {len(selected) + 1}]\nSource: {item.source}\n"
+                f"Chunk: {item.metadata.get('chunk_id', '')}\n{item.content}"
+            )
+            cost = _estimated_context_tokens(rendered)
+            if cost <= remaining:
+                selected.append(item)
+                remaining -= cost
+                continue
+            if not selected and remaining > 32:
+                # Keep a bounded prefix if one very large chunk is the only
+                # available evidence; structured facts are already above it.
+                prefix_chars = max(64, remaining * 2)
+                selected.append(
+                    replace(item, content=str(item.content or "")[:prefix_chars])
+                )
+                remaining = 0
+            if remaining <= 0:
+                break
+        # If the ledger/plan consumed the whole budget, retain no narrative
+        # rather than emitting an over-budget prompt.
+    for index, item in enumerate(selected, 1):
         sections.append(
             f"[Evidence {index}]\nSource: {item.source}\nChunk: {item.metadata.get('chunk_id', '')}\n{item.content}"
         )

@@ -58,6 +58,9 @@ _EXPLICIT_FISCAL_YEAR = (
         re.IGNORECASE,
     ),
     re.compile(r"\b(?:fiscal\s+(?:year\s+)?)20(?P<short_year>\d{2})\b", re.IGNORECASE),
+    # Some extracted Chinese annual-report titles contain the duplicated
+    # marker ``2025 年年度报告``. This remains an explicit fiscal-year label.
+    re.compile(r"(?P<year>20\d{2})\s*年\s*年度"),
     re.compile(r"(?P<year>20\d{2})\s*(?:财年|年度|全年)"),
 )
 _DURATION_TABLE = re.compile(
@@ -87,8 +90,31 @@ _METRIC_ALIASES = (
     ("automotive_gross_margin", ("automotive gross margin", "汽车业务毛利率")),
     ("operating_margin", ("operating margin", "operating margins", "operating profit margin", "营业利润率")),
     ("revenue", ("revenue", "revenues", "net sales", "营收", "收入")),
+    (
+        "iphone_revenue",
+        (
+            "iphone®", "iphone net sales", "iphone revenue",
+            "iphone 销售额", "iphone收入", "iphone 收入", "iphone销售额",
+        ),
+    ),
+    ("products_revenue", ("products net sales", "products revenue", "产品净销售额", "产品收入")),
+    ("mac_revenue", ("mac®", "mac net sales", "mac revenue", "mac销售额", "mac收入")),
+    ("ipad_revenue", ("ipad®", "ipad net sales", "ipad revenue", "ipad销售额", "ipad收入")),
+    (
+        "wearables_revenue",
+        (
+            "wearables, home and accessories",
+            "wearables net sales",
+            "wearables revenue",
+            "可穿戴设备、家居和配件",
+        ),
+    ),
     ("net_income", ("net income", "net profit", "净利润")),
     ("operating_income", ("operating income", "营业利润")),
+    (
+        "free_cash_flow",
+        ("free cash flow", "fcf", "自由现金流"),
+    ),
     (
         "operating_cash_flow",
         (
@@ -104,6 +130,15 @@ _METRIC_ALIASES = (
     ("eps", ("eps", "earnings per share", "每股收益")),
     ("automotive", ("automotive", "汽车业务")),
     ("services", ("services", "service-related", "service business", "服务业务", "服务相关")),
+    (
+        "energy_revenue",
+        (
+            "energy generation and storage revenue",
+            "energy revenue",
+            "能源发电与储能收入",
+            "能源收入",
+        ),
+    ),
     ("energy", ("energy generation", "储能", "能源")),
 )
 
@@ -458,6 +493,24 @@ def period_scoped_row_numbers(
         "revenue": ("total revenues", "total revenue", "net sales", "revenues"),
         "automotive_revenue": ("total automotive revenues", "automotive revenue"),
         "services_revenue": ("services and other revenue", "services revenue"),
+        "energy_revenue": (
+            "energy generation and storage revenue",
+            "energy generation and storage",
+            "energy revenue",
+        ),
+        "mac_revenue": ("mac net sales", "mac revenue", "mac®"),
+        "ipad_revenue": ("ipad net sales", "ipad revenue", "ipad®"),
+        "wearables_revenue": (
+            "wearables, home and accessories",
+            "wearables net sales",
+            "wearables revenue",
+        ),
+        "products_gross_margin": (
+            "products gross margin", "metric: products", "产品毛利率",
+        ),
+        "services_gross_margin": (
+            "services gross margin", "metric: services", "服务毛利率",
+        ),
         "data_center_revenue": ("data center revenue", "datacenter revenue"),
         "gross_margin": ("gross margin",),
         "automotive_gross_margin": ("automotive gross margin",),

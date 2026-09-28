@@ -237,6 +237,29 @@ class TestAgentRuntime:
             ["NVIDIA"],
         )
 
+    def test_companyless_financial_table_followup_inherits_company_in_same_thread(self):
+        context = prior_user_context_for_followup(
+            "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+            [{"role": "user", "content": "贵州茅台2025年度收入表现如何？"}],
+        )
+
+        assert context == (
+            "贵州茅台2025年度收入表现如何？",
+            ["贵州茅台"],
+        )
+
+    def test_companyless_financial_followup_does_not_cross_general_question_boundary(self):
+        context = prior_user_context_for_followup(
+            "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？",
+            [
+                {"role": "user", "content": "贵州茅台2025年度收入表现如何？"},
+                {"role": "assistant", "content": "我可以概述年报。"},
+                {"role": "user", "content": "什么是同比？"},
+            ],
+        )
+
+        assert context is None
+
     def test_focus_only_growth_driver_followup_inherits_all_compared_companies(self):
         history = [{"role": "user", "content": "Compare Apple and NVIDIA."}]
 
@@ -283,9 +306,26 @@ class TestAgentRuntime:
             ],
         )
 
-        assert "Tesla's Q2 2025 performance" in result.resolved_question
+        assert "Tesla" in result.resolved_question
+        assert "Q2_2025" in result.resolved_question
+        assert "Tesla's Q2 2025 performance" not in result.resolved_question
         assert runtime.planner.last_context.companies == ["Tesla"]
-        assert "Q2 2025" in runtime.planner.last_context.question
+        assert "Q2_2025" in runtime.planner.last_context.question
+
+    def test_financial_table_followup_inherits_scope_without_prior_dimensions(self, runtime):
+        prior_question = "贵州茅台2025年度国内和国外主营业务收入分别是多少？"
+        current_question = "2025年直销和批发代理模式的收入分别是多少？各自同比如何变化？"
+
+        result = runtime.run(
+            current_question,
+            conversation_history=[{"role": "user", "content": prior_question}],
+        )
+
+        assert current_question in result.resolved_question
+        assert "贵州茅台" in result.resolved_question
+        assert "FY2025" in result.resolved_question
+        assert "国内和国外" not in result.resolved_question
+        assert "批发代理" in result.resolved_question
 
     def test_growth_driver_followup_is_planned_as_company_document_qa(self, runtime):
         from agent.query_planner import QueryPlanner
@@ -302,7 +342,8 @@ class TestAgentRuntime:
         retrieval_steps = [
             step for step in result.plan.tasks if step.step_type is StepType.RETRIEVE
         ]
-        assert "Summarize NVIDIA's financial performance." in result.resolved_question
+        assert "NVIDIA" in result.resolved_question
+        assert "Summarize NVIDIA's financial performance." not in result.resolved_question
         assert retrieval_steps
         assert all(step.company == "NVIDIA" for step in retrieval_steps)
         assert result.plan.task_type is TaskType.DOCUMENT_QA

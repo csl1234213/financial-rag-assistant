@@ -12,10 +12,14 @@ from config import (
     OCR_LANGUAGES,
     OCR_MIN_TEXT_CHARS,
 )
+from core.financial_facts import FinancialDocumentContext, financial_facts_from_rows
+from core.financial_metric_registry import MetricMappingStatus, normalize_financial_table_row
 from core.financial_table_rows import (
+    VerificationStatus,
     financial_table_rows_from_chunk,
     financial_table_rows_json,
 )
+from core.persistent_financial_facts import SQLFinancialFactRepository
 from core.usage_events import ResourceType, UsageEvent
 from document_loader import (
     get_company,
@@ -38,6 +42,78 @@ from storage.chroma_store import ChromaEmbeddingStore
 from storage.database import SessionLocal
 from storage.vector_models import VectorDocument
 from tasks.repository import TaskRepository
+
+
+def _persist_verified_financial_facts(
+    db,
+    *,
+    rows,
+    document_id: int,
+    tenant_id: int,
+    company: str,
+    filename: str,
+) -> dict[str, object]:
+    """Persist only parser-verified, registry-mapped rows for this document.
+
+    The PDF/Chroma path still keeps PARTIAL and UNMAPPED table rows for
+    diagnostics and retrieval. Only the strict P1.5 fact eligibility gate can
+    create SQL facts; metadata hints or raw text never promote a row's trust.
+    """
+
+    rebound_rows = tuple(
+        dict.fromkeys(
+            replace(
+                row,
+                document_id=str(document_id),
+                company=company or row.company,
+                source=filename,
+            )
+            for row in rows
+        )
+    )
+    verified_rows = tuple(
+        row for row in rebound_rows if row.verification_status == VerificationStatus.VERIFIED
+    )
+    mapped_rows = tuple(
+        row
+        for row in verified_rows
+        if normalize_financial_table_row(row).mapping_status
+        in {MetricMappingStatus.EXACT, MetricMappingStatus.SUPPORTED}
+    )
+    facts = financial_facts_from_rows(
+        rebound_rows,
+        context=FinancialDocumentContext(),
+    )
+    rejected = len(mapped_rows) - len(facts)
+    counters = {
+        "rows_seen": len(rebound_rows),
+        "rows_verified": len(verified_rows),
+        "rows_mapped": len(mapped_rows),
+        "facts_rejected": rejected,
+    }
+    if not facts:
+        return {
+            **counters,
+            "status": "NO_ELIGIBLE_FACTS",
+            "facts_inserted": 0,
+            "facts_unchanged": 0,
+            "final_row_count": 0,
+            "run_id": None,
+        }
+
+    result = SQLFinancialFactRepository(db, tenant_id=tenant_id).save_batch(
+        facts,
+        document_id=str(document_id),
+        **counters,
+    )
+    return {
+        **counters,
+        "status": result.status,
+        "facts_inserted": result.facts_inserted,
+        "facts_unchanged": result.facts_unchanged,
+        "final_row_count": result.final_row_count,
+        "run_id": result.run_id,
+    }
 
 
 def _set_document_status(
@@ -166,6 +242,17 @@ def process_document_task(task_public_id: str):
         # or Q-number in the upload filename is kept only as diagnostic metadata.
         company = get_document_company(chunks, filename_hint=filename_company_hint)
         quarter = get_document_period(chunks)
+        # Discovered filings carry authoritative issuer/period metadata that
+        # may not be recoverable from the parsed document body. Preserve it
+        # through indexing so tenant/company retrieval filters remain aligned
+        # with the discovery result and knowledge UI.
+        if payload.get("source_type") in {"sec_edgar", "cninfo"}:
+            discovered_company = payload.get("source_company")
+            discovered_period = payload.get("source_report_date") or payload.get("source_filing_date")
+            if isinstance(discovered_company, str) and discovered_company.strip():
+                company = discovered_company.strip()
+            if isinstance(discovered_period, str) and discovered_period.strip():
+                quarter = discovered_period.strip()
 
         repo.update_task(task_public_id, progress=30)
 
@@ -189,6 +276,10 @@ def process_document_task(task_public_id: str):
             else doc_id
         )
         docs = []
+        # Keep parser-native rows separately from the retrieval fallback rows.
+        # Heuristic rows are useful search metadata, but are never promoted to
+        # structured financial facts.
+        verified_fact_candidates = []
         for chunk, embedding in zip(
             chunks,
             chunk_embeddings,
@@ -216,6 +307,8 @@ def process_document_task(task_public_id: str):
                 "embedding_model": EMBEDDING_MODEL,
                 "embedding_revision": EMBEDDING_MODEL_REVISION or "unversioned",
             }
+            native_financial_rows = tuple(chunk.financial_table_rows)
+            verified_fact_candidates.extend(native_financial_rows)
             financial_rows = tuple(
                 replace(
                     row,
@@ -223,7 +316,7 @@ def process_document_task(task_public_id: str):
                     company=company,
                     source=filename,
                 )
-                for row in chunk.financial_table_rows
+                for row in native_financial_rows
             ) or financial_table_rows_from_chunk(
                 content=chunk.text,
                 content_type=chunk.content_type,
@@ -268,6 +361,29 @@ def process_document_task(task_public_id: str):
         store.delete_document(doc_id, tenant_id=tenant_id)
         store.add_documents(docs)
 
+        financial_fact_result: dict[str, object]
+        if document_id is None:
+            financial_fact_result = {
+                "status": "SKIPPED_NO_RELATIONAL_DOCUMENT",
+                "facts_inserted": 0,
+            }
+        elif not isinstance(content_sha256, str) or len(content_sha256) != 64:
+            # P1.6 uses the content digest as immutable document-version
+            # identity. Do not substitute filename, task id, or parser output.
+            financial_fact_result = {
+                "status": "SKIPPED_NO_CONTENT_SHA256",
+                "facts_inserted": 0,
+            }
+        else:
+            financial_fact_result = _persist_verified_financial_facts(
+                db,
+                rows=verified_fact_candidates,
+                document_id=document_id,
+                tenant_id=tenant_id,
+                company=company,
+                filename=filename,
+            )
+
         repo.update_task(
             task_public_id,
             status=TaskStatus.SUCCESS,
@@ -276,6 +392,7 @@ def process_document_task(task_public_id: str):
                 "chunks": len(chunks),
                 "company": company,
                 "document_id": document_id,
+                "financial_fact_ingestion": financial_fact_result,
             },
         )
         _set_document_status(

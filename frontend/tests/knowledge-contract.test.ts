@@ -5,9 +5,69 @@ import {
   formatByteSize,
   MAX_PDF_UPLOAD_BYTES,
   mapKnowledgeDocument,
+  parseDeleteDocumentResponse,
+  parseDocumentQuota,
+  parseDiscoveryResponse,
+  parseTaskResponse,
+  parseUploadResponse,
   validateDocumentUpload,
   validatePdfUpload,
 } from '../src/api/knowledgeContract.ts';
+
+test('parses the quota contract without accepting widened values', () => {
+  assert.deepEqual(parseDocumentQuota({
+    used: 1,
+    limit: 10,
+    remaining: 9,
+    bypassed: false,
+  }), {
+    used: 1,
+    limit: 10,
+    remaining: 9,
+    bypassed: false,
+  });
+  assert.throws(
+    () => parseDocumentQuota({ used: '1', limit: 10, remaining: 9, bypassed: false }),
+    /used must be a non-negative integer/,
+  );
+});
+
+test('parses upload, task, and deletion responses at the API boundary', () => {
+  assert.deepEqual(parseUploadResponse({
+    message: 'upload success',
+    file: 'report.pdf',
+    document_id: 7,
+    task_id: 'task-7',
+    status: 'pending',
+  }).task_id, 'task-7');
+  assert.deepEqual(parseTaskResponse({
+    id: 'task-7',
+    status: 'success',
+    progress: 100,
+    error: null,
+  }), {
+    id: 'task-7',
+    status: 'success',
+    progress: 100,
+    error: null,
+  });
+  assert.deepEqual(parseDeleteDocumentResponse({
+    deleted: true,
+    document_id: 7,
+  }), {
+    deleted: true,
+    document_id: 7,
+  });
+  assert.throws(
+    () => parseTaskResponse({
+      id: 'task-7',
+      status: 'success',
+      progress: 101,
+      error: null,
+    }),
+    /progress must be a finite number between 0 and 100/,
+  );
+});
 
 test('maps stable knowledge item fields from the backend contract', () => {
   const document = mapKnowledgeDocument({
@@ -34,9 +94,57 @@ test('maps stable knowledge item fields from the backend contract', () => {
     byteSize: 2_621_440,
     size: '2.5 MB',
     contentSha256: 'a'.repeat(64),
+    sourceUrl: undefined,
     uploadedAt: '2026-07-29T12:00:00Z',
     canDelete: true,
   });
+});
+
+test('parses the SEC discovery contract and preserves source provenance', () => {
+  assert.deepEqual(parseDiscoveryResponse({
+    status: 'downloaded',
+    filename: 'Microsoft_10Q_2025-01-01_000000000000000001.html',
+    document_id: 8,
+    task_id: 'task-8',
+    company: 'Microsoft Corporation',
+    period: '2025-01-01',
+    source_url: 'https://www.sec.gov/Archives/edgar/data/1/report.html',
+    source_type: 'sec_edgar',
+    source_form: '10-Q',
+  }).source_form, '10-Q');
+  assert.throws(
+    () => parseDiscoveryResponse({
+      status: 'downloaded',
+      filename: 'filing.html',
+      document_id: 8,
+      company: 'Microsoft',
+      source_url: 42,
+    }),
+    /source_url must be a string/,
+  );
+});
+
+test('parses CNINFO audited annual report discovery metadata', () => {
+  const parsed = parseDiscoveryResponse({
+    status: 'downloaded',
+    filename: '贵州茅台_2025年度报告_审计_2026-04-17.pdf',
+    document_id: 9,
+    task_id: 'task-9',
+    company: '贵州茅台',
+    period: '2025-12-31',
+    source_url: 'https://static.cninfo.com.cn/finalpage/2026-04-17/1225114741.PDF',
+    source_type: 'cninfo',
+    source_stock_code: '600519',
+    source_exchange: 'sse',
+    source_report_type: 'annual',
+    source_report_year: 2025,
+    source_audited: true,
+  });
+
+  assert.equal(parsed.source_type, 'cninfo');
+  assert.equal(parsed.source_stock_code, '600519');
+  assert.equal(parsed.source_report_year, 2025);
+  assert.equal(parsed.source_audited, true);
 });
 
 test('legacy filename responses remain readable without a stable delete id', () => {

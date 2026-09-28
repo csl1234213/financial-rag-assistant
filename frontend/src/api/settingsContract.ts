@@ -45,6 +45,7 @@ function requireProvider(value: unknown): LLMProvider {
     && value !== 'openai'
     && value !== 'anthropic'
     && value !== 'doubao'
+    && value !== 'ollama'
   ) {
     throw new SettingsContractError('provider is not supported.');
   }
@@ -81,6 +82,9 @@ export function parseProviderSettings(value: unknown): ProviderSettings {
     is_default: value.is_default,
     key_hint: requireNullableString(value, 'key_hint'),
     model: requireString(value, 'model'),
+    base_url: value.base_url === undefined
+      ? null
+      : requireNullableString(value, 'base_url'),
     models: requireStringArray(value, 'models'),
     updated_at: requireNullableString(value, 'updated_at'),
   };
@@ -102,6 +106,7 @@ export function parseLLMSettingsResponse(value: unknown): LLMSettingsResponse {
 export function createProviderSettingsRequest(
   apiKey: string,
   model: string,
+  baseUrl?: string,
 ): UpdateProviderSettingsRequest {
   const normalizedKey = apiKey.trim();
   if (normalizedKey && normalizedKey.length < 8) {
@@ -109,11 +114,13 @@ export function createProviderSettingsRequest(
   }
 
   const normalizedModel = model.trim();
-  if (!normalizedKey && !normalizedModel) {
-    throw new SettingsContractError('api_key or model must be provided.');
+  const normalizedBaseUrl = baseUrl?.trim() ?? '';
+  if (!normalizedKey && !normalizedModel && !normalizedBaseUrl) {
+    throw new SettingsContractError('api_key, model, or base_url must be provided.');
   }
   return {
     ...(normalizedKey ? { api_key: normalizedKey } : {}),
     ...(normalizedModel ? { model: normalizedModel } : {}),
+    ...(normalizedBaseUrl ? { base_url: normalizedBaseUrl } : {}),
   };
 }

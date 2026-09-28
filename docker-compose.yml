@@ -136,6 +136,7 @@ services:
       - EVALUATION_BYPASS_TENANT_IDS=${EVALUATION_BYPASS_TENANT_IDS:-}
       - CHAT_PLAN_LIMITS_ENABLED=${CHAT_PLAN_LIMITS_ENABLED:-true}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+      - "SEC_USER_AGENT=${SEC_USER_AGENT:-financial-rag-assistant/8.2 (contact: financial-rag-assistant@example.com)}"
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
       - EMBEDDING_MODEL_REVISION=${EMBEDDING_MODEL_REVISION:-614241f622f53c4eeff9890bdc4f31cfecc418b3}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-}
@@ -163,6 +164,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - financial_network
     healthcheck:
@@ -222,12 +225,14 @@ services:
       - DOUBAO_API_KEY=${DOUBAO_API_KEY:-}
       - LLM_CREDENTIAL_ENCRYPTION_KEYS=${LLM_CREDENTIAL_ENCRYPTION_KEYS:-}
       - LLM_CREDENTIAL_KEY_FILE=/app/storage/memory/.llm-credential-key
+      - ALLOW_REAL_PROVIDER=${ALLOW_REAL_PROVIDER:-false}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
       - EVALUATION_BYPASS_PLAN_LIMITS=${EVALUATION_BYPASS_PLAN_LIMITS:-false}
       - EVALUATION_BYPASS_TENANT_IDS=${EVALUATION_BYPASS_TENANT_IDS:-}
       - CHAT_PLAN_LIMITS_ENABLED=${CHAT_PLAN_LIMITS_ENABLED:-true}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+      - "SEC_USER_AGENT=${SEC_USER_AGENT:-financial-rag-assistant/8.2 (contact: financial-rag-assistant@example.com)}"
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
       - EMBEDDING_MODEL_REVISION=${EMBEDDING_MODEL_REVISION:-614241f622f53c4eeff9890bdc4f31cfecc418b3}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-}
@@ -256,6 +261,8 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - financial_network
     healthcheck:

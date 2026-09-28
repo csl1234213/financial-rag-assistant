@@ -16,6 +16,7 @@ from ..providers.provider_exceptions import (
     ProviderError,
     RateLimitError,
 )
+from ..providers.provider_guard import ensure_real_provider_allowed
 from ..providers.provider_models import ChatRequest, ChatResponse, ProviderCapability
 
 
@@ -54,6 +55,7 @@ class DoubaoProvider(BaseProvider):
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
+            ensure_real_provider_allowed("doubao", self._base_url)
             if not self._api_key:
                 raise AuthenticationError("Doubao API key is not configured")
             self._client = OpenAI(

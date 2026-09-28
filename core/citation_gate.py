@@ -11,8 +11,12 @@ from __future__ import annotations
 import hashlib
 import re
 
-from agent.planning.entity_extractor import extract_companies
+from agent.planning.entity_extractor import (
+    extract_allowed_source_companies,
+    extract_companies,
+)
 from agent.reasoning_models import Evidence
+from core.fact_ledger import periods_equivalent
 from core.financial_grounding import (
     any_equivalent,
     derived_growth,
@@ -22,7 +26,19 @@ from core.growth_driver_evidence import (
     has_growth_driver_evidence,
     is_growth_driver_question,
 )
-from retrieval.periods import matches_filter, query_filters
+from retrieval.periods import extract_periods, matches_filter, query_filters
+
+_RISK_QUERY = re.compile(
+    r"(?i)\b(?:risk|risks|challenge|challenges|threat|threats|constraint|constraints)\b|"
+    r"风险|挑战|威胁|约束|限制"
+)
+_RISK_CONTEXT = re.compile(
+    r"(?i)\b(?:risk|risks|uncertaint(?:y|ies)|regulatory|regulations?|laws?|"
+    r"tariffs?|indebtedness|financing|foreign exchange|competition|recall|"
+    r"supply chain|forward[- ]looking|constraint(?:s|ed)?|not\s+assum(?:e|ing)|"
+    r"excluded|exclusion)\b|风险|不确定性|监管|法规|关税|债务|融资|汇率|竞争|召回|"
+    r"供应链|约束|限制|未假设|不假设|排除"
+)
 
 
 def _authority_deduplicate(items: list[Evidence]) -> list[Evidence]:
@@ -111,14 +127,24 @@ def filter_evidence_for_query(question: str, evidence: list[Evidence]) -> list[E
         return []
 
     expected_companies = {name.casefold() for name in extract_companies(question)}
+    allowed_source_companies = {
+        name.casefold() for name in extract_allowed_source_companies(question)
+    }
     filters = query_filters(question)
     growth_driver_request = is_growth_driver_question(question)
+    risk_question = bool(_RISK_QUERY.search(question or ""))
     accepted: list[Evidence] = []
     rejected: list[Evidence] = []
 
     for item in evidence:
         metadata = dict(item.metadata)
         company = str(item.company or metadata.get("company", "")).casefold()
+        if allowed_source_companies and company not in allowed_source_companies:
+            # An explicit source-only instruction is stronger than the
+            # retrieval fallback. Never return a known third-party chunk as an
+            # "unverified" citation when the user restricted the source set.
+            rejected.append(item)
+            continue
         if expected_companies and company not in expected_companies:
             rejected.append(item)
             continue
@@ -135,6 +161,97 @@ def filter_evidence_for_query(question: str, evidence: list[Evidence]) -> list[E
             and has_growth_driver_evidence(item.content)
         ):
             failed_filters.discard("metric")
+        # Risk/challenge questions often target a historical column in a
+        # filing whose risk-factor section is a document-level disclosure, not
+        # a quarter-labelled table. Keep that narrative only when the issuer
+        # matches and period is the sole unresolved constraint; label it as
+        # related context so answer policy must disclose that it is not
+        # period-specific instead of presenting it as a Q2 risk result.
+        if (
+            risk_question
+            and _RISK_CONTEXT.search(item.content or "")
+            and failed_filters <= {"period"}
+        ):
+            requested_periods = extract_periods(question)
+            content_periods = extract_periods(item.content)
+            metadata_period = str(
+                metadata.get("quarter")
+                or metadata.get("document_reporting_period")
+                or ""
+            )
+            metadata_periods = extract_periods(str(metadata.get("periods", "")))
+            metadata_is_unknown = metadata_period.casefold() in {
+                "", "unknown", "undated", "none", "null", "n_a", "na"
+            }
+            # A source filename is not authoritative period truth. If the
+            # chunk itself has no period and metadata is unknown, do not let
+            # a matching-looking filename rescue a prose citation. Conversely
+            # a known document period may safely carry a document-level risk
+            # section when the section has no quarter label of its own.
+            content_period_matches = bool(
+                requested_periods
+                and content_periods
+                and any(
+                    periods_equivalent(found, requested)
+                    for found in content_periods
+                    for requested in requested_periods
+                )
+            )
+            metadata_period_matches = bool(
+                requested_periods
+                and not metadata_is_unknown
+                and any(
+                    periods_equivalent(metadata_period, requested)
+                    for requested in requested_periods
+                )
+            )
+            metadata_period_matches = metadata_period_matches or any(
+                periods_equivalent(found, requested)
+                for found in metadata_periods
+                for requested in requested_periods
+            )
+            if (
+                requested_periods
+                and content_periods
+                and not content_period_matches
+                and not metadata_period_matches
+            ):
+                rejected.append(item)
+                continue
+            if requested_periods and not content_periods and not metadata_period_matches:
+                # A known filing period is enough to identify a document-level
+                # risk section even when the uploaded filename has no period
+                # token (for example ``Tesla_sample.pdf``).  Keep it only as
+                # related context with an explicit non-period-specific caveat;
+                # an unknown period must still fail closed and cannot be rescued
+                # by a filename that merely resembles the requested period.
+                if metadata_is_unknown:
+                    source_periods = extract_periods(str(item.source or "").replace("_", " "))
+                    if not source_periods or any(
+                        periods_equivalent(found, requested)
+                        for found in source_periods
+                        for requested in requested_periods
+                    ):
+                        rejected.append(item)
+                        continue
+            metadata.update(
+                {
+                    "semantic_support": "related_context",
+                    "semantic_support_reason": (
+                        "general risk disclosure; requested reporting period is not explicit"
+                    ),
+                }
+            )
+            accepted.append(
+                Evidence(
+                    content=item.content,
+                    source=item.source,
+                    company=item.company,
+                    confidence=item.confidence,
+                    metadata=metadata,
+                )
+            )
+            continue
         if failed_filters:
             rejected.append(item)
             continue
@@ -156,6 +273,11 @@ def filter_evidence_for_query(question: str, evidence: list[Evidence]) -> list[E
 
     if accepted:
         return _authority_deduplicate(accepted)
+    if allowed_source_companies:
+        # With an explicit source allow-list, an empty accepted set is a
+        # truthful insufficient-evidence result. Falling back to the strongest
+        # rejected record would violate the user's source constraint.
+        return []
     if not rejected:
         return []
 

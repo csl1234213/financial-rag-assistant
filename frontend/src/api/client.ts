@@ -16,6 +16,10 @@ export interface ApiErrorDetail {
   code?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export class ApiClientError extends Error {
   readonly status?: number;
   readonly payload?: unknown;
@@ -44,9 +48,9 @@ export class ApiClientError extends Error {
 }
 
 function extractErrorDetail(payload: unknown): ApiErrorDetail | null {
-  if (typeof payload !== 'object' || payload === null) return null;
+  if (!isRecord(payload)) return null;
 
-  const p = payload as Record<string, unknown>;
+  const p = payload;
   const detail: ApiErrorDetail = {};
 
   if (typeof p.detail === 'string') detail.detail = p.detail;
@@ -55,10 +59,6 @@ function extractErrorDetail(payload: unknown): ApiErrorDetail | null {
   if (typeof p.code === 'string') detail.code = p.code;
 
   return Object.keys(detail).length > 0 ? detail : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -96,7 +96,7 @@ export function getAuthorizationHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function parseResponse<TResponse>(response: Response): Promise<TResponse> {
+async function parseResponse(response: Response): Promise<unknown> {
   const payload = parseJson(await response.text());
 
   if (!response.ok) {
@@ -111,10 +111,10 @@ async function parseResponse<TResponse>(response: Response): Promise<TResponse> 
     throw new ApiClientError('The API returned an invalid JSON response.', response.status);
   }
 
-  return payload as TResponse;
+  return payload;
 }
 
-export async function getJson<TResponse>(path: string): Promise<TResponse> {
+export async function getJson(path: string): Promise<unknown> {
   let response: Response;
 
   try {
@@ -126,10 +126,10 @@ export async function getJson<TResponse>(path: string): Promise<TResponse> {
     throw new ApiClientError(message);
   }
 
-  return parseResponse<TResponse>(response);
+  return parseResponse(response);
 }
 
-export async function postJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
+export async function postJson(path: string, body: unknown): Promise<unknown> {
   let response: Response;
 
   try {
@@ -146,10 +146,10 @@ export async function postJson<TResponse>(path: string, body: unknown): Promise<
     throw new ApiClientError(message);
   }
 
-  return parseResponse<TResponse>(response);
+  return parseResponse(response);
 }
 
-export async function putJson<TResponse>(path: string, body: unknown): Promise<TResponse> {
+export async function putJson(path: string, body: unknown): Promise<unknown> {
   let response: Response;
 
   try {
@@ -166,10 +166,10 @@ export async function putJson<TResponse>(path: string, body: unknown): Promise<T
     throw new ApiClientError(message);
   }
 
-  return parseResponse<TResponse>(response);
+  return parseResponse(response);
 }
 
-export async function deleteJson<TResponse>(path: string): Promise<TResponse> {
+export async function deleteJson(path: string): Promise<unknown> {
   let response: Response;
 
   try {
@@ -182,5 +182,5 @@ export async function deleteJson<TResponse>(path: string): Promise<TResponse> {
     throw new ApiClientError(message);
   }
 
-  return parseResponse<TResponse>(response);
+  return parseResponse(response);
 }

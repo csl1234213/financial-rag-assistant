@@ -4,6 +4,7 @@ export type MarkdownBlock =
   | { type: 'heading'; level: 1 | 2 | 3 | 4; text: string }
   | { type: 'label'; text: string }
   | { type: 'paragraph'; text: string }
+  | { type: 'table'; headers?: string[]; rows: string[][] }
   | { type: 'unordered-list'; items: string[] }
   | { type: 'ordered-list'; items: string[] }
   | { type: 'blockquote'; text: string }
@@ -19,6 +20,104 @@ export interface ResearchReportParts {
 export interface ModelIdentity {
   provider: string;
   model: string | null;
+}
+
+export type RuntimeFailureKind =
+  | 'provider-disabled'
+  | 'provider-configuration'
+  | 'provider-error'
+  | 'agent-runtime-fallback';
+
+/** Classifies backend fallback markers so the UI never presents them as an AI answer. */
+export function getRuntimeFailureKind(report: string): RuntimeFailureKind | null {
+  if (report.startsWith('[Provider Disabled]')) return 'provider-disabled';
+  if (report.startsWith('[Provider Configuration Error]')) return 'provider-configuration';
+  if (report.startsWith('[Provider Error]')) return 'provider-error';
+  if (report.startsWith('[Agent Runtime Fallback]')) return 'agent-runtime-fallback';
+  return null;
+}
+
+export function shouldShowAnswerDisclaimer(report: string): boolean {
+  return getRuntimeFailureKind(report) === null;
+}
+
+/** Render explicit CNY amounts in Chinese monetary units without changing evidence data. */
+export function localizeCnyAmounts(answer: string, language: Language): string {
+  if (!answer) return answer;
+
+  const formatYuan = (yuan: number): string => {
+    const absoluteYuan = Math.abs(yuan);
+    if (language === 'en') {
+      const unit = absoluteYuan >= 1_000_000_000
+        ? { divisor: 1_000_000_000, label: 'billion' }
+        : absoluteYuan >= 1_000_000
+          ? { divisor: 1_000_000, label: 'million' }
+          : absoluteYuan >= 1_000
+            ? { divisor: 1_000, label: 'thousand' }
+            : { divisor: 1, label: '' };
+      const formattedEnglish = new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(yuan / unit.divisor);
+      return `CNY ${formattedEnglish}${unit.label ? ` ${unit.label}` : ''}`;
+    }
+
+    const unit = absoluteYuan >= 100_000_000
+      ? { divisor: 100_000_000, label: '亿元人民币' }
+      : absoluteYuan >= 10_000
+        ? { divisor: 10_000, label: '万元人民币' }
+        : { divisor: 1, label: '元人民币' };
+    const formattedChinese = new Intl.NumberFormat('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(yuan / unit.divisor);
+    return `${formattedChinese} ${unit.label}`;
+  };
+
+  // Some answers are already rendered in Chinese yuan units by a model or a
+  // deterministic fact-ledger fallback. Normalize them for the selected UI.
+  const chineseAmountPattern = /(?<![\p{L}\d])([+-]?[\d,]+(?:\.\d+)?)\s*(亿元人民币|万元人民币|元人民币)(?![\p{L}\d])/gu;
+  let localized = answer.replace(
+    chineseAmountPattern,
+    (match, amountText: string, unit: string) => {
+      const amount = Number(amountText.replaceAll(',', ''));
+      if (!Number.isFinite(amount)) return match;
+      const multiplier = unit === '亿元人民币'
+        ? 100_000_000
+        : unit === '万元人民币'
+          ? 10_000
+          : 1;
+      return formatYuan(amount * multiplier);
+    },
+  );
+
+  const amountPattern = /(?<![\p{L}\d])(?:(CNY|RMB)\s*([+-]?[\d,]+(?:\.\d+)?)\s*(billion|million|thousand)?|([+-]?[\d,]+(?:\.\d+)?)\s*(billion|million|thousand)\s*(CNY|RMB)|([+-]?[\d,]+(?:\.\d+)?)\s*(CNY|RMB))(?![\p{L}\d])/giu;
+  localized = localized.replace(amountPattern, (match, prefixCurrency: string | undefined, prefixAmount: string | undefined, prefixScale: string | undefined, suffixAmount: string | undefined, suffixScale: string | undefined, suffixCurrency: string | undefined, plainAmount: string | undefined) => {
+    const amountText = prefixAmount ?? suffixAmount ?? plainAmount;
+    if (!amountText) return match;
+
+    const amount = Number(amountText.replaceAll(',', ''));
+    if (!Number.isFinite(amount)) return match;
+
+    const scale = (prefixScale ?? suffixScale ?? '').toLowerCase();
+    const multiplier = scale === 'billion'
+      ? 1_000_000_000
+      : scale === 'million'
+        ? 1_000_000
+        : scale === 'thousand'
+          ? 1_000
+          : 1;
+    const yuan = amount * multiplier;
+    // Currency groups are parsed explicitly to avoid localizing bare figures,
+    // financial-year labels, or USD values.
+    void prefixCurrency;
+    void suffixCurrency;
+    return formatYuan(yuan);
+  });
+
+  return language === 'zh-CN'
+    ? localized.replace(/\bFY\s*(20\d{2})\b/gi, '$1财年')
+    : localized;
 }
 
 const modelSectionLabels = new Set([
@@ -90,6 +189,69 @@ function isBlockStart(line: string): boolean {
   );
 }
 
+function splitMarkdownTableRow(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) return null;
+
+  const source = trimmed
+    .replace(/^\|/, '')
+    .replace(/(?<!\\)\|$/, '');
+  const cells: string[] = [];
+  let cell = '';
+  let escaped = false;
+
+  for (const character of source) {
+    if (escaped) {
+      cell += character;
+      escaped = false;
+    } else if (character === '\\') {
+      escaped = true;
+    } else if (character === '|') {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+
+  if (escaped) cell += '\\';
+  cells.push(cell.trim());
+  return cells;
+}
+
+function isMarkdownTableSeparator(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) return false;
+  const headers = splitMarkdownTableRow(lines[index]);
+  const separator = splitMarkdownTableRow(lines[index + 1]);
+  return Boolean(
+    headers
+    && separator
+    && headers.length === separator.length
+    && isMarkdownTableSeparator(separator),
+  );
+}
+
+function isHeaderlessPipeTableStart(lines: string[], index: number): boolean {
+  const first = splitMarkdownTableRow(lines[index]);
+  if (!first || first.length < 2 || !lines[index].trim().startsWith('|')) return false;
+
+  let rowCount = 1;
+  for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+    const row = splitMarkdownTableRow(lines[cursor]);
+    if (!row || !lines[cursor].trim().startsWith('|') || row.length !== first.length) break;
+    if (isMarkdownTableSeparator(row)) break;
+    rowCount += 1;
+  }
+
+  // Only promote a repeated, rectangular block of pipe-delimited rows.
+  // A single inline pipe or an irregular list remains ordinary text.
+  return rowCount >= 2;
+}
+
 /**
  * Parses a deliberately small Markdown subset. Raw HTML has no special block
  * type and remains ordinary text so React will escape it during rendering.
@@ -104,6 +266,35 @@ export function parseRestrictedMarkdown(markdown: string): MarkdownBlock[] {
 
     if (!trimmed) {
       index += 1;
+      continue;
+    }
+
+    if (isMarkdownTableStart(lines, index)) {
+      const tableHeaders = splitMarkdownTableRow(lines[index]);
+      if (!tableHeaders) continue;
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length) {
+        const row = splitMarkdownTableRow(lines[index]);
+        if (!row || row.length !== tableHeaders.length) break;
+        rows.push(row);
+        index += 1;
+      }
+      blocks.push({ type: 'table', headers: tableHeaders, rows });
+      continue;
+    }
+
+    if (isHeaderlessPipeTableStart(lines, index)) {
+      const firstRow = splitMarkdownTableRow(lines[index]);
+      if (!firstRow) continue;
+      const rows: string[][] = [];
+      while (index < lines.length) {
+        const row = splitMarkdownTableRow(lines[index]);
+        if (!row || !lines[index].trim().startsWith('|') || row.length !== firstRow.length) break;
+        rows.push(row);
+        index += 1;
+      }
+      blocks.push({ type: 'table', rows });
       continue;
     }
 
@@ -172,6 +363,8 @@ export function parseRestrictedMarkdown(markdown: string): MarkdownBlock[] {
       index < lines.length
       && lines[index].trim()
       && !isBlockStart(lines[index])
+      && !isMarkdownTableStart(lines, index)
+      && !isHeaderlessPipeTableStart(lines, index)
     ) {
       paragraphLines.push(lines[index].trim());
       index += 1;

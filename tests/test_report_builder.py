@@ -12,6 +12,17 @@ from core.report_builder import build_research_report
 
 @pytest.mark.unit
 class TestReportBuilderBasic:
+    def test_report_labels_follow_explicit_ui_language(self):
+        report = build_research_report(
+            question="贵州茅台2025年营收是多少？",
+            answer="Revenue was CNY 168.84 billion.",
+            citations=[],
+            evidence_stats={},
+            response_language="en",
+        )
+        assert "# Research Report" in report
+        assert "## Answer (LLM Answer)" in report
+
     def test_report_contains_question(self):
         report = build_research_report(
             question="What is Apple's revenue?",

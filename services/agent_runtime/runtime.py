@@ -29,6 +29,7 @@ def run_agent(
     tenant_id: Optional[int] = None,
     user_id: Optional[int] = None,
     company: Optional[str] = None,
+    answer_language: str | None = None,
     deadline: float | None = None,
 ) -> Dict[str, Any]:
     t0 = time.time()
@@ -47,11 +48,14 @@ def run_agent(
             user_id,
             exc,
         )
-        return _fallback_response(question, thread_id, str(exc))
+        return _fallback_response(
+            question, thread_id, str(exc), answer_language=answer_language,
+        )
     cache_key = _cache_key(
         question,
         history,
         company,
+        answer_language,
         settings_revision=(
             llm_settings.revision if llm_settings is not None else None
         ),
@@ -124,6 +128,7 @@ def run_agent(
                         "checkpointer": checkpointer,
                         "checkpoint_thread_id": checkpoint_thread_id,
                         "llm_settings": llm_settings,
+                        "answer_language": answer_language,
                     }
                     if deadline is not None:
                         graph_kwargs["deadline"] = deadline
@@ -239,7 +244,13 @@ def run_agent(
                 tools_used=[],
                 error=str(e),
             )
-            return _fallback_response(question, thread_id, str(e), trace.request_id)
+            return _fallback_response(
+                question,
+                thread_id,
+                str(e),
+                trace.request_id,
+                answer_language=answer_language,
+            )
     duration = round(time.time() - t0, 3)
     finish_trace(
         trace,
@@ -249,7 +260,10 @@ def run_agent(
             "reason": "agent_unavailable",
         },
     )
-    return _fallback_response(question, thread_id, "", trace.request_id)
+    return _fallback_response(
+        question, thread_id, "", trace.request_id,
+        answer_language=answer_language,
+    )
 
 
 def _load_history(
@@ -328,6 +342,7 @@ def _cache_key(
     question: str,
     history: list[Dict[str, Any]],
     company: Optional[str],
+    answer_language: str | None = None,
     *,
     settings_revision: str | None = None,
 ) -> str:
@@ -335,6 +350,7 @@ def _cache_key(
         {
             "question": question,
             "company": company,
+            "answer_language": answer_language,
             "history": history,
             "llm_settings_revision": settings_revision,
         },
@@ -381,17 +397,37 @@ def _save_to_cache(
         logger.warning(f"Cache save failed: {e}")
 
 
-def _fallback_response(question: str, thread_id: str, error: str = "", trace_id: str = "") -> Dict[str, Any]:
+def _fallback_response(
+    question: str,
+    thread_id: str,
+    error: str = "",
+    trace_id: str = "",
+    *,
+    answer_language: str | None = None,
+) -> Dict[str, Any]:
     # Never reflect raw exceptions to clients. A narrowly classified provider
     # authentication failure can still return an actionable, secret-free
     # message while full details remain in structured logs and the trace.
-    if (
+    # Keep the legacy English fallback when older callers omit this field;
+    # the current frontend always sends its selected UI language explicitly.
+    chinese = answer_language == "zh-CN"
+    if "Real provider calls are disabled" in error:
+        if chinese:
+            answer = "[Provider Disabled] 当前运行策略已禁用外部 AI 服务调用，未生成 AI 答案。"
+        else:
+            answer = (
+                "[Provider Disabled] External AI provider calls are disabled by "
+                "runtime policy. No AI answer was generated."
+            )
+    elif (
         "DEEPSEEK_API_KEY not set" in error
         or "LLM credential encryption" in error
         or "Stored LLM credential" in error
     ):
         answer = (
-            "[Provider Configuration Error] AI provider credentials are not "
+            "[Provider Configuration Error] 后端尚未配置 AI 服务凭据，请联系部署管理员。"
+            if chinese
+            else "[Provider Configuration Error] AI provider credentials are not "
             "configured on the backend. Contact the deployment administrator "
             "and retry after provider authentication is enabled."
         )
@@ -401,13 +437,17 @@ def _fallback_response(question: str, thread_id: str, error: str = "", trace_id:
         # evaluation can distinguish dependency failure from planner/runtime
         # failure without exposing upstream response bodies.
         answer = (
-            "[Provider Error] The configured AI provider is temporarily "
+            "[Provider Error] AI 服务因账户额度限制暂时不可用，请恢复服务后重试。"
+            if chinese
+            else "[Provider Error] The configured AI provider is temporarily "
             "unavailable due to account limits. Retry after provider access "
             "has been restored."
         )
     else:
         answer = (
-            f"[Agent Runtime Fallback] Unable to process: '{question}'. "
+            "[Agent Runtime Fallback] 当前无法处理该请求，请稍后重试。"
+            if chinese
+            else "[Agent Runtime Fallback] Unable to process this request. "
             "Please retry or inspect the runtime trace."
         )
     return {

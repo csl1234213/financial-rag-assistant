@@ -11,7 +11,7 @@ import { Icon } from '../ui/Icon';
 
 interface InputBoxProps {
   onSubmit: (message: string) => void;
-  onFileUpload?: (file: File) => Promise<void>;
+  onFileUpload: (file: File) => Promise<void>;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -59,7 +59,7 @@ export function InputBox({
     const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = '';
 
-    if (files.length === 0 || !onFileUpload) {
+    if (files.length === 0) {
       return;
     }
 

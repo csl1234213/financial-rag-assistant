@@ -66,7 +66,15 @@ Rules:
 19. For a missing fact, write one concise evidence limitation and continue
     with supported requested facts. Do not repeat refusal text in multiple
     sections or append unrelated evidence analysis.
-20. For a why/driver question, answer with an explicitly cited causal or
+20. Any comparative financial table must include a visible header and identify
+    the reporting period for every compared value in the same row. State the
+    comparison basis (YoY or QoQ) explicitly; never output unlabeled adjacent
+    amounts or infer the basis from a filename/document title.
+21. Do not put a generic "insufficient evidence" sentence before or after
+    supported figures. If only part of the requested comparison is supported,
+    state exactly which period/basis is missing and keep that limitation
+    separate from the supported fact.
+22. For a why/driver question, answer with an explicitly cited causal or
     management-driver statement from the retrieved narrative. Do not substitute
     a related revenue/margin figure for the requested cause. If no such narrative
     is present, state that the causal evidence is unavailable; do not infer a
@@ -274,9 +282,26 @@ def get_prompt_metadata(
 def get_prompt_system_prompt(
     name: str,
     version: str | None = None,
+    *,
+    response_language: str | None = None,
 ) -> str:
     definition = PromptRegistry.get(name, version or _PROMPT_DEFAULTS[name])
-    return definition.system_prompt
+    system_prompt = definition.system_prompt
+    if response_language == "zh-CN":
+        return (
+            f"{system_prompt}\n\n"
+            "User-facing response language: Simplified Chinese. This is a system-level "
+            "requirement and overrides the language of the question, evidence, or history. "
+            "Use Chinese financial units such as 亿元人民币; keep citations unchanged."
+        )
+    if response_language == "en":
+        return (
+            f"{system_prompt}\n\n"
+            "User-facing response language: English. This is a system-level requirement "
+            "and overrides the language of the question, evidence, or history. Use English "
+            "financial units such as CNY 82.32 billion; keep citations unchanged."
+        )
+    return system_prompt
 
 
 def _format_history(history: Sequence[dict[str, Any]] | None) -> str:
@@ -365,9 +390,10 @@ def _render(
     question: str,
     history: Sequence[dict[str, Any]] | None = None,
     context: str = "",
+    response_language: str | None = None,
 ) -> str:
     definition = PromptRegistry.get(name, version or _PROMPT_DEFAULTS[name])
-    return definition.content.format(
+    rendered = definition.content.format(
         question=question,
         context=context,
         history_text=_format_history(history),
@@ -375,6 +401,49 @@ def _render(
             question, comparison=name == "financial_compare"
         ) if name != "direct_chat" else "",
     )
+    if response_language not in {"en", "zh-CN"}:
+        return rendered
+
+    if response_language == "zh-CN":
+        instruction = (
+            "RESPONSE LANGUAGE OVERRIDE: Write all user-facing prose and headings in "
+            "Simplified Chinese, regardless of the question or conversation language. "
+            "Use Chinese financial number/currency conventions (for example, 823.20 亿元人民币). "
+            "Keep source names and citation markers unchanged. This overrides conflicting "
+            "language rules below.\n\n"
+        )
+        rendered = rendered.replace(
+            "translate the final answer back to Chinese",
+            "translate the final answer into Simplified Chinese",
+        )
+        rendered = rendered.replace(
+            "translate every heading and section label into\nChinese",
+            "write every heading and section label in Simplified Chinese",
+        )
+    else:
+        instruction = (
+            "RESPONSE LANGUAGE OVERRIDE: Write all user-facing prose and headings in "
+            "English, regardless of the question or conversation language. Use English "
+            "number/currency conventions (for example, CNY 82.32 billion). Keep source "
+            "names and citation markers unchanged. This overrides conflicting language "
+            "rules below.\n\n"
+        )
+        rendered = rendered.replace(
+            "translate the final answer back to Chinese",
+            "write the final answer in English",
+        )
+        rendered = rendered.replace(
+            "translate every heading and section label into\nChinese",
+            "write every heading and section label in English",
+        )
+    rendered = rendered.replace(
+        "same language as the QUESTION",
+        "selected response language",
+    ).replace(
+        "QUESTION's language",
+        "selected response language",
+    )
+    return instruction + rendered
 
 
 def build_prompt(
@@ -382,6 +451,8 @@ def build_prompt(
     context: str,
     history: Sequence[dict[str, Any]] | None = None,
     prompt_version: str | None = None,
+    *,
+    response_language: str | None = None,
 ) -> str:
     return _render(
         "financial_rag",
@@ -389,6 +460,7 @@ def build_prompt(
         question=question,
         context=context,
         history=history,
+        response_language=response_language,
     )
 
 
@@ -398,6 +470,7 @@ def build_compare_prompt(
     prompt_version: str | None = None,
     *,
     history: Sequence[dict[str, Any]] | None = None,
+    response_language: str | None = None,
 ) -> str:
     return _render(
         "financial_compare",
@@ -405,6 +478,7 @@ def build_compare_prompt(
         question=question,
         context=context,
         history=history,
+        response_language=response_language,
     )
 
 
@@ -412,10 +486,13 @@ def build_direct_chat_prompt(
     question: str,
     history: Sequence[dict[str, Any]] | None = None,
     prompt_version: str | None = None,
+    *,
+    response_language: str | None = None,
 ) -> str:
     return _render(
         "direct_chat",
         version=prompt_version,
         question=question,
         history=history,
+        response_language=response_language,
     )

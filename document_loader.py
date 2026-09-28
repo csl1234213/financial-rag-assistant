@@ -35,8 +35,8 @@ from retrieval.periods import extract_metrics, extract_periods
 
 logger = logging.getLogger(__name__)
 
-PARSER_VERSION = "pymupdf-blocks-ocr-v16-financial-release-narrative"
-CHUNKER_VERSION = "page-block-section-v4-source-locator"
+PARSER_VERSION = "pymupdf-blocks-ocr-v20-financial-row-reconstruction"
+CHUNKER_VERSION = "page-block-section-v5-table-trust-boundaries"
 
 _HYPHENATED_LINE_BREAK = re.compile(r"(\w)-\s*\n\s*(\w)")
 _WHITESPACE = re.compile(r"[^\S\n]+")
@@ -713,7 +713,7 @@ def load_documents(pdf_folder: str | os.PathLike[str]) -> list[dict[str, object]
     report_files = sorted(
         path
         for path in folder.iterdir()
-        if path.is_file() and path.suffix.casefold() in {".pdf", ".xlsx", ".docx", ".csv"}
+        if path.is_file() and path.suffix.casefold() in {".pdf", ".html", ".xlsx", ".docx", ".csv"}
     )
 
     for report_path in report_files:
@@ -2502,17 +2502,32 @@ def _chunk_block_group(
     chunks: list[DocumentChunk] = []
     current: list[ParsedBlock] = []
     for block in expanded:
+        # Keep verified financial rows out of any chunk containing quarantined
+        # dense table text. Chunk metadata is conservative (an unverified row
+        # taints its whole chunk), and retrieval/citation gates correctly drop
+        # such chunks. Without this boundary, a validated CNINFO row could be
+        # merged with a neighboring ambiguous row and become unusable.
+        verified_unverified_boundary = _crosses_table_trust_boundary(
+            {item.content_type for item in current},
+            {block.content_type},
+        )
         proposed_length = _joined_length([*current, block])
-        if current and proposed_length > chunk_size:
+        if current and (verified_unverified_boundary or proposed_length > chunk_size):
             chunks.append(
                 _make_chunk(
                     current,
                     chunk_index=start_index + len(chunks),
                 )
             )
-            current = _overlap_blocks(current, overlap)
-            while current and _joined_length([*current, block]) > chunk_size:
-                current.pop(0)
+            if verified_unverified_boundary:
+                # Overlap is intentionally disabled across a trust boundary;
+                # otherwise quarantined rows could leak into the verified
+                # chunk and inherit the conservative unverified metadata.
+                current = []
+            else:
+                current = _overlap_blocks(current, overlap)
+                while current and _joined_length([*current, block]) > chunk_size:
+                    current.pop(0)
         current.append(block)
 
     if current:
@@ -2554,6 +2569,14 @@ def _make_chunk(
     )
 
 
+def _crosses_table_trust_boundary(left_types: set[str], right_types: set[str]) -> bool:
+    """Prevent validated financial rows from sharing chunks with quarantined rows."""
+
+    return (
+        "unverified_table" in left_types and "table" in right_types
+    ) or ("table" in left_types and "unverified_table" in right_types)
+
+
 def _merge_tiny_page_chunks(
     chunks: list[DocumentChunk],
     *,
@@ -2573,9 +2596,25 @@ def _merge_tiny_page_chunks(
             continue
 
         if index + 1 < len(pending):
+            if _crosses_table_trust_boundary(
+                {chunk.content_type},
+                {pending[index + 1].content_type},
+            ):
+                # A small verified fact row is still independently useful.
+                # Merging it with an adjacent unverified financial block would
+                # taint the whole chunk and hide the verified evidence.
+                index += 1
+                continue
             pending[index : index + 2] = [
                 _merge_chunks(chunk, pending[index + 1])
             ]
+            continue
+
+        if _crosses_table_trust_boundary(
+            {pending[index - 1].content_type},
+            {chunk.content_type},
+        ):
+            index += 1
             continue
 
         pending[index - 1 : index + 1] = [
@@ -2684,6 +2723,18 @@ def _attach_table_context(blocks: list[ParsedBlock]) -> list[ParsedBlock]:
     for index, block in enumerate(blocks):
         if block.content_type == "table":
             attached.append(block)
+            continue
+        cninfo_row = _verified_cninfo_annual_summary_row(blocks, index)
+        if cninfo_row is not None:
+            normalized_text, table_context = cninfo_row
+            attached.append(
+                replace(
+                    block,
+                    text=normalized_text,
+                    table_context=table_context,
+                    content_type="table",
+                )
+            )
             continue
         if _looks_like_financial_narrative_block(block.text):
             # Some PDF layout engines concatenate release highlights into one
@@ -2820,6 +2871,163 @@ def _attach_table_context(blocks: list[ParsedBlock]) -> list[ParsedBlock]:
         context = None
         attached.append(replace(block, table_context=None))
     return attached
+
+
+def _verified_cninfo_annual_summary_row(
+    blocks: list[ParsedBlock], index: int
+) -> tuple[str, str] | None:
+    """Bind only whitelisted CNINFO summary facts to explicit split headers.
+
+    Some Chinese filing PDFs expose the year cells and the year-over-year
+    column as separate text blocks. Promote a small set of exact summary row
+    labels only when the adjacent header proves the three annual columns and
+    comparison-rate column. Other dense rows remain quarantined.
+    """
+
+    block = blocks[index]
+    row_source = block.text
+    if index + 1 < len(blocks) and blocks[index + 1].page == block.page:
+        continuation = re.sub(r"\s+", "", blocks[index + 1].text)
+        if re.fullmatch(r"分点|百分点", continuation):
+            row_source = f"{row_source} {blocks[index + 1].text}"
+        elif continuation.startswith("分点"):
+            row_source = f"{row_source} 分点"
+    row = re.sub(r"\s+", " ", row_source).strip()
+    summary_metrics = (
+        (r"营业收入", "Revenue"),
+        (r"归属于上市公司股东的净利润", "Net Income Attributable to Shareholders"),
+        (r"经营活动产生的现金流量净额", "Operating Cash Flow"),
+    )
+    metric = next(
+        (
+            normalized
+            for label, normalized in summary_metrics
+            if re.match(rf"^{label}(?:\s|$)", row)
+        ),
+        None,
+    )
+    if metric is None:
+        return _verified_cninfo_segment_row(blocks, index)
+
+    preceding = [
+        candidate.text
+        for candidate in blocks[max(0, index - 10) : index]
+        if candidate.page == block.page
+    ]
+    header = re.sub(r"\s+", "", " ".join(preceding))
+    if not any(marker in header for marker in ("主要会计数据", "主要财务指标")):
+        return None
+    if not re.search(r"本期比.{0,6}上年同期增减", header):
+        return None
+    if not re.search(r"增减.{0,12}%|%", header):
+        return None
+
+    years = tuple(dict.fromkeys(re.findall(r"20\d{2}(?=年|\b)", header)))
+    if len(years) != 3 or int(years[0]) - int(years[1]) != 1 or int(years[1]) - int(years[2]) != 1:
+        return None
+
+    values = [match.group(0).strip() for match in _TABLE_NUMBER.finditer(block.text)]
+    if len(values) != 4:
+        return None
+    # The validated CNINFO header order is current year, prior year, YoY %,
+    # then the third annual comparison year. Preserve only amount columns in
+    # the structured fact row; do not let the unlabelled rate become a year.
+    yoy = values[2].replace(",", "").replace("%", "").strip()
+    try:
+        yoy_value = float(yoy)
+    except ValueError:
+        return None
+    if not -100 <= yoy_value <= 100:
+        return None
+
+    table_context = (
+        f"CNINFO annual summary; Comparative columns: FY{years[0]} | "
+        f"FY{years[1]} | FY{years[2]}; Currency: CNY"
+    )
+    annual_values = (values[0], values[1], values[3])
+    canonical_values = tuple(value.replace(",", "").replace(" ", "") for value in annual_values)
+    normalized = (
+        f"Structured financial table row — Metric: {metric} | "
+        f"FY{years[0]}: {canonical_values[0]} CNY | "
+        f"FY{years[1]}: {canonical_values[1]} CNY | "
+        f"FY{years[2]}: {canonical_values[2]} CNY | YoY: {yoy}%"
+    )
+    return normalized, table_context
+
+
+def _verified_cninfo_segment_row(
+    blocks: list[ParsedBlock], index: int
+) -> tuple[str, str] | None:
+    """Parse labelled revenue/margin cells from a verified CNINFO annual table.
+
+    The parser requires a recognized section, its column headings, a known row
+    label for that section, and the complete six-cell financial row. This keeps
+    nearby prose and unlabeled dense rows quarantined.
+    """
+
+    block = blocks[index]
+    row_source = block.text
+    if index + 1 < len(blocks) and blocks[index + 1].page == block.page:
+        continuation = re.sub(r"\s+", "", blocks[index + 1].text)
+        if re.fullmatch(r"分点|百分点", continuation):
+            row_source = f"{row_source} {blocks[index + 1].text}"
+        elif continuation.startswith("分点"):
+            row_source = f"{row_source} 分点"
+    row = re.sub(r"\s+", " ", row_source).strip()
+    row = re.sub(r"百\s+分", "百分", row)
+    row = re.sub(r"^分点\s+", "", row)
+    sections = (
+        ("主营业务分行业情况", {"酒类"}, "industry"),
+        ("主营业务分产品情况", {"茅台酒", "其他系列酒"}, "product"),
+        ("主营业务分地区情况", {"国内", "国外"}, "region"),
+        ("主营业务分销售模式情况", {"批发代理", "直销"}, "sales_mode"),
+    )
+    preceding_blocks = [candidate for candidate in blocks[max(0, index - 18) : index] if candidate.page == block.page]
+    preceding = re.sub(r"\s+", " ", " ".join(candidate.text for candidate in preceding_blocks))
+    selected = next(
+        (
+            (heading, categories, section_id)
+            for heading, categories, section_id in reversed(sections)
+            if heading in preceding
+        ),
+        None,
+    )
+    if selected is None:
+        return None
+    _, categories, section_id = selected
+    if not all(marker in preceding for marker in ("营业收入", "毛利率", "营业成本")):
+        return None
+
+    label = next((value for value in categories if row.startswith(value + " ")), None)
+    if label is None:
+        return None
+    cells = re.match(
+        r"^(?P<label>[^ ]+)\s+"
+        r"(?P<revenue>\d[\d,]*(?:\.\d+)?)\s+"
+        r"(?P<cost>\d[\d,]*(?:\.\d+)?)\s+"
+        r"(?P<margin>\d+(?:\.\d+)?)\s+"
+        r"(?P<revenue_yoy>[+-]?\d+(?:\.\d+)?)\s+"
+        r"(?P<cost_yoy>[+-]?\d+(?:\.\d+)?)\s+"
+        r"(?:减少|增加)\s*(?P<margin_delta>\d+(?:\.\d+)?)\s*个百分?点",
+        row,
+    )
+    if cells is None or cells.group("label") != label:
+        return None
+
+    revenue = cells.group("revenue").replace(",", "")
+    margin = cells.group("margin")
+    revenue_yoy = cells.group("revenue_yoy")
+    table_context = (
+        f"CNINFO annual segmented financial table; FY2025; "
+        f"Dimension: {section_id}; Category: {label}; Currency: CNY"
+    )
+    normalized = (
+        f"Structured financial table row — Dimension: {section_id}; Category: {label} | "
+        f"Metric: Revenue | FY2025: {revenue} CNY | YoY: {revenue_yoy}%\n"
+        f"Structured financial table row — Dimension: {section_id}; Category: {label} | "
+        f"Metric: Gross Margin | FY2025: {margin}%"
+    )
+    return normalized, table_context
 
 
 def _has_table_period_cells(blocks: list[ParsedBlock]) -> bool:

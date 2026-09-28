@@ -8,6 +8,7 @@ import {
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Header } from '../components/layout/Header';
+import { DefaultProviderSelector } from '../components/settings/DefaultProviderSelector';
 import { ProviderKeyCard } from '../components/settings/ProviderKeyCard';
 import { ThemeSelector } from '../components/settings/ThemeSelector';
 import { Icon } from '../components/ui/Icon';
@@ -49,8 +50,9 @@ export function Settings() {
     provider: LLMProvider,
     apiKey: string,
     model: string,
+    baseUrl?: string,
   ) => {
-    const updated = await updateLLMProvider(provider, apiKey, model);
+    const updated = await updateLLMProvider(provider, apiKey, model, baseUrl);
     replaceProvider(updated);
   }, [replaceProvider]);
 
@@ -143,17 +145,24 @@ export function Settings() {
             )}
 
             {!loading && !loadError && providers.length > 0 && (
-              <div className="provider-grid">
-                {providers.map((provider) => (
-                  <ProviderKeyCard
-                    key={provider.provider}
-                    settings={provider}
-                    onSave={handleSave}
-                    onClear={handleClear}
-                    onSetDefault={handleSetDefault}
+              <>
+                {providers.some((provider) => provider.configured) && (
+                  <DefaultProviderSelector
+                    providers={providers.filter((provider) => provider.configured)}
+                    onSelect={handleSetDefault}
                   />
-                ))}
-              </div>
+                )}
+                <div className="provider-grid">
+                  {providers.map((provider) => (
+                    <ProviderKeyCard
+                      key={provider.provider}
+                      settings={provider}
+                      onSave={handleSave}
+                      onClear={handleClear}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </section>
         </main>

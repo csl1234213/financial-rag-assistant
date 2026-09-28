@@ -17,6 +17,7 @@ from ..providers.provider_exceptions import (
     ProviderError,
     RateLimitError,
 )
+from ..providers.provider_guard import ensure_real_provider_allowed
 from ..providers.provider_models import (
     ChatRequest,
     ChatResponse,
@@ -68,6 +69,7 @@ class GeminiProvider(BaseProvider):
 
     def _get_client(self):
         if self._client is None:
+            ensure_real_provider_allowed("gemini")
             if not self._api_key:
                 raise AuthenticationError("GEMINI_API_KEY not set in environment")
             from google import genai

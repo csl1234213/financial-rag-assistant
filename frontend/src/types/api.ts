@@ -86,6 +86,8 @@ export interface KnowledgeDocument {
   byteSize?: number;
   chunkCount?: number;
   contentSha256?: string;
+  sourceUrl?: string;
+  sourceType?: 'sec_edgar' | 'cninfo';
   canDelete?: boolean;
 }
 

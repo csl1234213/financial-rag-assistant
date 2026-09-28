@@ -20,7 +20,6 @@ from ..providers.provider_config import ProviderConfig
 from ..providers.provider_registry import ProviderRegistry
 from .base_policy import BaseRoutingPolicy
 from .routing_context import RoutingContext
-from .routing_enums import TaskType
 from .routing_result import RoutingResult
 
 _DEFAULT_MODELS = {
@@ -29,6 +28,7 @@ _DEFAULT_MODELS = {
     "openai": OPENAI_MODEL,
     "anthropic": ANTHROPIC_MODEL,
     "doubao": DOUBAO_MODEL,
+    "ollama": LLM_MODEL,
 }
 
 
@@ -133,10 +133,12 @@ class CapabilityRoutingPolicy(BaseRoutingPolicy):
                     reasons.append(label)
 
         if required == 0:
-            # Default CHAT task — prefer default provider
-            if context.task == TaskType.CHAT:
-                if provider_name == self._default_provider:
-                    return ("Default chat provider", 0.85)
+            # The user's selected default applies to every task that does not
+            # require a specific capability.  Restricting this preference to
+            # CHAT made financial/document questions tie at the generic score;
+            # registry order could then route them to an unrelated provider.
+            if provider_name == self._default_provider:
+                return ("Default provider", 0.85)
             return ("General purpose", 0.5)
 
         if matched != required:

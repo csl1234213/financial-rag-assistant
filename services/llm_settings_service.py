@@ -26,11 +26,19 @@ from config.llm import (
     OPENAI_BASE_URL,
     OPENAI_MODEL,
 )
+from llm.providers.provider_guard import normalize_local_ollama_url
 from models.llm_provider_setting import LLMProviderSetting
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LLM_PROVIDERS: dict[str, dict[str, object]] = {
+    "ollama": {
+        "display_name": "本地模型（Ollama）",
+        "default_model": "",
+        "base_url": "http://host.docker.internal:11434",
+        "models": [],
+        "local": True,
+    },
     "deepseek": {
         "display_name": "DeepSeek",
         "default_model": DEEPSEEK_MODEL,
@@ -222,31 +230,49 @@ def upsert_provider_setting(
     provider: str,
     api_key: str | None,
     model: str | None = None,
+    base_url: str | None = None,
 ) -> LLMProviderSetting:
     definition = SUPPORTED_LLM_PROVIDERS[provider]
+    is_local = bool(definition.get("local"))
     setting = get_provider_setting(
         db,
         tenant_id=tenant_id,
         user_id=user_id,
         provider=provider,
     )
+    selected_base_url = (
+        normalize_local_ollama_url(
+            base_url or (setting.base_url if setting is not None else None)
+        )
+        if is_local
+        else None
+    )
+    if not is_local and base_url is not None:
+        raise ValueError("Custom endpoints are only supported for local Ollama")
     normalized_key = api_key.strip() if api_key is not None else None
     if normalized_key is not None and not normalized_key:
         raise ValueError("API key cannot be blank")
+    if is_local and normalized_key is not None:
+        raise ValueError("Local Ollama does not accept an API key")
     if normalized_key is not None and not 8 <= len(normalized_key) <= 4096:
         raise ValueError("API key must contain between 8 and 4096 characters")
-    if setting is None and normalized_key is None:
+    if setting is None and normalized_key is None and not is_local:
         raise ValueError("API key is required when configuring a provider")
-    if setting is not None and normalized_key is None and model is None:
-        raise ValueError("API key or model must be provided")
+    if setting is not None and normalized_key is None and model is None and base_url is None:
+        raise ValueError("API key, model, or endpoint must be provided")
     selected_model = model or (
         setting.model if setting is not None else str(definition["default_model"])
     )
-    if selected_model not in definition["models"]:
+    if is_local:
+        selected_model = selected_model.strip()
+        if not selected_model:
+            raise ValueError("Ollama model name is required")
+        if len(selected_model) > 255:
+            raise ValueError("Ollama model name is too long")
+    elif selected_model not in definition["models"]:
         raise ValueError("Unsupported model for LLM provider")
 
     if setting is None:
-        assert normalized_key is not None
         is_first_provider = (
             _setting_query(
                 db,
@@ -259,9 +285,14 @@ def upsert_provider_setting(
             tenant_id=tenant_id,
             user_id=user_id,
             provider=provider,
-            encrypted_api_key=_encrypt_api_key(normalized_key),
-            key_hint=normalized_key[-4:],
+            encrypted_api_key=(
+                _encrypt_api_key(normalized_key)
+                if normalized_key is not None
+                else None
+            ),
+            key_hint=normalized_key[-4:] if normalized_key is not None else None,
             model=selected_model,
+            base_url=selected_base_url,
             is_default=is_first_provider,
         )
         db.add(setting)
@@ -270,6 +301,8 @@ def upsert_provider_setting(
             setting.encrypted_api_key = _encrypt_api_key(normalized_key)
             setting.key_hint = normalized_key[-4:]
         setting.model = selected_model
+        if is_local:
+            setting.base_url = selected_base_url
         setting.revision = str(uuid4())
         setting.updated_at = datetime.now(timezone.utc)
 
@@ -379,19 +412,23 @@ def get_runtime_llm_settings(
         definition = SUPPORTED_LLM_PROVIDERS.get(setting.provider)
         if definition is None:
             continue
-        try:
-            api_key = _decrypt_api_key(setting.encrypted_api_key)
-        except CredentialEncryptionError:
-            logger.error(
-                "Unable to load LLM credential for tenant=%s user=%s provider=%s",
-                tenant_id,
-                user_id,
-                setting.provider,
-            )
-            raise
+        api_key = ""
+        if setting.encrypted_api_key:
+            try:
+                api_key = _decrypt_api_key(setting.encrypted_api_key)
+            except CredentialEncryptionError:
+                logger.error(
+                    "Unable to load LLM credential for tenant=%s user=%s provider=%s",
+                    tenant_id,
+                    user_id,
+                    setting.provider,
+                )
+                raise
 
         provider_config = {"api_key": api_key}
         base_url = definition.get("base_url")
+        if setting.base_url:
+            base_url = setting.base_url
         if base_url:
             provider_config["base_url"] = str(base_url)
         provider_configs[setting.provider] = provider_config
@@ -403,6 +440,7 @@ def get_runtime_llm_settings(
                 "id": setting.id,
                 "provider": setting.provider,
                 "model": setting.model,
+                "base_url": setting.base_url or "",
                 "revision": setting.revision,
                 "is_default": setting.is_default,
                 "updated_at": setting.updated_at.isoformat(),

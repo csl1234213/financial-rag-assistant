@@ -96,18 +96,22 @@ class DeepSeekProvider(BaseProvider):
 
     def _get_client(self) -> OpenAI:
         if self._client is None:
-            # Offline pytest runs must never reach a real paid provider.  The
-            # guard is deliberately scoped to pytest and allows injected
-            # OpenAI test doubles (their constructor is patched in adapter
-            # retry-contract tests).  Production processes are unaffected.
-            if (
+            # Real provider access is an explicit opt-in in every runtime.
+            # Production must not silently spend against a credential merely
+            # because a persisted routing setting selects DeepSeek.  Pytest
+            # adapter tests may inject an OpenAI test double; that constructor
+            # is not a network client and remains allowed for retry-contract
+            # coverage.
+            provider_enabled = os.environ.get("ALLOW_REAL_PROVIDER", "false").lower() in {
+                "1", "true", "yes"
+            }
+            injected_test_client = bool(
                 os.environ.get("PYTEST_CURRENT_TEST")
-                and os.environ.get("ALLOW_REAL_PROVIDER", "false").lower()
-                not in {"1", "true", "yes"}
-                and getattr(OpenAI, "__module__", "openai").startswith("openai")
-            ):
+                and not getattr(OpenAI, "__module__", "openai").startswith("openai")
+            )
+            if not provider_enabled and not injected_test_client:
                 raise ProviderError(
-                    "Real provider calls are disabled in offline tests; "
+                    "Real provider calls are disabled; "
                     "set ALLOW_REAL_PROVIDER=true only for an explicit live run"
                 )
             if not self._api_key:

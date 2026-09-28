@@ -3,6 +3,8 @@ import type { ChatResponse, Citation } from '../../types/api';
 import { SafeMarkdown } from './SafeMarkdown';
 import {
   buildCitationDomId,
+  localizeCnyAmounts,
+  shouldShowAnswerDisclaimer,
   splitResearchReport,
 } from './reportPresentation';
 
@@ -73,9 +75,10 @@ export function AssistantReport({
   response,
   citationNamespace,
 }: AssistantReportProps) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const report = splitResearchReport(content);
-  const answerContent = report?.modelAnswer ?? content;
+  const answerContent = localizeCnyAmounts(report?.modelAnswer ?? content, language);
+  const showDisclaimer = shouldShowAnswerDisclaimer(response?.report ?? content);
   const citations = response?.citations ?? [];
   const markdownProps = {
     citationNamespace,
@@ -128,6 +131,11 @@ export function AssistantReport({
         aria-label={t.chat.modelAnswer}
       >
         <SafeMarkdown content={answerContent} {...markdownProps} />
+        {showDisclaimer && (
+          <p className="assistant-report__disclaimer" role="note">
+            {t.chat.answerDisclaimer}
+          </p>
+        )}
       </section>
 
       <CompactCitationTargets

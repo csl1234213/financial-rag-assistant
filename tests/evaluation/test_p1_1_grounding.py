@@ -12,7 +12,7 @@ from core.financial_grounding import (
 from core.query_scope import QueryScope, classify_query_scope
 from core.required_fact_plan import infer_required_fact_plan
 from evaluation.p1_1_grounding import _resolved_evaluation_question
-from evaluation.replay_formal_100_offline import _resolved_evidence_question
+from evaluation.replay_formal_100_offline import _resolved_evidence_question, replay_one
 from retrieval.hybrid_retriever import HybridRetriever
 from storage.vector_models import SearchResult
 
@@ -41,6 +41,24 @@ def test_historical_grounding_replay_uses_latest_followup_intent_and_guarded_con
     assert resolved.startswith("Focus only on the business growth drivers.")
     assert "Relevant prior user request for reference resolution: Compare Apple and NVIDIA." in resolved
     assert classify_query_scope(resolved) is QueryScope.ANALYSIS
+
+
+def test_formal_replay_does_not_reclassify_direct_chat_examples_as_financial_claims():
+    result = replay_one(
+        {
+            "id": "ZH-044",
+            "language": "zh",
+            "question": "什么叫毛利率？",
+            "actual_answer": "毛利率是收入扣除直接成本后占收入的比例。例如收入100元、成本60元时为40%。",
+            "citations": [],
+        },
+        {},
+        {},
+    )
+
+    assert classify_query_scope(result["evidence_question"]) is QueryScope.GENERAL_CONCEPT
+    assert result["final_unsupported_numeric_claims"] == 0
+    assert result["final_claim_dispositions"].get("UNSUPPORTED", 0) == 0
 
 
 def test_bilingual_driver_followups_do_not_inherit_numeric_plan_from_prior_turn():

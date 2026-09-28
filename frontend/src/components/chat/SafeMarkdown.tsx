@@ -147,6 +147,35 @@ export function SafeMarkdown({
                 {inline(localizeReportHeading(block.text, language))}
               </h4>
             );
+          case 'table':
+            return (
+              <div className="safe-markdown__table-wrap" key={key}>
+                <table className="safe-markdown__table">
+                  {block.headers && (
+                    <thead>
+                      <tr>
+                        {block.headers.map((header, cellIndex) => (
+                          <th scope="col" key={`${key}-header-${cellIndex}`}>
+                            {inline(header)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                  )}
+                  <tbody>
+                    {block.rows.map((row, rowIndex) => (
+                      <tr key={`${key}-row-${rowIndex}`}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={`${key}-row-${rowIndex}-cell-${cellIndex}`}>
+                            {inline(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           case 'unordered-list':
             return (
               <ul key={key}>

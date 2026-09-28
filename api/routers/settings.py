@@ -45,8 +45,17 @@ def _serialize_provider(
         models=list(definition["models"]),
         configured=setting is not None,
         is_default=setting.is_default if setting is not None else False,
-        key_hint=f"••••{setting.key_hint}" if setting is not None else None,
+        key_hint=(
+            f"••••{setting.key_hint}"
+            if setting is not None and setting.key_hint
+            else None
+        ),
         model=setting.model if setting is not None else str(definition["default_model"]),
+        base_url=(
+            setting.base_url
+            if setting is not None and setting.base_url
+            else (str(definition["base_url"]) if definition.get("base_url") else None)
+        ),
         updated_at=setting.updated_at if setting is not None else None,
     )
 
@@ -148,6 +157,7 @@ def put_llm_setting(
                 else None
             ),
             model=request.model,
+            base_url=request.base_url,
         )
     except ValueError as exc:
         raise HTTPException(

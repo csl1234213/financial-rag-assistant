@@ -148,7 +148,7 @@ def test_parse_pdf_preserves_sorted_page_and_section_provenance(tmp_path):
 
     parsed = parse_pdf(pdf_path, ocr_enabled=False)
 
-    assert parsed.parser_version == "pymupdf-blocks-ocr-v16-financial-release-narrative"
+    assert parsed.parser_version == "pymupdf-blocks-ocr-v20-financial-row-reconstruction"
     assert [page.number for page in parsed.pages] == [1, 2]
     assert [block.text for block in parsed.pages[0].blocks] == [
         "Revenue Overview",
@@ -157,6 +157,154 @@ def test_parse_pdf_preserves_sorted_page_and_section_provenance(tmp_path):
     assert parsed.pages[0].blocks[1].section == "Revenue Overview"
     assert parsed.pages[1].blocks[1].section == "Risk Factors"
     assert not any(page.ocr_used for page in parsed.pages)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("label", "metric", "current", "prior", "growth"),
+    (
+        (
+            "归属于上市公司股东的净利润",
+            "Net Income Attributable to Shareholders",
+            "82320067101.68",
+            "86228146421.62",
+            "-4.53",
+        ),
+        (
+            "经营活动产生的现金流量净额",
+            "Operating Cash Flow",
+            "61522204989.35",
+            "92463692168.43",
+            "-33.46",
+        ),
+    ),
+)
+def test_cninfo_annual_summary_binds_whitelisted_metric_rows(
+    label, metric, current, prior, growth
+):
+    blocks = [
+        ParsedBlock("七、近三年主要会计数据和财务指标", 6, "", False),
+        ParsedBlock("主要会计数据", 6, "", False),
+        ParsedBlock("2025年", 6, "", False),
+        ParsedBlock("2024年", 6, "", False),
+        ParsedBlock("本期比上年同期增减", 6, "", False),
+        ParsedBlock("(%)", 6, "", False),
+        ParsedBlock("2023年", 6, "", False),
+        ParsedBlock(
+            f"{label} {current} {prior} {growth} 74734071550.75",
+            6,
+            "",
+            False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    attached = document_loader._attach_table_context(blocks)
+
+    row = attached[-1]
+    assert row.content_type == "table"
+    assert f"Metric: {metric}" in row.text
+    assert f"FY2025: {current} CNY" in row.text
+    assert f"FY2024: {prior} CNY" in row.text
+    assert f"YoY: {growth}%" in row.text
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("heading", "label", "dimension", "revenue", "margin", "growth"),
+    (
+        (
+            "主营业务分产品情况",
+            "茅台酒",
+            "product",
+            "146499906480.49",
+            "93.53",
+            "0.39",
+        ),
+        (
+            "主营业务分产品情况",
+            "其他系列酒",
+            "product",
+            "22274678707.16",
+            "76.11",
+            "-9.76",
+        ),
+        (
+            "主营业务分地区情况",
+            "国内",
+            "region",
+            "163924442864.97",
+            "91.21",
+            "-0.91",
+        ),
+        (
+            "主营业务分地区情况",
+            "国外",
+            "region",
+            "4850142322.68",
+            "91.69",
+            "-6.52",
+        ),
+        (
+            "主营业务分销售模式情况",
+            "批发代理",
+            "sales_mode",
+            "84231553333.02",
+            "87.86",
+            "-12.05",
+        ),
+        (
+            "主营业务分销售模式情况",
+            "直销",
+            "sales_mode",
+            "84543031854.63",
+            "94.58",
+            "12.96",
+        ),
+    ),
+)
+def test_cninfo_segment_table_requires_headers_and_preserves_row_labels(
+    heading, label, dimension, revenue, margin, growth
+):
+    blocks = [
+        ParsedBlock(heading, 10, "", False),
+        ParsedBlock("单位：元 币种：人民币", 10, "", False),
+        ParsedBlock("营业收入 营业成本 毛利率（%）", 10, "", False),
+        ParsedBlock(
+            f"{label} {revenue} 9484757825.54 {margin} {growth} 9.50 减少0.53 个百 分点",
+            10,
+            "",
+            False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    attached = document_loader._attach_table_context(blocks)
+
+    row = attached[-1]
+    assert row.content_type == "table"
+    assert f"Dimension: {dimension}; Category: {label}" in row.text
+    assert f"Metric: Revenue | FY2025: {revenue} CNY | YoY: {growth}%" in row.text
+    assert f"Metric: Gross Margin | FY2025: {margin}%" in row.text
+    assert "FY2025" in row.table_context
+
+
+@pytest.mark.unit
+def test_cninfo_segment_table_rejects_rows_without_recognized_section_headers():
+    blocks = [
+        ParsedBlock("Other discussion", 10, "", False),
+        ParsedBlock(
+            "茅台酒 146,499,906,480.49 9,484,757,825.54 93.53 0.39 9.50 减少0.53 个百分点",
+            10,
+            "",
+            False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    [_, row] = document_loader._attach_table_context(blocks)
+
+    assert row.content_type == "unverified_table"
 
 
 @pytest.mark.unit
@@ -304,6 +452,146 @@ def test_flattened_financial_table_without_period_headers_is_marked_unverified()
         "Revenue was $22.5 billion. Operating income was $1.6 billion. "
         "The company expects demand to remain strong next quarter."
     )
+
+
+@pytest.mark.unit
+def test_split_cninfo_annual_header_binds_revenue_cells_without_yoy_shift():
+    blocks = [
+        ParsedBlock("主要会计数据", 6, "主要会计数据", False, is_heading=True),
+        ParsedBlock("2025年", 6, "主要会计数据", False),
+        ParsedBlock("2024年", 6, "主要会计数据", False),
+        ParsedBlock("2023年", 6, "主要会计数据", False),
+        ParsedBlock("本期比", 6, "主要会计数据", False),
+        ParsedBlock("上年同", 6, "主要会计数据", False),
+        ParsedBlock("期增减", 6, "主要会计数据", False),
+        ParsedBlock("(%)", 6, "主要会计数据", False),
+        ParsedBlock(
+            "营业收入 168,838,102,514.79 170,899,152,276.34 -1.21 147,693,604,994.14",
+            6,
+            "主要会计数据",
+            False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    attached = document_loader._attach_table_context(blocks)
+    row = attached[-1]
+
+    assert row.content_type == "table"
+    assert row.table_context == (
+        "CNINFO annual summary; Comparative columns: FY2025 | FY2024 | FY2023; Currency: CNY"
+    )
+    assert "FY2025: 168838102514.79 CNY" in row.text
+    assert "FY2024: 170899152276.34 CNY" in row.text
+    assert "FY2023: 147693604994.14 CNY" in row.text
+    assert "YoY: -1.21%" in row.text
+    assert "FY2023: CNY -1.21" not in row.text
+
+    ledger = FactLedger.from_evidence(
+        [
+            Evidence(
+                content=row.text,
+                source="贵州茅台2025年度报告.pdf",
+                company="贵州茅台",
+                confidence=1.0,
+                metadata={
+                    "content_type": row.content_type,
+                    "table_context": row.table_context,
+                    "page": row.page,
+                    "chunk_id": "cninfo-page-6-revenue",
+                },
+            )
+        ]
+    )
+
+    facts = ledger.lookup(company="Kweichow Moutai", metric_id="revenue")
+    assert [(fact.fact_period, str(fact.value)) for fact in facts] == [
+        ("FY2025", "168838102514.79"),
+        ("FY2024", "170899152276.34"),
+        ("FY2023", "147693604994.14"),
+    ]
+    assert [fact.currency for fact in facts] == ["cny", "cny", "cny"]
+
+
+@pytest.mark.unit
+def test_chunker_keeps_verified_cninfo_row_separate_from_quarantined_table_rows():
+    blocks = [
+        ParsedBlock(
+            text="Unverified neighboring row: total assets 303,834,844,021.44",
+            page=6,
+            section="主要会计数据",
+            ocr_used=False,
+            content_type="unverified_table",
+        ),
+        ParsedBlock(
+            text=(
+                "Structured financial table row — Metric: Net Income Attributable "
+                "to Shareholders | FY2025: 82320067101.68 CNY | "
+                "FY2024: 86228146421.62 CNY | FY2023: 74734071550.75 CNY | "
+                "YoY: -4.53%"
+            ),
+            page=6,
+            section="主要会计数据",
+            ocr_used=False,
+            table_context="CNINFO annual summary; Currency: CNY",
+            content_type="table",
+        ),
+        ParsedBlock(
+            text="Unverified following row: net assets 244,637,811,032.18",
+            page=6,
+            section="主要会计数据",
+            ocr_used=False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    chunks = document_loader._chunk_block_group(
+        blocks,
+        chunk_size=2_000,
+        overlap=200,
+        start_index=0,
+    )
+
+    assert [chunk.content_type for chunk in chunks] == [
+        "unverified_table",
+        "table",
+        "unverified_table",
+    ]
+    assert "Net Income Attributable" not in chunks[0].text
+    assert "Unverified neighboring row" not in chunks[1].text
+    assert "Unverified following row" not in chunks[1].text
+    assert "FY2025: 82320067101.68 CNY" in chunks[1].text
+
+    merged = document_loader._merge_tiny_page_chunks(
+        chunks,
+        minimum_chars=2_000,
+    )
+    assert [chunk.content_type for chunk in merged] == [
+        "unverified_table",
+        "table",
+        "unverified_table",
+    ]
+
+
+@pytest.mark.unit
+def test_split_cninfo_header_does_not_promote_without_explicit_yoy_mapping():
+    blocks = [
+        ParsedBlock("主要会计数据", 6, "主要会计数据", False, is_heading=True),
+        ParsedBlock("2025年", 6, "主要会计数据", False),
+        ParsedBlock("2024年", 6, "主要会计数据", False),
+        ParsedBlock("2023年", 6, "主要会计数据", False),
+        ParsedBlock(
+            "营业收入 168,838,102,514.79 170,899,152,276.34 -1.21 147,693,604,994.14",
+            6,
+            "主要会计数据",
+            False,
+            content_type="unverified_table",
+        ),
+    ]
+
+    attached = document_loader._attach_table_context(blocks)
+
+    assert attached[-1].content_type == "unverified_table"
 
 
 @pytest.mark.unit

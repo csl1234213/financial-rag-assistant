@@ -15,6 +15,7 @@ import re
 import zipfile
 from bisect import bisect_right
 from datetime import date, datetime, time
+from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -36,7 +37,7 @@ from retrieval.periods import extract_periods
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({".pdf", ".xlsx", ".docx", ".csv"})
+SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({".pdf", ".html", ".xlsx", ".docx", ".csv"})
 MAX_ARCHIVE_MEMBERS = 20_000
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 1_000
@@ -79,6 +80,10 @@ def validate_document_payload(filename: str, content: bytes) -> str:
             raise DocumentProcessingError("Uploaded PDF could not be opened") from exc
         return extension
 
+    if extension == ".html":
+        _validate_html_payload(content)
+        return extension
+
     if extension in {".xlsx", ".docx"}:
         expected_entry = "xl/workbook.xml" if extension == ".xlsx" else "word/document.xml"
         _validate_office_archive(content, expected_entry)
@@ -101,7 +106,9 @@ def load_structured_document_chunks(
         raise DocumentProcessingError(f"Document file not found: {source.name}")
     content = source.read_bytes()
     extension = validate_document_payload(source.name, content)
-    if extension == ".xlsx":
+    if extension == ".html":
+        document = _parse_html(source, content)
+    elif extension == ".xlsx":
         document = _parse_xlsx(source)
     elif extension == ".docx":
         document = _parse_docx(source)
@@ -114,6 +121,125 @@ def load_structured_document_chunks(
     if not chunks:
         raise DocumentProcessingError(f"{extension.upper().lstrip('.')} produced no indexable content")
     return chunks
+
+
+class _FinancialHtmlParser(HTMLParser):
+    """Extract ordered filing text while keeping table rows together."""
+
+    _BLOCK_TAGS = frozenset({"article", "div", "h1", "h2", "h3", "h4", "li", "p", "section"})
+    _SKIP_TAGS = frozenset({"script", "style", "noscript", "svg"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[tuple[str, str]] = []
+        self._buffer: list[str] = []
+        self._cells: list[str] = []
+        self._cell_buffer: list[str] = []
+        self._skip_depth = 0
+        self._in_row = False
+
+    @staticmethod
+    def _normalise(parts: list[str]) -> str:
+        return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+    def _flush_block(self) -> None:
+        text = self._normalise(self._buffer)
+        if text:
+            self.blocks.append((text, "narrative"))
+        self._buffer.clear()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.casefold()
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if tag == "tr":
+            self._flush_block()
+            self._in_row = True
+            self._cells.clear()
+            self._cell_buffer.clear()
+        elif tag in {"td", "th"} and self._in_row:
+            self._cell_buffer.clear()
+        elif tag in self._BLOCK_TAGS:
+            self._flush_block()
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.casefold()
+        if tag in self._SKIP_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+            return
+        if self._skip_depth:
+            return
+        if tag in {"td", "th"} and self._in_row:
+            cell = self._normalise(self._cell_buffer)
+            if cell:
+                self._cells.append(cell)
+            self._cell_buffer.clear()
+        elif tag == "tr" and self._in_row:
+            row = self._normalise(self._cells)
+            if row:
+                self.blocks.append((row, "table"))
+            self._cells.clear()
+            self._in_row = False
+        elif tag in self._BLOCK_TAGS:
+            self._flush_block()
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        if self._in_row:
+            self._cell_buffer.append(data)
+        else:
+            self._buffer.append(data)
+
+    def finish(self) -> list[tuple[str, str]]:
+        self._flush_block()
+        return self.blocks
+
+
+def _parse_html(source: Path, content: bytes) -> ParsedDocument:
+    try:
+        text = content.decode("utf-8", errors="replace")
+        parser = _FinancialHtmlParser()
+        parser.feed(text)
+        blocks = parser.finish()
+    except Exception as exc:
+        raise DocumentProcessingError("HTML financial report could not be parsed") from exc
+    parsed_blocks = tuple(
+        ParsedBlock(
+            text=clean_text(block_text),
+            page=0,
+            section="SEC filing table" if content_type == "table" else "SEC filing",
+            ocr_used=False,
+            content_type=content_type,
+            source_locator="HTML table row" if content_type == "table" else None,
+            table_context="SEC filing table" if content_type == "table" else None,
+        )
+        for block_text, content_type in blocks
+        if len(clean_text(block_text)) >= 2
+    )
+    if not parsed_blocks:
+        raise DocumentProcessingError("HTML financial report contains no readable text")
+    return ParsedDocument(
+        filename=source.name,
+        pages=(ParsedPage(number=0, blocks=parsed_blocks, ocr_used=False),),
+        parser_version="sec-html-v1",
+        content_type="text/html",
+    )
+
+
+def _validate_html_payload(content: bytes) -> None:
+    if len(content) > MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+        raise DocumentProcessingError("HTML document exceeds the safe parsing limit")
+    sample = content[:4096].lower()
+    if b"<html" not in sample and b"<!doctype" not in sample:
+        raise DocumentProcessingError("Uploaded content does not match an HTML document")
+    parser = _FinancialHtmlParser()
+    parser.feed(content.decode("utf-8", errors="replace"))
+    if sum(len(text) for text, _ in parser.finish()) < 100:
+        raise DocumentProcessingError("HTML document contains no meaningful report text")
 
 
 def _validate_office_archive(content: bytes, expected_entry: str) -> None:

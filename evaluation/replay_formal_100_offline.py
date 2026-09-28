@@ -24,6 +24,8 @@ from agent.planning.entity_extractor import prior_user_context_for_followup  # n
 from agent.reasoning_models import Evidence  # noqa: E402
 from core.answer_grounding import sanitize_answer  # noqa: E402
 from core.answer_policy import finalize_grounded_answer, no_evidence_response  # noqa: E402
+from core.financial_grounding import extract_normalized_numbers  # noqa: E402
+from core.query_scope import QueryScope, classify_query_scope  # noqa: E402
 
 DEFAULT_SOURCE = ROOT / "evaluation/results/formal_20260916"
 DEFAULT_OUTPUT = ROOT / "evaluation/results/offline_grounding_replay_20260917"
@@ -135,7 +137,14 @@ def replay_one(
         # empty/bare refusal when there is no retrieved source at all.
         raw_answer = no_evidence_response(evidence_question)
     finalized = finalize_grounded_answer(evidence_question, raw_answer, evidence)
-    checked = sanitize_answer(evidence_question, finalized.answer, finalized.grounded.evidence)
+    # Direct-chat definitions are deliberately outside the filing citation
+    # gate.  Do not turn educational examples into false unsupported
+    # financial claims during an offline post-check.
+    checked = (
+        finalized.grounded
+        if classify_query_scope(evidence_question) is QueryScope.GENERAL_CONCEPT
+        else sanitize_answer(evidence_question, finalized.answer, finalized.grounded.evidence)
+    )
     plan = finalized.plan.as_dict(finalized.ledger, finalized.answer)
     # Match core.core_engine._project_answer_citations(): the API exposes only
     # evidence ranks actually referenced by the final answer, not every
@@ -161,7 +170,11 @@ def replay_one(
         "final_answer": finalized.answer,
         "raw_claim_dispositions": dict(Counter(item.disposition for item in finalized.raw_grounding.claims)),
         "final_claim_dispositions": dict(Counter(item.disposition for item in checked.claims)),
-        "final_unsupported_numeric_claims": checked.unsupported_count,
+        "final_unsupported_numeric_claims": sum(
+            bool(extract_normalized_numbers(claim.text))
+            for claim in checked.claims
+            if claim.disposition == "UNSUPPORTED"
+        ),
         "required_fact_plan": plan,
         "available_required_fact_coverage": (
             sum(bool(item["answer_present"]) for item in plan["required"]) / len(plan["required"])

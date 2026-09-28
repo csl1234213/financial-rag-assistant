@@ -22,6 +22,11 @@ LLM_CONNECT_TIMEOUT = float(os.getenv("LLM_CONNECT_TIMEOUT", "10"))
 LLM_READ_TIMEOUT = float(os.getenv("LLM_READ_TIMEOUT", "45"))
 LLM_TOTAL_DEADLINE = float(os.getenv("LLM_TOTAL_DEADLINE", "120"))
 LLM_STREAM = os.getenv("LLM_STREAM", "false").lower() == "true"
+LLM_ROUTING_PROVIDER_ALLOWLIST = tuple(
+    provider.strip().casefold()
+    for provider in os.getenv("LLM_ROUTING_PROVIDER_ALLOWLIST", "").split(",")
+    if provider.strip()
+)
 
 # =========================
 # DeepSeek

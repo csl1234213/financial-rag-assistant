@@ -154,9 +154,24 @@ class AgentRuntime:
         inherited_companies: list[str] = []
         if followup_context is not None:
             prior_question, inherited_companies = followup_context
-            resolved_question = (
-                f"{question}\nRelevant prior user request for reference resolution: {prior_question}"
+            inherited_periods = tuple(
+                dict.fromkeys(
+                    (*extract_periods(prior_question), *extract_annual_periods(prior_question))
+                )
             )
+            scope_parts = []
+            if inherited_companies:
+                scope_parts.append(f"company scope: {', '.join(inherited_companies)}")
+            if inherited_periods:
+                scope_parts.append(f"report period scope: {', '.join(inherited_periods)}")
+            if scope_parts:
+                # Carry only resolved entities/periods into retrieval and
+                # grounding. Appending the whole previous question leaks its
+                # old metrics and dimensions into the current fact plan.
+                resolved_question = (
+                    f"{question}\nConversation scope context (resolve omitted references only): "
+                    f"{'; '.join(scope_parts)}."
+                )
         current_companies = extract_companies(question)
 
         if company is None and len(current_companies) == 1:

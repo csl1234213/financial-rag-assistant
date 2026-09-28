@@ -31,7 +31,7 @@ interface ChatWindowProps {
   emptyTitle?: string;
   emptyHint?: string;
   demoQuestions?: DemoQuestion[];
-  onDemoQuestion?: (question: string) => void;
+  onDemoQuestion: (question: string) => void;
 }
 
 export function ChatWindow({
@@ -187,7 +187,7 @@ export function ChatWindow({
                         key={dq.question}
                         type="button"
                         className="chat-landing__demo-chip"
-                        onClick={() => onDemoQuestion?.(dq.question)}
+                        onClick={() => onDemoQuestion(dq.question)}
                       >
                         <Icon name="chat" className="chat-landing__suggestion-icon" />
                         <span>{dq.label}</span>

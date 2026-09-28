@@ -102,7 +102,9 @@ def classify_query_scope(question: str) -> QueryScope:
         and len(extract_companies(query)) >= 2
     ):
         return QueryScope.COMPARE
-    if any(token in query for token in ("risk", "risks", "challenge", "风险", "挑战")):
+    if any(token in query for token in (
+        "risk", "risks", "challenge", "constraints", "constraint", "风险", "挑战", "约束", "限制",
+    )):
         return QueryScope.RISK
     explicit_summary_request = any(token in query for token in (
         "summarize", "summary", "overview", "financial results", "总结", "概述",
@@ -113,8 +115,10 @@ def classify_query_scope(question: str) -> QueryScope:
         "analyze", "analysis", "research", "trend", "what drove",
         "business driver", "business drivers", "growth driver",
         "growth drivers", "reason for growth", "why did", "caused", "driver of",
+        "attributable to", "reason for decline", "reason for decrease", "what caused",
         "drivers of growth", "main drivers of", "key drivers of", "primary drivers of",
         "分析", "研究", "趋势", "驱动因素", "增长动力", "为什么增长", "增长原因", "原因是什么",
+        "归因", "下降原因", "减少原因", "下滑原因", "变化原因",
     )):
         return QueryScope.ANALYSIS
     has_financial_term = any(token in query for token in (

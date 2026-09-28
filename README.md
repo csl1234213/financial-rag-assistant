@@ -14,9 +14,20 @@
 
 ## Project Overview
 
-Financial Agent Runtime Assistant is a **production-grade AI Agent framework** designed for financial document analysis.
+Financial Agent Runtime Assistant is a framework for researching financial documents. It combines intent routing, workflow orchestration, retrieval, and pluggable model providers.
 
-Unlike traditional RAG demos, this project implements a **full Agent Runtime architecture** with Intent Routing, Workflow Orchestration, Layered Execution, and Pluggable Runtime Capabilities.
+### Financial document problems this project targets
+
+Financial reports are not plain prose. Flattening tables into text chunks can separate a metric from its value, unit, period, reporting scope, or page. A user's wording may also differ from the report's row label, causing retrieval to miss data that is present. Finally, a relevant citation does not by itself prove that it supports the answer's company, period, or numeric claim.
+
+The project addresses these failure points along the evidence path:
+
+- Reconstruct statement tables into typed rows with period, unit, reporting scope, and page provenance, while keeping structural verification separate from metric-meaning verification.
+- Map row labels conservatively through a financial metric registry. Uncertain labels remain unmapped; for example, Chinese `货币资金` is not silently treated as `cash and cash equivalents`.
+- Store eligible facts with company, period, scope, and source location so retrieval can audit which observation it selected and detect conflicting values.
+- Route structured financial questions to metric-aware retrieval instead of relying only on text similarity.
+
+The current regression focus is the standard financial statements in the 2025 Guizhou Moutai annual-report sample. This does not establish complete coverage for every issuer, PDF layout, footnote table, or bilingual query. See [Financial RAG problem scope and validation boundaries](docs/FINANCIAL_RAG_PROBLEM_STATEMENT.md).
 
 ### Core Capabilities
 

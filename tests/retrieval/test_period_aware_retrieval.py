@@ -55,6 +55,22 @@ def test_annual_period_parser_does_not_infer_quarters_from_year_only_headers():
     assert not matches_filter(annual_row.content, annual_row.metadata, "period", "Q4_2025")
 
 
+def test_annual_period_parser_accepts_extracted_chinese_report_title_spacing():
+    content = (
+        "贵州茅台酒股份有限公司2025 年年度报告\n"
+        "天健会计师事务所(特殊普通合伙)为本公司出具了标准无保留意见的审计报告。"
+    )
+    metadata = {
+        "quarter": "2025-12-31",
+        "periods": "",
+        "table_context": "",
+    }
+
+    assert extract_annual_periods(content) == ("FY2025",)
+    assert matches_filter(content, metadata, "period", "FY2025")
+    assert not matches_filter(content, metadata, "period", "Q4_2025")
+
+
 def test_metadata_periods_allow_exact_quarter_with_optional_fiscal_marker():
     row = SearchResult(
         document_id="apple-q2-2026",

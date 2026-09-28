@@ -26,6 +26,7 @@ from core.answer_grounding import sanitize_answer  # noqa: E402
 from core.answer_policy import finalize_grounded_answer, no_evidence_response  # noqa: E402
 from core.fact_ledger import FactLedger, canonical_company  # noqa: E402
 from core.financial_grounding import extract_normalized_numbers  # noqa: E402
+from core.query_scope import QueryScope, classify_query_scope  # noqa: E402
 from core.required_fact_plan import RequiredFactSpec, answer_contains_fact  # noqa: E402
 from document_loader import get_company, get_document_period, load_pdf_chunks  # noqa: E402
 from evaluation.replay_formal_100_offline import _main_answer  # noqa: E402
@@ -164,11 +165,21 @@ def run(source: Path, audit_path: Path, output: Path) -> dict[str, Any]:
         if not evidence:
             citationless_answer = no_evidence_response(question)
         finalized = finalize_grounded_answer(question, citationless_answer, evidence)
-        checked = sanitize_answer(
-            question,
-            finalized.answer,
-            finalized.grounded.evidence,
-            require_qualitative_citations=True,
+        # ``finalize_grounded_answer`` is the production boundary.  General
+        # concept questions intentionally bypass filing grounding and keep
+        # explanatory examples (for example ``$100 - $60 = 40%``) as direct
+        # chat.  Re-running those answers through the financial citation gate
+        # would misclassify the examples as unsupported claims and make this
+        # replay disagree with the API contract.
+        checked = (
+            finalized.grounded
+            if classify_query_scope(question) is QueryScope.GENERAL_CONCEPT
+            else sanitize_answer(
+                question,
+                finalized.answer,
+                finalized.grounded.evidence,
+                require_qualitative_citations=True,
+            )
         )
         raw_unsupported = [
             claim for claim in finalized.raw_grounding.claims

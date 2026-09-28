@@ -3,30 +3,43 @@ import {
   deleteJson,
   getAuthorizationHeaders,
   getJson,
+  postJson,
   toApiUrl,
 } from './client';
 import {
   isKnowledgeRecord,
   mapKnowledgeDocument,
+  parseDeleteDocumentResponse,
+  parseDocumentQuota,
+  parseTaskResponse,
+  parseUploadResponse,
+  parseDiscoveryResponse,
 } from './knowledgeContract';
 import { MOCK_DOCUMENTS } from '../types/knowledge';
 import type { KnowledgeDocument } from '../types/knowledge';
+import type {
+  DeleteDocumentResponse,
+  DocumentQuota,
+  TaskResponse,
+  UploadResponse,
+  DiscoveryResponse,
+} from './knowledgeContract';
+export type {
+  DeleteDocumentResponse,
+  DocumentQuota,
+  TaskResponse,
+  UploadResponse,
+  DiscoveryResponse,
+} from './knowledgeContract';
 
 const knowledgeEndpoint = '/v1/knowledge';
 const TASK_POLL_INTERVAL_MS = 4_000;
 const TASK_RATE_LIMIT_RETRY_MS = 6_000;
 const READ_RATE_LIMIT_RETRY_MS = 2_000;
-export interface DocumentQuota {
-  used: number;
-  limit: number;
-  remaining: number;
-  bypassed?: boolean;
-}
-
-async function getKnowledgeJson<TResponse>(path: string): Promise<TResponse> {
+async function getKnowledgeJson(path: string): Promise<unknown> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await getJson<TResponse>(path);
+      return await getJson(path);
     } catch (error: unknown) {
       if (!(error instanceof ApiClientError) || error.status !== 429 || attempt === 2) {
         throw error;
@@ -38,7 +51,8 @@ async function getKnowledgeJson<TResponse>(path: string): Promise<TResponse> {
 }
 
 export function getDocumentQuota(): Promise<DocumentQuota> {
-  return getKnowledgeJson<DocumentQuota>(`${knowledgeEndpoint}/quota`);
+  return getKnowledgeJson(`${knowledgeEndpoint}/quota`)
+    .then(parseDocumentQuota);
 }
 const knowledgeUploadEndpoint = '/v1/upload';
 const taskEndpoint = (taskId: string) => `/v1/tasks/${taskId}`;
@@ -66,29 +80,9 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 
 const isMockEnabled = import.meta.env.VITE_ENABLE_MOCK === 'true';
 
-interface UploadResponse {
-  message: string;
-  file: string;
-  document_id: number;
-  task_id: string;
-  status: string;
-}
-
-interface TaskResponse {
-  id: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
-  progress: number;
-  error: string | null;
-}
-
-interface DeleteDocumentResponse {
-  deleted: boolean;
-  document_id: number;
-}
-
 export async function getDocuments(): Promise<KnowledgeDocument[]> {
   try {
-    const raw = await getKnowledgeJson<unknown>(knowledgeEndpoint);
+    const raw = await getKnowledgeJson(knowledgeEndpoint);
     if (isRecord(raw) && Array.isArray(raw.items)) {
       return raw.items
         .map(mapKnowledgeDocument)
@@ -123,7 +117,9 @@ async function waitForTask(taskId: string): Promise<void> {
   while (Date.now() < deadline) {
     let task: TaskResponse;
     try {
-      task = await getJson<TaskResponse>(taskEndpoint(taskId));
+      task = parseTaskResponse(
+        await getJson(taskEndpoint(taskId)),
+      );
     } catch (error: unknown) {
       // Upload already succeeded at this point. A reverse-proxy 429 while
       // checking task progress is transient and must not be reported as a
@@ -176,11 +172,16 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
     throw new ApiClientError('The API returned an invalid JSON response.', response.status);
   }
 
-  if (!isRecord(payload) || typeof payload.task_id !== 'string') {
-    throw new ApiClientError('The upload response did not include a task id.', response.status, payload);
+  let uploadResponse: UploadResponse;
+  try {
+    uploadResponse = parseUploadResponse(payload);
+  } catch {
+    throw new ApiClientError(
+      'The upload response did not match the expected contract.',
+      response.status,
+      payload,
+    );
   }
-
-  const uploadResponse = payload as unknown as UploadResponse;
   await waitForTask(uploadResponse.task_id);
   return uploadResponse;
 }
@@ -190,10 +191,19 @@ export async function refreshKnowledge(): Promise<KnowledgeDocument[]> {
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await deleteJson<DeleteDocumentResponse>(
+  const payload = await deleteJson(
     `${knowledgeEndpoint}/${encodeURIComponent(documentId)}`,
   );
+  const response: DeleteDocumentResponse = parseDeleteDocumentResponse(payload);
   if (!response.deleted) {
     throw new ApiClientError('The API did not confirm document deletion.');
   }
+}
+
+export async function discoverCompanyDocument(company: string): Promise<DiscoveryResponse> {
+  const payload = await postJson(
+    `${knowledgeEndpoint}/discover`,
+    { company: company.trim() },
+  );
+  return parseDiscoveryResponse(payload);
 }

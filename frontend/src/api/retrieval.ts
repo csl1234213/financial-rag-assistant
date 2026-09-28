@@ -1,5 +1,9 @@
 import { ApiClientError, toApiUrl } from './client';
 import type { RetrievalChunk, RetrievalMetrics, RetrievalResponse } from '../types/api';
+import {
+  parseRetrievalResponse,
+  type RawApiResponse,
+} from './retrievalContract';
 
 const retrievalQueryEndpoint = '/v1/retrieval/query';
 
@@ -13,7 +17,7 @@ function parseJson(text: string): unknown | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -25,24 +29,6 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 }
 
 const isMockEnabled = import.meta.env.VITE_ENABLE_MOCK === 'true';
-
-interface RawApiChunk {
-  content: string;
-  metadata?: Record<string, unknown>;
-  score: number;
-}
-
-interface RawApiMetrics {
-  latency?: number;
-  latency_ms?: number;
-  retriever_type?: string;
-}
-
-interface RawApiResponse {
-  query?: string;
-  chunks?: RawApiChunk[];
-  metrics?: RawApiMetrics;
-}
 
 function mapApiResponse(raw: RawApiResponse, query: string): RetrievalResponse {
   const chunks: RetrievalChunk[] = (raw.chunks ?? []).map((c) => ({
@@ -152,7 +138,7 @@ export async function queryRetrieval(
       throw new ApiClientError('The API returned an invalid JSON response.', response.status);
     }
 
-    return mapApiResponse(payload as RawApiResponse, query);
+    return mapApiResponse(parseRetrievalResponse(payload), query);
   } catch (err) {
     if (isMockEnabled) {
       return generateMockResults(query);

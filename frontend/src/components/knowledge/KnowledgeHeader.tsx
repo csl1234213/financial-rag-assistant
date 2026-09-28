@@ -5,8 +5,8 @@ interface KnowledgeHeaderProps {
   indexedCount: number;
   processingCount: number;
   failedCount: number;
-  onRefresh?: () => void;
-  refreshing?: boolean;
+  onRefresh: () => void;
+  refreshing: boolean;
 }
 
 export function KnowledgeHeader({
@@ -15,7 +15,7 @@ export function KnowledgeHeader({
   processingCount,
   failedCount,
   onRefresh,
-  refreshing = false,
+  refreshing,
 }: KnowledgeHeaderProps) {
   const { t } = useLanguage();
 
@@ -24,21 +24,19 @@ export function KnowledgeHeader({
       <div className="knowledge-header__titles">
         <div className="knowledge-header__title-row">
           <h1 className="knowledge-header__title">{t.knowledge.title}</h1>
-          {onRefresh && (
-            <button
-              type="button"
-              className={`knowledge-header__refresh ${refreshing ? 'knowledge-header__refresh--spinning' : ''}`}
-              onClick={onRefresh}
-              disabled={refreshing}
-              title={t.knowledge.refreshTitle}
-              aria-label={t.knowledge.refreshTitle}
-            >
-              <span className="knowledge-header__refresh-icon" aria-hidden="true">
-                &#x21BB;
-              </span>
-              {refreshing ? t.knowledge.refreshing : t.knowledge.refresh}
-            </button>
-          )}
+          <button
+            type="button"
+            className={`knowledge-header__refresh ${refreshing ? 'knowledge-header__refresh--spinning' : ''}`}
+            onClick={onRefresh}
+            disabled={refreshing}
+            title={t.knowledge.refreshTitle}
+            aria-label={t.knowledge.refreshTitle}
+          >
+            <span className="knowledge-header__refresh-icon" aria-hidden="true">
+              &#x21BB;
+            </span>
+            {refreshing ? t.knowledge.refreshing : t.knowledge.refresh}
+          </button>
         </div>
         <p className="knowledge-header__subtitle">{t.knowledge.subtitle}</p>
       </div>

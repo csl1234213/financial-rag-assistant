@@ -2,7 +2,6 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import type { DocumentStatus } from '../../types/knowledge';
 
 interface DocumentCardProps {
-  id: string;
   filename: string;
   company: string;
   pages: number;
@@ -12,7 +11,8 @@ interface DocumentCardProps {
   period?: string;
   chunkCount?: number;
   contentSha256?: string;
-  onClick?: (id: string) => void;
+  sourceUrl?: string;
+  sourceType?: 'sec_edgar' | 'cninfo';
   onDelete?: () => void;
   deleting?: boolean;
 }
@@ -32,7 +32,6 @@ function formatDate(iso: string, language: 'en' | 'zh-CN'): string {
 }
 
 export function DocumentCard({
-  id,
   filename,
   company,
   pages,
@@ -42,30 +41,17 @@ export function DocumentCard({
   period,
   chunkCount,
   contentSha256,
-  onClick,
+  sourceUrl,
+  sourceType,
   onDelete,
   deleting = false,
 }: DocumentCardProps) {
   const { language, t } = useLanguage();
   const fileType = filename.split('.').at(-1)?.toUpperCase().slice(0, 4) || 'FILE';
-  const interactiveProps = onClick
-    ? {
-        onClick: () => onClick(id),
-        role: 'button',
-        tabIndex: 0,
-        onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onClick(id);
-          }
-        },
-      }
-    : {};
 
   return (
     <article
       className="doc-card"
-      {...interactiveProps}
     >
       <div className="doc-card__icon">
         <span className="doc-card__icon-text">{fileType}</span>
@@ -152,6 +138,18 @@ export function DocumentCard({
         {contentSha256 && (
           <div className="doc-card__checksum" title={contentSha256}>
             {t.knowledge.checksum}: {contentSha256.slice(0, 12)}
+          </div>
+        )}
+        {sourceUrl && (
+          <div className="doc-card__source">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {sourceType === 'cninfo' ? t.knowledge.viewCninfoSource : t.knowledge.viewSource}
+            </a>
           </div>
         )}
       </div>

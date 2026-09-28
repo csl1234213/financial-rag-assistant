@@ -29,6 +29,109 @@ def test_supported_numeric_claim_is_retained() -> None:
     assert result.claims[0].disposition == "SUPPORTED"
 
 
+def test_chinese_annual_revenue_claim_uses_fy_period_instead_of_report_date_metadata() -> None:
+    evidence = Evidence(
+        content=(
+            "贵州茅台酒股份有限公司2025年年度报告。2025年度，贵州茅台公司的营业收入"
+            "为人民币16,883,810.25万元。其中主营业务收入为人民币16,877,458.52万元，"
+            "占营业收入的99.96%。"
+        ),
+        source="贵州茅台_2025年度报告.pdf",
+        company="贵州茅台",
+        metadata={
+            "chunk_id": "moutai-fy2025-revenue",
+            "quarter": "2025-12-31",
+            "page": 6,
+            "metrics": "revenue",
+        },
+    )
+    result = sanitize_answer(
+        "贵州茅台2025年度营业收入是多少？",
+        "贵州茅台2025年度营业收入为人民币16,883,810.25万元 [Evidence 1]。",
+        [evidence],
+    )
+
+    assert "16,883,810.25万元" in result.answer
+    assert "证据不足" not in result.answer
+    assert result.claims[0].disposition == "SUPPORTED"
+
+
+def test_main_business_revenue_is_not_duplicated_as_consolidated_revenue() -> None:
+    from core.fact_ledger import FactLedger
+
+    evidence = Evidence(
+        content=(
+            "2025年度，贵州茅台公司的营业收入为人民币16,883,810.25万元。"
+            "其中主营业务收入为人民币16,877,458.52万元，占营业收入的99.96%。"
+        ),
+        source="贵州茅台_2025年度报告.pdf",
+        company="贵州茅台",
+        metadata={"chunk_id": "moutai-fy2025-revenue", "quarter": "FY2025"},
+    )
+    ledger = FactLedger.from_evidence([evidence])
+
+    assert [fact.normalized_value for fact in ledger.lookup(metric_id="revenue")] == [
+        168_838_102_500
+    ]
+    assert [
+        fact.normalized_value
+        for fact in ledger.lookup(metric_id="main_business_revenue")
+    ] == [168_774_585_200]
+
+
+def test_guizhou_moutai_alias_enforces_company_scope() -> None:
+    from agent.planning.entity_extractor import extract_companies
+    from core.citation_gate import filter_evidence_for_query
+
+    question = "贵州茅台2025年度营业收入是多少？"
+    target = _evidence(
+        "贵州茅台2025年度营业收入为人民币16,883,810.25万元。",
+        company="贵州茅台",
+        period="FY2025",
+    )
+    unrelated = _evidence(
+        "苹果公司2025年度营业收入为人民币1元。",
+        company="Apple",
+        period="FY2025",
+    )
+
+    assert extract_companies(question) == ["贵州茅台"]
+    accepted = filter_evidence_for_query(question, [target, unrelated])
+    assert [item.company for item in accepted] == ["贵州茅台"]
+
+
+def test_chinese_iphone_category_claim_matches_filing_native_structured_row() -> None:
+    from pathlib import Path
+
+    from document_loader import get_document_period, load_pdf_chunks
+
+    source = Path(__file__).resolve().parents[2] / "demo" / "documents" / "Apple_sample.pdf"
+    chunks = load_pdf_chunks(source, ocr_enabled=False)
+    chunk = next(chunk for chunk in chunks if "Metric: iPhone®" in str(chunk.text or ""))
+    result = sanitize_answer(
+        "总结苹果公司 2026 年第二季度的财务表现。",
+        "苹果 Q2 FY2026 iPhone收入: 56.994 billion USD [Evidence 1].",
+        [
+            Evidence(
+                content=str(chunk.text or ""),
+                source=source.name,
+                company="Apple",
+                metadata={
+                    "chunk_id": "apple-iphone",
+                    "quarter": get_document_period(chunks),
+                    "periods": get_document_period(chunks),
+                    "metrics": "iphone_revenue",
+                    "content_type": chunk.content_type,
+                    "table_context": str(getattr(chunk, "table_context", "") or ""),
+                },
+            )
+        ],
+    )
+
+    assert "56.994 billion" in result.answer
+    assert result.unsupported_count == 0
+
+
 def test_derived_numeric_claim_cites_only_operand_sources_not_the_whole_context() -> None:
     result = sanitize_answer(
         "How did NVIDIA revenue grow from Q1 FY2026 to Q1 FY2027?",
@@ -72,6 +175,105 @@ def test_total_revenue_cannot_answer_data_center_performance_question() -> None:
     )
     assert "$75.2 billion" in correct_metric.answer
     assert correct_metric.unsupported_count == 0
+
+
+def test_company_heading_context_blocks_wrong_issuer_numeric_bullet() -> None:
+    """An implicit Apple bullet must not borrow Tesla's cited value."""
+
+    rows = [
+        _evidence(
+            "Apple Q2 FY2026 net sales were $111.184 billion USD.",
+            company="Apple",
+            period="Q2_FY2026",
+        ),
+        _evidence(
+            "Tesla Q4 2025 total quarterly revenue decreased 3% YoY to $24.9B.",
+            company="Tesla",
+            period="Q4_2025",
+        ),
+    ]
+    result = sanitize_answer(
+        "Which of Apple, NVIDIA and Tesla reports the strongest growth narrative?",
+        "### 2. Apple: Moderate growth\n"
+        "Revenue declined 3% YoY to $24.9B [Evidence 2].",
+        rows,
+        require_qualitative_citations=True,
+    )
+
+    assert "$24.9B" not in result.answer
+    assert result.unsupported_count >= 1
+
+
+def test_growth_ranking_inference_requires_growth_evidence_for_every_issuer() -> None:
+    rows = [
+        _evidence(
+            "Apple Q2 FY2026 Services net sales increased due to higher advertising and App Store sales.",
+            company="Apple",
+            period="Q2_FY2026",
+            metrics="revenue",
+        ),
+        _evidence(
+            "NVIDIA Q1 FY2027 revenue was $81.6 billion, up 85% year over year. "
+            "The buildout of AI factories is accelerating at extraordinary speed.",
+            company="NVIDIA",
+            period="Q1_FY2027",
+            metrics="revenue",
+        ),
+        _evidence(
+            "Tesla Q4 2025 total revenue decreased 3% YoY due to lower vehicle deliveries.",
+            company="Tesla",
+            period="Q4_2025",
+            metrics="revenue",
+        ),
+    ]
+    result = sanitize_answer(
+        "Which of Apple, NVIDIA and Tesla reports the strongest growth narrative?",
+        "NVIDIA reports the strongest growth narrative. [Evidence 2].",
+        rows,
+        require_qualitative_citations=True,
+    )
+
+    assert "strongest growth narrative" in result.answer.casefold()
+    assert result.unsupported_count == 0
+    assert result.answer.count("[Evidence") >= 3
+
+
+def test_growth_ranking_rescue_does_not_validate_long_period_mixed_paragraph() -> None:
+    rows = [
+        _evidence(
+            "Apple Q2 FY2026 Services net sales increased due to higher advertising and App Store sales.",
+            company="Apple",
+            period="Q2_FY2026",
+            metrics="revenue",
+        ),
+        _evidence(
+            "NVIDIA Q1 FY2027 revenue was $81.6 billion, up 85% year over year. "
+            "The buildout of AI factories is accelerating at extraordinary speed.",
+            company="NVIDIA",
+            period="Q1_FY2027",
+            metrics="revenue",
+        ),
+        _evidence(
+            "Tesla Q4 2025 total revenue decreased 3% YoY due to lower vehicle deliveries.",
+            company="Tesla",
+            period="Q4_2025",
+            metrics="revenue",
+        ),
+    ]
+    result = sanitize_answer(
+        "Which of Apple, NVIDIA and Tesla reports the strongest growth narrative?",
+        (
+            "Based on filings through early 2024, NVIDIA reports the strongest growth "
+            "narrative by a wide margin, with an AI transformation and explosive results. "
+            "[Evidence 1] [Evidence 2] [Evidence 3]"
+        ),
+        rows,
+        require_qualitative_citations=True,
+    )
+
+    assert "through early 2024" not in result.answer
+    assert "explosive results" not in result.answer
+    assert result.unsupported_count >= 1
 
 
 def test_query_metric_scope_allows_separate_metrics_in_comparison_questions() -> None:
@@ -118,6 +320,28 @@ def test_repeated_chinese_qualitative_refusals_are_compacted() -> None:
 
     assert result.answer.count("所引财报证据不足以支持该表述。") == 1
     assert result.unsupported_count == 2
+
+
+def test_product_identifier_in_qualitative_risk_claim_is_not_numeric_refusal() -> None:
+    result = sanitize_answer(
+        "What risks or challenges are mentioned in Tesla's Q2 2025 report?",
+        "Tesla faces supply-chain challenges caused by trade barriers and tariff risks, "
+        "including battery packs with 4680 cells [Evidence 1].",
+        [
+            _evidence(
+                "Tesla faces supply-chain challenges caused by trade barriers and tariff risks, "
+                "including battery packs with 4680 cells.",
+                company="Tesla",
+                period="Q2_2025",
+                metrics="",
+            )
+        ],
+        require_qualitative_citations=True,
+    )
+
+    assert "4680 cells" in result.answer
+    assert "Insufficient evidence to support this numeric claim." not in result.answer
+    assert result.unsupported_count == 0
 
 
 def test_wrong_period_cannot_support_claim() -> None:
@@ -526,4 +750,31 @@ def test_multi_metric_prose_is_rejected_when_one_metric_lacks_matching_evidence(
 
     assert "Revenue increased and gross margin improved" not in result.answer
     assert "[Evidence" not in result.answer
+    assert result.unsupported_count == 1
+
+
+def test_headerless_comparative_financial_table_requires_periods_on_each_row() -> None:
+    row = _evidence(
+        "Q4-2024 Q1-2025 Q2-2025 Q3-2025 Q4-2025 YoY\n"
+        "Total automotive revenues 19,798 13,967 16,661 21,205 17,693 -11%",
+        company="Tesla",
+        period="Q4_2025",
+        metrics="revenue",
+    )
+    row.metadata["periods"] = "Q4_2024|Q1_2025|Q2_2025|Q3_2025|Q4_2025"
+    row.metadata["table_context"] = (
+        "(USD in millions); Q4-2024 Q1-2025 Q2-2025 Q3-2025 Q4-2025 YoY"
+    )
+    row.metadata["content_type"] = "table"
+
+    result = sanitize_answer(
+        "Tesla Q1 2025 revenue growth trend?",
+        "| Automotive revenue | $19,798 million | $13,967 million | "
+        "-$5,831 million, -29.5% | [Evidence 1]",
+        [row],
+    )
+
+    assert "$19,798 million" not in result.answer
+    assert "$13,967 million" not in result.answer
+    assert "-29.5%" not in result.answer
     assert result.unsupported_count == 1

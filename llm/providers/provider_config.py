@@ -6,6 +6,29 @@
 # ============================================================
 
 from dataclasses import dataclass
+from math import ceil
+
+
+def timeout_budget_for_provider(
+    provider: str,
+    *,
+    timeout: int,
+    read_timeout: float | None,
+    total_deadline: float | None,
+) -> tuple[int, float | None]:
+    """Keep local Ollama inference bounded by, but not shorter than, the request deadline.
+
+    Global HTTP defaults are tuned for remote APIs (60s total / 45s read),
+    while a local model may need longer for prompt evaluation and generation.
+    The absolute request deadline remains the hard ceiling in the adapter.
+    """
+    if provider.casefold() != "ollama" or not total_deadline or total_deadline <= 0:
+        return timeout, read_timeout
+    deadline_budget = float(total_deadline)
+    return (
+        max(timeout, ceil(deadline_budget)),
+        max(float(read_timeout or timeout), deadline_budget),
+    )
 
 
 @dataclass(slots=True)

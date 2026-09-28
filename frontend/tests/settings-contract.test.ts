@@ -12,6 +12,17 @@ test('parses the supported provider settings response', () => {
   const response = parseLLMSettingsResponse({
     providers: [
       {
+        provider: 'ollama',
+        display_name: '本地模型（Ollama）',
+        configured: false,
+        is_default: false,
+        key_hint: null,
+        model: '',
+        base_url: 'http://host.docker.internal:11434',
+        models: [],
+        updated_at: null,
+      },
+      {
         provider: 'deepseek',
         display_name: 'DeepSeek',
         configured: true,
@@ -79,13 +90,13 @@ test('parses the supported provider settings response', () => {
     default_provider: 'deepseek',
   });
 
-  assert.equal(response.providers.length, 5);
-  assert.equal(response.providers[0].provider, 'deepseek');
-  assert.deepEqual(response.providers[0].models, [
+  assert.equal(response.providers.length, 6);
+  assert.equal(response.providers[1].provider, 'deepseek');
+  assert.deepEqual(response.providers[1].models, [
     'deepseek-v4-flash',
     'deepseek-v4-pro',
   ]);
-  assert.equal(response.providers[1].configured, false);
+  assert.equal(response.providers[2].configured, false);
   assert.equal(response.default_provider, 'deepseek');
 });
 
@@ -120,6 +131,10 @@ test('creates the exact provider update request without empty model values', () 
   assert.deepEqual(
     createProviderSettingsRequest('', 'deepseek-v4-pro'),
     { model: 'deepseek-v4-pro' },
+  );
+  assert.deepEqual(
+    createProviderSettingsRequest('', 'qwen3.8:latest', 'http://host.docker.internal:11434'),
+    { model: 'qwen3.8:latest', base_url: 'http://host.docker.internal:11434' },
   );
 });
 

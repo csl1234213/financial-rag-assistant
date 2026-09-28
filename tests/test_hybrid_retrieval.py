@@ -7,6 +7,9 @@ from agent.execution_plan import StepType
 from agent.planning import PlanningContext
 from agent.planning.entity_extractor import extract_companies, prior_user_context_for_followup
 from agent.query_planner import QueryPlanner
+from agent.reasoning_models import Evidence
+from core.fact_ledger import FactLedger
+from core.required_fact_plan import infer_required_fact_plan
 from core.retrieval_tool_adapter import TenantRetrievalToolExecutor
 from document_loader import (
     chunk_document,
@@ -139,6 +142,53 @@ def test_hybrid_rrf_combines_vector_and_bm25_ranks():
     assert store.lexical_calls == [7]
 
 
+def test_auditor_question_adds_targeted_lexical_evidence_queries():
+    auditor = _result(
+        "moutai-annual-report",
+        "auditor-page-2",
+        0.2,
+        "贵州茅台2025年度财务报表由天健会计师事务所（特殊普通合伙）审计；审计意见为标准无保留意见。",
+        company="贵州茅台",
+        page=2,
+    )
+    opinion = _result(
+        "moutai-annual-report",
+        "opinion-page-53",
+        0.99,
+        "审计报告认为财务报表在所有重大方面按照企业会计准则编制并公允反映。",
+        company="贵州茅台",
+        page=53,
+    )
+    non_unqualified = _result(
+        "moutai-annual-report",
+        "non-unqualified-page-56",
+        1.0,
+        "天健会计师事务所可能发表非无保留意见。",
+        company="贵州茅台",
+        page=56,
+    )
+    store = _HybridStore(
+        vectors={7: [non_unqualified, opinion, auditor]},
+        corpora={7: [non_unqualified, opinion, auditor]},
+    )
+
+    results = HybridRetriever(_EmbeddingModel()).retrieve(
+        RetrievalContext(
+            question="贵州茅台2025年度财务报表由哪家会计师事务所审计？审计意见是什么？",
+            company="贵州茅台",
+            tenant_id=7,
+            top_k=3,
+        ),
+        store,
+    )
+
+    assert {result.chunk_id for result in results} == {
+        "auditor-page-2", "opinion-page-53", "non-unqualified-page-56"
+    }
+    assert results[0].chunk_id == "auditor-page-2"
+    assert any("特殊普通合伙" in result.content for result in results)
+
+
 def test_tesla_margin_followup_inherits_period_and_excludes_other_issuers():
     followup = "What did it say about margins?"
     history = [
@@ -189,7 +239,7 @@ def test_tesla_margin_followup_inherits_period_and_excludes_other_issuers():
             filters=retrieval_step.parameters["filters"],
             tenant_id=7,
             include_public=True,
-            top_k=6,
+            top_k=3,
         ),
         store,
     )
@@ -645,6 +695,88 @@ def test_comparison_rerank_reserves_slot_for_authoritative_revenue_table():
     assert nvidia in results
 
 
+def test_bilingual_revenue_comparison_promotes_period_mapped_table_rows():
+    """Chinese and English revenue comparisons must share table coverage."""
+
+    tesla_narrative = _result(
+        "tesla-q2",
+        "tesla-narrative",
+        0.01,
+        "Tesla quarterly revenue performance and outlook discussion.",
+        company="Tesla",
+        tenant_id=0,
+    )
+    tesla_table = _result(
+        "tesla_q2_2025",
+        "tesla-q2-revenue-table",
+        0.90,
+        (
+            "Structured financial table row | Metric: Total revenues | "
+            "Q4-2024: 25,707 | Q1-2025: 19,335 | Q2-2025: 22,496 | Q4-2025: 24,901"
+        ),
+        company="Tesla",
+        tenant_id=0,
+        quarter="Q4_2025",
+        periods="Q4_2024|Q1_2025|Q2_2025|Q4_2025",
+        table_context="Comparative columns: Q4-2024 | Q1-2025 | Q2-2025 | Q4-2025",
+        content_type="table",
+    )
+    nvidia = _result(
+        "nvidia_q1_fy2027",
+        "nvidia-revenue",
+        0.02,
+        "NVIDIA Q1 FY2027 revenue was $81.6 billion.",
+        company="NVIDIA",
+        tenant_id=0,
+        quarter="Q1_FY2027",
+        periods="Q1_FY2027",
+        metrics="revenue",
+    )
+    distractors = [
+        _result(
+            "tesla-q2",
+            f"tesla-distractor-{index}",
+            0.01 + index * 0.001,
+            f"Tesla quarterly business discussion and outlook note {index}.",
+            company="Tesla",
+            tenant_id=0,
+        )
+        for index in range(12)
+    ]
+    corpus = [tesla_narrative, *distractors, tesla_table, nvidia]
+    store = _HybridStore(vectors={0: corpus}, corpora={0: corpus})
+    retriever = HybridRetriever(_EmbeddingModel())
+
+    for question in (
+        "Compare Tesla and NVIDIA revenue performance.",
+        "\u6bd4\u8f83\u7279\u65af\u62c9\u548c\u82f1\u4f1f\u8fbe\u7684\u8425\u6536\u8868\u73b0\u3002",
+    ):
+        ranked = retriever.retrieve(
+            RetrievalContext(question=question, tenant_id=0, top_k=2),
+            store,
+        )
+        assert {item.chunk_id for item in ranked} == {
+            "tesla-q2-revenue-table",
+            "nvidia-revenue",
+        }
+        evidence = [
+            Evidence(
+                content=item.content,
+                source=str(item.metadata.get("source", "")),
+                company=str(item.metadata.get("company", "")),
+                confidence=item.score,
+                metadata={**item.metadata, "document_id": item.document_id, "chunk_id": item.chunk_id},
+            )
+            for item in ranked
+        ]
+        ledger = FactLedger.from_evidence(evidence)
+        plan = infer_required_fact_plan(question, evidence, ledger)
+        assert [(spec.company, spec.period) for spec in plan.required] == [
+            ("tesla", "Q2_2025"),
+            ("nvidia", "Q1_FY2027"),
+        ]
+
+
 def test_segment_summary_retrieval_keeps_distinct_segment_evidence():
     generic = [
         _result(
@@ -692,6 +824,77 @@ def test_segment_summary_retrieval_keeps_distinct_segment_evidence():
     )
 
     assert {"data-center-segment", "edge-segment"} <= {
+        item.chunk_id for item in ranked
+    }
+
+
+def test_segment_comparison_recovers_product_service_rows_with_generic_pdf_sections():
+    """Apple-style disaggregated rows must not be lost to generic section labels."""
+
+    apple_products = _result(
+        "apple-q2",
+        "apple-products",
+        0.01,
+        "Structured financial table row | Resolved financial label: Products net sales | "
+        "Q2 FY2026: 80,208 million USD",
+        company="Apple",
+        tenant_id=0,
+        quarter="Q2_FY2026",
+        section="Three Months Ended Six Months Ended",
+    )
+    apple_services = _result(
+        "apple-q2",
+        "apple-services",
+        0.01,
+        "Structured financial table row | Resolved financial label: Services net sales | "
+        "Q2 FY2026: 30,976 million USD",
+        company="Apple",
+        tenant_id=0,
+        quarter="Q2_FY2026",
+        section="Three Months Ended Six Months Ended",
+    )
+    data_center = _result(
+        "nvidia-q1",
+        "nvidia-data-center",
+        0.01,
+        "Data Center\n\nFirst-quarter revenue was a record $75.2 billion.",
+        company="NVIDIA",
+        tenant_id=0,
+        quarter="Q1_FY2027",
+        section="Data Center",
+    )
+    edge = _result(
+        "nvidia-q1",
+        "nvidia-edge",
+        0.01,
+        "Edge Computing\n\nFirst-quarter revenue was $6.4 billion.",
+        company="NVIDIA",
+        tenant_id=0,
+        quarter="Q1_FY2027",
+        section="Edge Computing",
+    )
+    generic = _result(
+        "nvidia-q1",
+        "nvidia-generic",
+        0.99,
+        "NVIDIA consolidated financial statement discussion.",
+        company="NVIDIA",
+        tenant_id=0,
+        quarter="Q1_FY2027",
+    )
+    corpus = [generic, apple_products, apple_services, data_center, edge]
+    store = _HybridStore(vectors={0: [generic]}, corpora={0: corpus})
+
+    ranked = HybridRetriever(_EmbeddingModel()).retrieve(
+        RetrievalContext(
+            question="比较苹果和英伟达财报中涉及的主要业务板块。",
+            top_k=6,
+            tenant_id=0,
+        ),
+        store,
+    )
+
+    assert {"apple-products", "apple-services", "nvidia-data-center", "nvidia-edge"} <= {
         item.chunk_id for item in ranked
     }
 
@@ -746,6 +949,61 @@ def test_growth_driver_retrieval_prefers_reported_commentary_over_safe_harbor():
         )
 
         assert "reported-drivers" in {item.chunk_id for item in ranked}
+
+
+def test_growth_narrative_comparison_reserves_reported_evidence_for_each_company():
+    apple = _result(
+        "apple-q2",
+        "apple-growth",
+        0.20,
+        "Apple total net sales increased 17% year over year, with Services growth driven by advertising, the App Store, and cloud services.",
+        company="Apple",
+        tenant_id=0,
+    )
+    nvidia = _result(
+        "nvidia-q1",
+        "nvidia-growth",
+        0.30,
+        "NVIDIA revenue grew 69% year over year, driven by strong Data Center demand and AI factory buildout.",
+        company="NVIDIA",
+        tenant_id=0,
+    )
+    tesla = _result(
+        "tesla-q2",
+        "tesla-growth",
+        0.40,
+        "Tesla total revenue declined 3% year over year, while energy storage growth provided a positive offset.",
+        company="Tesla",
+        tenant_id=0,
+    )
+    # Include a high-scoring generic statement row to prove narrative coverage
+    # is not lost to one issuer's semantic match.
+    generic = _result(
+        "apple-q2",
+        "apple-generic",
+        0.01,
+        "Apple certification and filing information.",
+        company="Apple",
+        tenant_id=0,
+    )
+    corpus = [apple, nvidia, tesla, generic]
+    store = _HybridStore(vectors={0: corpus}, corpora={0: corpus})
+
+    ranked = HybridRetriever(_EmbeddingModel()).retrieve(
+        RetrievalContext(
+            question=(
+                "Which of Apple, NVIDIA and Tesla reports the strongest growth "
+                "narrative? Support the comparison with sources."
+            ),
+            tenant_id=0,
+            top_k=3,
+        ),
+        store,
+    )
+
+    retrieved = {item.chunk_id for item in ranked}
+    assert {"apple-growth", "nvidia-growth", "tesla-growth"} <= retrieved
+    assert "apple-generic" not in retrieved
 
 
 def test_nvidia_growth_driver_followup_retrieves_reported_commentary():
@@ -1852,6 +2110,55 @@ def test_canonical_tesla_pdf_retrieval_keeps_q2_2025_margin_rows_offline():
         )
         context = "\n".join(item.content for item in ranked)
         assert "17.2%" in context and "4.1%" in context, [
+            item.chunk_id for item in ranked
+        ]
+
+
+def test_canonical_tesla_pdf_retrieval_keeps_q2_2025_free_cash_flow_row_offline():
+    """Flattened verified summary rows must still expose the Q2 FCF cell."""
+
+    path = "demo/documents/Tesla_sample.pdf"
+    chunks = load_pdf_chunks(path, ocr_enabled=False)
+    corpus = [
+        _result(
+            "tesla_fy2025",
+            f"tesla-fcf-{index}",
+            0.9 - index * 0.0001,
+            chunk.text,
+            company=get_company(path),
+            tenant_id=7,
+            source=path.rsplit("/", maxsplit=1)[-1],
+            section=chunk.section,
+            page=chunk.page,
+            table_context=getattr(chunk, "table_context", ""),
+            content_type=chunk.content_type,
+            periods="|".join(
+                extract_periods(
+                    f"{getattr(chunk, 'table_context', '')}\n{chunk.text}"
+                )
+            ),
+            metrics="|".join(extract_metrics(chunk.text)),
+            quarter="Q4_FY2025",
+        )
+        for index, chunk in enumerate(chunks)
+    ]
+    store = _HybridStore(vectors={7: corpus}, corpora={7: corpus})
+
+    for question in (
+        "What was Tesla's free cash flow in Q2 2025?",
+        "特斯拉 2025 年第二季度的自由现金流是多少？",
+    ):
+        ranked = HybridRetriever(_EmbeddingModel()).retrieve(
+            RetrievalContext(
+                question=question,
+                company="Tesla",
+                top_k=4,
+                tenant_id=7,
+            ),
+            store,
+        )
+        context = "\n".join(item.content for item in ranked)
+        assert "Free cash flow" in context and "2,034 664 146" in context, [
             item.chunk_id for item in ranked
         ]
 

@@ -86,6 +86,37 @@ def _fake_run_agent_empty(question, company=None, **_request_scope):
 
 @pytest.mark.integration
 class TestChatAPI:
+    def test_chat_forwards_selected_answer_language(self, client):
+        observed = {}
+
+        def fake_run_agent(question, company=None, **request_scope):
+            observed.update(request_scope)
+            return _fake_agent_result(
+                answer="Revenue was CNY 168.84 billion.",
+                citations=[],
+                research_mode="default",
+                intent="SINGLE_COMPANY",
+                companies=["贵州茅台"],
+                strategy="rag",
+                workflow="rag",
+            )
+
+        with patch("api.services.chat_service.run_agent", side_effect=fake_run_agent):
+            response = client.post(
+                "/api/v1/chat",
+                json={"question": "贵州茅台2025年营收是多少？", "answer_language": "en"},
+            )
+
+        assert response.status_code == 200
+        assert observed["answer_language"] == "en"
+
+    def test_chat_rejects_unknown_answer_language(self, client):
+        response = client.post(
+            "/api/v1/chat",
+            json={"question": "What is revenue?", "answer_language": "fr"},
+        )
+        assert response.status_code == 422
+
     def test_chat_normal_question(self, client):
         with patch(
             "api.services.chat_service.run_agent",

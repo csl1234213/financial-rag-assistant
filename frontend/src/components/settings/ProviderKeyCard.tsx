@@ -5,12 +5,10 @@ import type { LLMProvider, ProviderSettings } from '../../types/settings';
 type Feedback =
   | 'saved'
   | 'cleared'
-  | 'selected'
   | 'save-error'
   | 'clear-error'
-  | 'select-error'
   | null;
-type Operation = 'saving' | 'clearing' | 'selecting' | null;
+type Operation = 'saving' | 'clearing' | null;
 
 interface ProviderKeyCardProps {
   settings: ProviderSettings;
@@ -18,9 +16,9 @@ interface ProviderKeyCardProps {
     provider: LLMProvider,
     apiKey: string,
     model: string,
+    baseUrl?: string,
   ) => Promise<void>;
   onClear: (provider: LLMProvider) => Promise<void>;
-  onSetDefault: (provider: LLMProvider) => Promise<void>;
 }
 
 function formatKeyHint(keyHint: string | null): string | null {
@@ -46,11 +44,11 @@ export function ProviderKeyCard({
   settings,
   onSave,
   onClear,
-  onSetDefault,
 }: ProviderKeyCardProps) {
   const { language, t } = useLanguage();
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState(settings.model);
+  const [baseUrl, setBaseUrl] = useState(settings.base_url ?? '');
   const [operation, setOperation] = useState<Operation>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -59,34 +57,29 @@ export function ProviderKeyCard({
     setModel(settings.model);
   }, [settings.model]);
 
+  useEffect(() => {
+    setBaseUrl(settings.base_url ?? '');
+  }, [settings.base_url]);
+
+  const isLocalModel = settings.provider === 'ollama';
+
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const localChanged = isLocalModel
+      && (!settings.configured
+        || model !== settings.model
+        || baseUrl !== (settings.base_url ?? ''));
     const modelChanged = settings.configured && model !== settings.model;
-    if ((!apiKey.trim() && !modelChanged) || operation) return;
+    if ((!apiKey.trim() && !modelChanged && !localChanged) || operation) return;
 
     setOperation('saving');
     setFeedback(null);
     try {
-      await onSave(settings.provider, apiKey, model);
+      await onSave(settings.provider, apiKey, model, baseUrl);
       setApiKey('');
       setFeedback('saved');
     } catch {
       setFeedback('save-error');
-    } finally {
-      setOperation(null);
-    }
-  };
-
-  const handleSetDefault = async () => {
-    if (operation || !settings.configured || settings.is_default) return;
-
-    setOperation('selecting');
-    setFeedback(null);
-    try {
-      await onSetDefault(settings.provider);
-      setFeedback('selected');
-    } catch {
-      setFeedback('select-error');
     } finally {
       setOperation(null);
     }
@@ -122,17 +115,19 @@ export function ProviderKeyCard({
     ? t.settings.saved
     : feedback === 'cleared'
       ? t.settings.cleared
-      : feedback === 'selected'
-        ? t.settings.defaultSelected
       : feedback === 'save-error'
         ? t.settings.saveError
         : feedback === 'clear-error'
           ? t.settings.clearError
-          : feedback === 'select-error'
-            ? t.settings.defaultError
           : null;
   const canSave = Boolean(
-    apiKey.trim() || (settings.configured && model !== settings.model),
+    isLocalModel
+      ? model.trim()
+        && baseUrl.trim()
+        && (!settings.configured
+          || model !== settings.model
+          || baseUrl !== (settings.base_url ?? ''))
+      : apiKey.trim() || (settings.configured && model !== settings.model),
   );
 
   return (
@@ -163,8 +158,8 @@ export function ProviderKeyCard({
 
       <dl className="provider-card__metadata">
         <div>
-          <dt>{t.settings.keyHint}</dt>
-          <dd>{keyHint ?? '—'}</dd>
+          <dt>{isLocalModel ? t.settings.localEndpointLabel : t.settings.keyHint}</dt>
+          <dd>{isLocalModel ? (settings.base_url ?? '—') : (keyHint ?? '—')}</dd>
         </div>
         <div>
           <dt>{t.settings.updatedAt}</dt>
@@ -173,42 +168,79 @@ export function ProviderKeyCard({
       </dl>
 
       <form className="provider-card__form" onSubmit={handleSave}>
-        <label className="settings-field">
-          <span>{t.settings.apiKeyLabel}</span>
-          <input
-            type="password"
-            minLength={8}
-            name={`${settings.provider}-api-key`}
-            autoComplete="new-password"
-            spellCheck={false}
-            value={apiKey}
-            placeholder={t.settings.apiKeyPlaceholder}
-            disabled={operation !== null}
-            onChange={(event) => {
-              setApiKey(event.target.value);
-              setFeedback(null);
-            }}
-          />
-        </label>
+        {isLocalModel ? (
+          <label className="settings-field">
+            <span>{t.settings.localEndpointLabel}</span>
+            <input
+              type="url"
+              name="ollama-base-url"
+              autoComplete="url"
+              spellCheck={false}
+              value={baseUrl}
+              placeholder={t.settings.localEndpointPlaceholder}
+              disabled={operation !== null}
+              onChange={(event) => {
+                setBaseUrl(event.target.value);
+                setFeedback(null);
+              }}
+            />
+            <small>{t.settings.localEndpointHelp}</small>
+          </label>
+        ) : (
+          <label className="settings-field">
+            <span>{t.settings.apiKeyLabel}</span>
+            <input
+              type="password"
+              minLength={8}
+              name={`${settings.provider}-api-key`}
+              autoComplete="new-password"
+              spellCheck={false}
+              value={apiKey}
+              placeholder={t.settings.apiKeyPlaceholder}
+              disabled={operation !== null}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                setFeedback(null);
+              }}
+            />
+          </label>
+        )}
 
         <label className="settings-field">
-          <span>{t.settings.modelLabel}</span>
-          <select
-            name={`${settings.provider}-model`}
-            value={model}
-            disabled={operation !== null}
-            onChange={(event) => {
-              setModel(event.target.value);
-              setFeedback(null);
-            }}
-          >
-            <option value="">{t.settings.modelPlaceholder}</option>
-            {modelOptions.map((modelName) => (
-              <option key={modelName} value={modelName}>
-                {modelName}
-              </option>
-            ))}
-          </select>
+          <span>{isLocalModel ? t.settings.localModelLabel : t.settings.modelLabel}</span>
+          {isLocalModel ? (
+            <input
+              type="text"
+              name="ollama-model"
+              autoComplete="off"
+              spellCheck={false}
+              value={model}
+              placeholder={t.settings.localModelPlaceholder}
+              disabled={operation !== null}
+              onChange={(event) => {
+                setModel(event.target.value);
+                setFeedback(null);
+              }}
+            />
+          ) : (
+            <select
+              name={`${settings.provider}-model`}
+              value={model}
+              disabled={operation !== null}
+              onChange={(event) => {
+                setModel(event.target.value);
+                setFeedback(null);
+              }}
+            >
+              <option value="">{t.settings.modelPlaceholder}</option>
+              {modelOptions.map((modelName) => (
+                <option key={modelName} value={modelName}>
+                  {modelName}
+                </option>
+              ))}
+            </select>
+          )}
+          {isLocalModel && <small>{t.settings.localModelHelp}</small>}
         </label>
 
         {feedbackMessage && (
@@ -216,14 +248,12 @@ export function ProviderKeyCard({
             className={`provider-card__feedback ${
               feedback === 'save-error'
                 || feedback === 'clear-error'
-                || feedback === 'select-error'
                 ? 'provider-card__feedback--error'
                 : 'provider-card__feedback--success'
             }`}
             role={
               feedback === 'save-error'
                 || feedback === 'clear-error'
-                || feedback === 'select-error'
                 ? 'alert'
                 : 'status'
             }
@@ -234,7 +264,7 @@ export function ProviderKeyCard({
 
         {confirmingClear && (
           <div className="provider-card__confirmation" role="alert">
-            <strong>{t.settings.confirmClear}</strong>
+              <strong>{isLocalModel ? t.settings.confirmClearLocal : t.settings.confirmClear}</strong>
             <span>{t.settings.confirmClearDescription}</span>
             <div>
               <button
@@ -276,18 +306,6 @@ export function ProviderKeyCard({
               }}
             >
               {t.settings.clear}
-            </button>
-          )}
-          {settings.configured && !settings.is_default && !confirmingClear && (
-            <button
-              type="button"
-              className="settings-button settings-button--secondary"
-              disabled={operation !== null}
-              onClick={handleSetDefault}
-            >
-              {operation === 'selecting'
-                ? t.settings.selectingDefault
-                : t.settings.setDefault}
             </button>
           )}
         </div>

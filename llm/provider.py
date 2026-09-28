@@ -37,10 +37,11 @@ from .adapters.claude_provider import ClaudeProvider
 from .adapters.deepseek_provider import DeepSeekProvider
 from .adapters.doubao_provider import DoubaoProvider
 from .adapters.gemini_provider import GeminiProvider
+from .adapters.ollama_provider import OllamaProvider
 from .adapters.openai_provider import OpenAIProvider
 from .factory.provider_factory import ProviderFactory
 from .providers.base_provider import BaseProvider
-from .providers.provider_config import ProviderConfig
+from .providers.provider_config import ProviderConfig, timeout_budget_for_provider
 from .providers.provider_models import ChatRequest
 from .providers.provider_registry import ProviderRegistry
 from .usage import record_failed_usage, record_usage
@@ -51,9 +52,16 @@ ProviderRegistry.register("gemini", GeminiProvider)
 ProviderRegistry.register("openai", OpenAIProvider)
 ProviderRegistry.register("anthropic", ClaudeProvider)
 ProviderRegistry.register("doubao", DoubaoProvider)
+ProviderRegistry.register("ollama", OllamaProvider)
 
 
 def _build_config() -> ProviderConfig:
+    timeout, read_timeout = timeout_budget_for_provider(
+        LLM_PROVIDER,
+        timeout=LLM_TIMEOUT,
+        read_timeout=LLM_READ_TIMEOUT,
+        total_deadline=LLM_TOTAL_DEADLINE,
+    )
     return ProviderConfig(
         provider=LLM_PROVIDER,
         model=LLM_MODEL,
@@ -61,10 +69,10 @@ def _build_config() -> ProviderConfig:
         base_url=LLM_BASE_URL,
         temperature=LLM_TEMPERATURE,
         max_tokens=LLM_MAX_TOKENS,
-        timeout=LLM_TIMEOUT,
+        timeout=timeout,
         stream=LLM_STREAM,
         connect_timeout=LLM_CONNECT_TIMEOUT,
-        read_timeout=LLM_READ_TIMEOUT,
+        read_timeout=read_timeout,
         total_deadline=LLM_TOTAL_DEADLINE,
     )
 

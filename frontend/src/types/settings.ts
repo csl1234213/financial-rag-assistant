@@ -3,7 +3,8 @@ export type LLMProvider =
   | 'gemini'
   | 'openai'
   | 'anthropic'
-  | 'doubao';
+  | 'doubao'
+  | 'ollama';
 
 export interface ProviderSettings {
   provider: LLMProvider;
@@ -12,6 +13,7 @@ export interface ProviderSettings {
   is_default: boolean;
   key_hint: string | null;
   model: string;
+  base_url: string | null;
   models: string[];
   updated_at: string | null;
 }
@@ -24,4 +26,5 @@ export interface LLMSettingsResponse {
 export interface UpdateProviderSettingsRequest {
   api_key?: string;
   model?: string;
+  base_url?: string;
 }

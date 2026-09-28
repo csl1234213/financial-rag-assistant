@@ -28,6 +28,7 @@ from config.llm import (
     LLM_CONNECT_TIMEOUT,
     LLM_MAX_TOKENS,
     LLM_READ_TIMEOUT,
+    LLM_ROUTING_PROVIDER_ALLOWLIST,
     LLM_STREAM,
     LLM_TEMPERATURE,
     LLM_TIMEOUT,
@@ -37,7 +38,7 @@ from config.llm import (
 )
 
 from ..factory.provider_factory import ProviderFactory
-from ..providers.provider_config import ProviderConfig
+from ..providers.provider_config import ProviderConfig, timeout_budget_for_provider
 from ..providers.provider_registry import ProviderRegistry
 from .routing_context import RoutingContext
 from .routing_policy import RoutingPolicy
@@ -67,6 +68,7 @@ _PROVIDER_CONFIG_OVERRIDES = {
         "api_key": DOUBAO_API_KEY,
         "base_url": DOUBAO_BASE_URL,
     },
+    "ollama": {},
 }
 
 
@@ -79,6 +81,9 @@ class ModelRouter:
     ):
         self._policy = policy
         self._provider_configs = provider_configs or _PROVIDER_CONFIG_OVERRIDES
+        configured_allowlist = list(LLM_ROUTING_PROVIDER_ALLOWLIST)
+        if configured_allowlist:
+            available_providers = configured_allowlist
         self._available_providers = (
             tuple(available_providers)
             if available_providers is not None
@@ -107,6 +112,8 @@ class ModelRouter:
             context=context,
             providers=providers,
         )
+        if result.provider not in providers:
+            raise ValueError("Routing policy selected a provider outside the configured allowlist")
         decision_time_ms = (time.perf_counter() - t0) * 1000
 
         result.decision_time_ms = round(decision_time_ms, 3)
@@ -128,6 +135,12 @@ class ModelRouter:
             result.provider,
             {},
         )
+        timeout, read_timeout = timeout_budget_for_provider(
+            result.provider,
+            timeout=LLM_TIMEOUT,
+            read_timeout=LLM_READ_TIMEOUT,
+            total_deadline=LLM_TOTAL_DEADLINE,
+        )
         return ProviderConfig(
             provider=result.provider,
             model=result.model,
@@ -135,9 +148,9 @@ class ModelRouter:
             base_url=overrides.get("base_url", LLM_BASE_URL),
             temperature=LLM_TEMPERATURE,
             max_tokens=LLM_MAX_TOKENS,
-            timeout=LLM_TIMEOUT,
+            timeout=timeout,
             stream=LLM_STREAM,
             connect_timeout=LLM_CONNECT_TIMEOUT,
-            read_timeout=LLM_READ_TIMEOUT,
+            read_timeout=read_timeout,
             total_deadline=LLM_TOTAL_DEADLINE,
         )

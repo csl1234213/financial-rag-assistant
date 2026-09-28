@@ -17,7 +17,7 @@ function providerEndpoint(provider: LLMProvider): string {
 }
 
 export async function getLLMSettings(): Promise<LLMSettingsResponse> {
-  const payload = await getJson<unknown>(llmSettingsEndpoint);
+  const payload = await getJson(llmSettingsEndpoint);
   return parseLLMSettingsResponse(payload);
 }
 
@@ -25,10 +25,11 @@ export async function updateLLMProvider(
   provider: LLMProvider,
   apiKey: string,
   model: string,
+  baseUrl?: string,
 ): Promise<ProviderSettings> {
-  const payload = await putJson<unknown>(
+  const payload = await putJson(
     providerEndpoint(provider),
-    createProviderSettingsRequest(apiKey, model),
+    createProviderSettingsRequest(apiKey, model, baseUrl),
   );
   return parseProviderSettings(payload);
 }
@@ -36,14 +37,14 @@ export async function updateLLMProvider(
 export async function clearLLMProvider(
   provider: LLMProvider,
 ): Promise<ProviderSettings> {
-  const payload = await deleteJson<unknown>(providerEndpoint(provider));
+  const payload = await deleteJson(providerEndpoint(provider));
   return parseProviderSettings(payload);
 }
 
 export async function setDefaultLLMProvider(
   provider: LLMProvider,
 ): Promise<LLMSettingsResponse> {
-  const payload = await putJson<unknown>(
+  const payload = await putJson(
     `${llmSettingsEndpoint}/default`,
     { provider },
   );

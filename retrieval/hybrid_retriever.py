@@ -28,7 +28,11 @@ from typing import Dict, List
 from agent.planning.entity_extractor import extract_companies
 from agent.reasoning_models import Evidence
 from core.financial_grounding import canonical_metrics, extract_normalized_numbers
-from core.growth_driver_evidence import is_explicit_growth_driver_question
+from core.growth_driver_evidence import (
+    has_explicit_financial_growth_driver_evidence,
+    is_explicit_growth_driver_question,
+    is_growth_narrative_question,
+)
 from core.query_scope import QueryScope, classify_query_scope
 from embedding import embed_query
 from retrieval.bm25_retriever import BM25Retriever
@@ -66,6 +70,16 @@ _NON_SEGMENT_SECTION = re.compile(
 _SEGMENT_FINANCIAL_VALUE = re.compile(
     r"\b(?:revenue|revenues|net sales|sales|operating income|segment profit)\b|"
     r"营收|收入|销售额|营业利润|分部利润",
+    re.IGNORECASE,
+)
+_SEGMENT_DISCLOSURE_LABEL = re.compile(
+    r"(?:resolved\s+financial\s+label\s*:\s*)?"
+    r"\b(products?|services?|iphone|ipad|mac|wearables(?:,\s*home\s+and\s+accessories)?)\s+"
+    r"(?:net\s+sales|revenue)\b",
+    re.IGNORECASE,
+)
+_SEGMENT_DISCLOSURE_TABLE = re.compile(
+    r"\b(?:disaggregated\s+(?:net\s+sales|revenue)|reportable\s+segment(?:s|\s+information)?)\b",
     re.IGNORECASE,
 )
 _FORWARD_LOOKING_BOILERPLATE = re.compile(
@@ -124,6 +138,21 @@ _SPECIFIC_RISK_EVIDENCE = re.compile(
 _RISK_QUESTION = re.compile(
     r"\b(?:risks?|risk factors?|constraints?|limitations?)\b|"
     r"风险(?:因素|点)?|限制因素|约束",
+    re.IGNORECASE,
+)
+_AUDIT_REPORT_QUESTION = re.compile(
+    r"\b(?:auditor|audit firm|audited by|audit opinion|opinion on (?:the )?financial statements)\b|"
+    r"会计师事务所|审计机构|谁审计|审计意见|审计报告由",
+    re.IGNORECASE,
+)
+_AUDITOR_IDENTITY_EVIDENCE = re.compile(
+    r"\b(?:independent\s+auditor|audit\s+firm|auditor(?:s)?\s*:|audited\s+by)\b|"
+    r"会计师事务所|审计机构|审计单位",
+    re.IGNORECASE,
+)
+_AUDIT_OPINION_EVIDENCE = re.compile(
+    r"\b(?:unmodified|unqualified)\s+opinion\b|"
+    r"标准无保留意见|(?<!非)无保留意见",
     re.IGNORECASE,
 )
 _RISK_FACTOR_QUESTION = re.compile(
@@ -190,8 +219,27 @@ _SUMMARY_METRIC_LABELS = (
     re.compile(r"\bautomotive\s+(?:net\s+)?sales\b", re.IGNORECASE),
     re.compile(r"\bservices\s+(?:net\s+)?sales\b", re.IGNORECASE),
 )
+_GROWTH_NARRATIVE_EVIDENCE = re.compile(
+    r"\b(?:growth|grew|increased|rose|higher|momentum|trajectory|"
+    r"year[- ]over[- ]year|yoy|net sales growth|revenue growth)\b|"
+    r"增长|同比|上升|提升|势头|动能|轨迹",
+    re.IGNORECASE,
+)
 _SEGMENT_REVENUE_METRICS = frozenset(
-    {"automotive_revenue", "services_revenue", "data_center_revenue", "edge_computing_revenue"}
+    {
+        "automotive_revenue",
+        "services_revenue",
+        "iphone_revenue",
+        "products_revenue",
+        "mac_revenue",
+        "ipad_revenue",
+        "wearables_revenue",
+        "products_gross_margin",
+        "services_gross_margin",
+        "energy_revenue",
+        "data_center_revenue",
+        "edge_computing_revenue",
+    }
 )
 _BROAD_COMPARISON_METRICS = (
     "revenue",
@@ -214,6 +262,32 @@ def _has_financial_summary_evidence(item: SearchResult) -> bool:
     ):
         return False
     return sum(bool(pattern.search(content)) for pattern in _SUMMARY_METRIC_LABELS) >= 2
+
+
+def _has_growth_narrative_evidence(item: SearchResult) -> bool:
+    """Recognize reported growth evidence for narrative comparisons.
+
+    A narrative comparison needs more than a causal-driver sentence: a
+    period-mapped row with a reported change (for example Apple net sales
+    rising year over year) is also evidence. Safe-harbor boilerplate is
+    explicitly excluded and unknown metadata remains eligible.
+    """
+
+    content = item.content or ""
+    if (
+        _FORWARD_LOOKING_BOILERPLATE.search(content)
+        or re.search(
+            r"\b(?:emerging growth company|large accelerated filer|"
+            r"certification|registrant is)\b",
+            content,
+            re.IGNORECASE,
+        )
+    ):
+        return False
+    return bool(
+        _GROWTH_NARRATIVE_EVIDENCE.search(content)
+        and extract_normalized_numbers(content)
+    ) or _has_growth_driver_evidence(item) or _has_financial_summary_evidence(item)
 
 
 def _has_verified_financial_table_evidence(item: SearchResult) -> bool:
@@ -296,6 +370,10 @@ def _is_risk_question(question: str) -> bool:
     return bool(_RISK_QUESTION.search(question or ""))
 
 
+def _is_audit_report_question(question: str) -> bool:
+    return bool(_AUDIT_REPORT_QUESTION.search(question or ""))
+
+
 def _has_risk_factor_evidence(item: SearchResult) -> bool:
     content = item.content or ""
     return bool(
@@ -343,6 +421,24 @@ def _segment_section(item: SearchResult) -> str | None:
         or not _SEGMENT_FINANCIAL_VALUE.search(item.content or "")
         or not extract_normalized_numbers(item.content or "")
     ):
+        content = item.content or ""
+        # Some filings (notably 10-Q exports) expose product/service rows as
+        # structured table chunks while the section metadata is only
+        # ``Three Months Ended``. Use the filing-native label as the segment
+        # identity so cross-company segment queries reserve it alongside
+        # titled sections such as Data Center and Edge Computing.
+        label = _SEGMENT_DISCLOSURE_LABEL.search(content)
+        if label and (
+            extract_normalized_numbers(content)
+            or re.search(
+                r"(?i)\b(?:increased|decreased|grew|growth|higher|lower|driven\s+by)\b|"
+                r"增长|增加|上升|下降|提高|主要由",
+                content,
+            )
+        ):
+            return f"{label.group(1).casefold()} segment"
+        if _SEGMENT_DISCLOSURE_TABLE.search(content) and extract_normalized_numbers(content):
+            return "disaggregated revenue"
         return None
     return re.sub(r"\s+", " ", section).casefold()
 
@@ -468,15 +564,40 @@ class HybridRetriever:
         requested_segment_metrics = set(canonical_metrics(context.question)) & _SEGMENT_REVENUE_METRICS
         segment_question = _is_segment_question(context.question)
         driver_question = _is_growth_driver_question(context.question)
+        growth_narrative_question = is_growth_narrative_question(context.question)
         broad_summary_question = (
             query_scope == QueryScope.SUMMARY
             and not query_metric_ids
         )
         broad_compare_question = query_scope == QueryScope.COMPARE and any(
             marker in context.question.casefold()
-            for marker in ("financial performance", "key metrics", "财务表现", "主要指标")
+            for marker in (
+                "financial performance",
+                "key metrics",
+                "revenue performance",
+                "财务表现",
+                "主要指标",
+                "营收表现",
+                "收入表现",
+                "营收对比",
+                "收入对比",
+                "growth narrative",
+                "growth momentum",
+                "增长势头",
+                "增长叙事",
+            )
+        ) or (
+            query_scope == QueryScope.COMPARE
+            and "relevant prior user request for reference resolution:" in context.question.casefold()
+            and re.search(
+                r"\b(?:analy[sz]e|review|summari[sz]e)\b.{0,100}\b(?:report|filing|financial)\b"
+                r"|分析.{0,24}(?:财报|报告)|报告分析",
+                context.question,
+                re.IGNORECASE,
+            ) is not None
         )
         risk_question = _is_risk_question(context.question)
+        audit_report_question = _is_audit_report_question(context.question)
         candidate_multiplier = self.config.candidate_multiplier
         # Summary/comparison questions need one authoritative table per
         # requested company. Those rows can sit below narrative matches in
@@ -564,12 +685,13 @@ class HybridRetriever:
             QueryScope.COMPARE,
             QueryScope.ANALYSIS,
             QueryScope.RISK,
-        } or requested_metrics or segment_question or driver_question or risk_question:
+        } or requested_metrics or segment_question or driver_question or risk_question or audit_report_question:
             companies = extract_companies(context.question)
             if not companies and context.company:
                 companies = [context.company]
             targeted_lexical: list[SearchResult] = []
             priority_segment_driver_evidence: list[SearchResult] = []
+            priority_audit_evidence: list[SearchResult] = []
             metrics = set(extract_metrics(context.question))
             suffixes: tuple[str, ...]
             if risk_question:
@@ -583,6 +705,13 @@ class HybridRetriever:
                     "风险因素",
                     "供应限制",
                     "出口管制",
+                )
+            elif audit_report_question:
+                suffixes = (
+                    "auditor audit firm audit opinion unqualified opinion",
+                    "independent auditor report opinion",
+                    "会计师事务所 审计机构 审计意见 标准无保留意见",
+                    "注册会计师签名 审计报告",
                 )
             else:
                 requested: list[str] = []
@@ -612,6 +741,8 @@ class HybridRetriever:
                     requested.append("net income")
                 if "operating_cash_flow" in metrics or "cash_flow" in metrics:
                     requested.append("cash generated by operating activities")
+                if "free_cash_flow" in metrics:
+                    requested.append("free cash flow")
                 if segment_question:
                     requested.extend(
                         (
@@ -627,6 +758,21 @@ class HybridRetriever:
                             "growth driven by",
                             "reasons for growth",
                             "demand accelerating rapidly",
+                        )
+                    )
+                if growth_narrative_question:
+                    # Narrative comparisons need both reported growth facts
+                    # and explicit management commentary for every issuer.
+                    # Do not turn this into the driver-only path: statement
+                    # rows still establish the measured change being ranked.
+                    requested.extend(
+                        (
+                            "revenue growth",
+                            "net sales growth",
+                            "growth momentum",
+                            "growth narrative",
+                            "growth driven by",
+                            "reasons for growth",
                         )
                     )
                 if not requested:
@@ -662,6 +808,18 @@ class HybridRetriever:
                     # used as an evidence hard-filter.
                     if scoped_company_documents:
                         company_lexical_corpus = scoped_company_documents
+                if audit_report_question:
+                    # Audit summaries often sit near the front of an annual
+                    # report and are semantically distant from the detailed
+                    # auditor opinion. Promote only chunks that explicitly
+                    # contain both the firm identity and opinion classification
+                    # so the answer context can support both requested facts.
+                    priority_audit_evidence.extend(
+                        item
+                        for item in company_lexical_corpus
+                        if _AUDITOR_IDENTITY_EVIDENCE.search(item.content or "")
+                        and _AUDIT_OPINION_EVIDENCE.search(item.content or "")
+                    )
                 for suffix in suffixes:
                     lexical_query = f"{company} {suffix}" if company else suffix
                     targeted_lexical.extend(
@@ -714,6 +872,22 @@ class HybridRetriever:
                         )
                     )
                     targeted_lexical.extend(priority_segment_driver_evidence)
+                elif segment_question:
+                    # A broad segment-overview query has no explicit metric
+                    # alias, so ``requested_segment_metrics`` is empty. Keep
+                    # every verified segment row for each named issuer in the
+                    # candidate pool; otherwise lexical wording (especially
+                    # Chinese vs English) can retain Services for one
+                    # language and Products for the other before the
+                    # coverage selector sees the full segment set.
+                    targeted_lexical.extend(
+                        item
+                        for item in company_lexical_corpus
+                        if not _is_unverified_table(item)
+                        and _SEGMENT_REVENUE_METRICS.intersection(
+                            canonical_metrics(item.content or "")
+                        )
+                    )
                 if broad_summary_question and company:
                     structured_rows = [
                         item
@@ -778,6 +952,43 @@ class HybridRetriever:
                 ]
                 priority_financial_evidence.extend((*summaries, *comparison_rows))
                 targeted_lexical.extend((*summaries, *comparison_rows))
+            if query_scope == QueryScope.COMPARE and "revenue" in metrics:
+                # Revenue comparisons need the issuer's period-mapped total
+                # revenue row even when a bilingual BM25 query ranks a dense
+                # narrative or an unheaded statement fragment higher.  This
+                # is a candidate boost, not a hard filter: coverage-aware
+                # reranking still decides the final context and may retain
+                # additional evidence.  Keeping the boost tied to the
+                # explicit total-revenue label avoids promoting segment or
+                # outlook rows as if they were headline revenue.
+                revenue_rows = [
+                    item
+                    for item in company_lexical_corpus
+                    if _has_verified_financial_table_evidence(item)
+                    and re.search(
+                        r"\b(?:metric:\s*)?total\s+(?:net\s+sales|revenues?)\b"
+                        r"(?=\s*[:|]|\s+\$?\d)",
+                        item.content or "",
+                        re.IGNORECASE,
+                    )
+                ]
+                # Put the canonical total-revenue rows ahead of optional
+                # comparison metrics; otherwise a large list of lower-risk
+                # table rows can consume the priority prefix before this
+                # headline fact is seen by RRF.
+                priority_financial_evidence[0:0] = revenue_rows
+                targeted_lexical.extend(revenue_rows)
+            if growth_narrative_question:
+                # The default comparison probes focus on statement metrics and
+                # can omit issuer-specific MD&A growth passages. Put both
+                # classes into the bounded RRF pool before coverage selection.
+                narrative_rows = [
+                    item
+                    for item in company_lexical_corpus
+                    if _has_growth_narrative_evidence(item)
+                ]
+                priority_financial_evidence.extend(narrative_rows)
+                targeted_lexical.extend(narrative_rows)
             lexical_results = self._deduplicate([*lexical_results, *targeted_lexical])
             if priority_financial_evidence:
                 # Keep each issuer's evidence-dense summary inside the bounded
@@ -787,6 +998,10 @@ class HybridRetriever:
                 lexical_results = self._deduplicate(
                     [*priority_financial_evidence, *lexical_results]
                 )
+            if priority_audit_evidence:
+                lexical_results = self._deduplicate(
+                    [*priority_audit_evidence, *lexical_results]
+                )
             if priority_segment_driver_evidence:
                 # The source prose may sit below the bounded generic BM25
                 # window. Promote only issuer-scoped, requested-segment driver
@@ -794,6 +1009,27 @@ class HybridRetriever:
                 # selection must still satisfy the same issuer/period slot.
                 lexical_results = self._deduplicate(
                     [*priority_segment_driver_evidence, *lexical_results]
+                )
+            if query_scope == QueryScope.COMPARE and "revenue" in metrics:
+                # The issuer-scoped probes above can still leave a canonical
+                # total-revenue row deep in the merged lexical list when the
+                # Chinese wording has weaker BM25 overlap. Promote the rows
+                # that are already present in the candidate pool immediately
+                # before RRF; this keeps the operation deterministic without
+                # treating metadata as an evidence hard filter.
+                canonical_revenue_rows = [
+                    item
+                    for item in lexical_results
+                    if _has_verified_financial_table_evidence(item)
+                    and re.search(
+                        r"\b(?:metric:\s*)?total\s+(?:net\s+sales|revenues?)\b"
+                        r"(?=\s*[:|]|\s+\$?\d)",
+                        item.content or "",
+                        re.IGNORECASE,
+                    )
+                ]
+                lexical_results = self._deduplicate(
+                    [*canonical_revenue_rows, *lexical_results]
                 )
         if not lexical_results:
             # A missing lexical channel is not permission to skip the shared
@@ -815,12 +1051,25 @@ class HybridRetriever:
                 else self.config.lexical_weight
             ),
         )
-        return self.coverage_aware_rerank(
+        reranked = self.coverage_aware_rerank(
             fused,
             context.question,
             top_k=context.top_k,
             company=context.company,
         )
+        if audit_report_question:
+            # Keep the filing's compact auditor/opinion disclosure ahead of
+            # the longer auditor's report body. The latter is semantically
+            # similar but often states only the opinion's reasoning, causing
+            # generation to omit the explicit firm suffix and opinion class.
+            explicit_audit_facts = [
+                item
+                for item in reranked
+                if _AUDITOR_IDENTITY_EVIDENCE.search(item.content or "")
+                and _AUDIT_OPINION_EVIDENCE.search(item.content or "")
+            ]
+            reranked = self._deduplicate([*explicit_audit_facts, *reranked])[: context.top_k]
+        return reranked
 
     @staticmethod
     def coverage_aware_rerank(
@@ -874,6 +1123,7 @@ class HybridRetriever:
         query_scope = classify_query_scope(question)
         segment_question = _is_segment_question(question)
         driver_question = _is_growth_driver_question(question)
+        growth_narrative_question = is_growth_narrative_question(question)
         query_metric_ids = tuple(extract_metrics(question))
         requested_segment_metrics = tuple(
             metric_id
@@ -886,7 +1136,30 @@ class HybridRetriever:
         )
         broad_compare_question = query_scope == QueryScope.COMPARE and any(
             marker in question.casefold()
-            for marker in ("financial performance", "key metrics", "财务表现", "主要指标")
+            for marker in (
+                "financial performance",
+                "key metrics",
+                "revenue performance",
+                "财务表现",
+                "主要指标",
+                "营收表现",
+                "收入表现",
+                "营收对比",
+                "收入对比",
+                "growth narrative",
+                "growth momentum",
+                "增长势头",
+                "增长叙事",
+            )
+        ) or (
+            query_scope == QueryScope.COMPARE
+            and "relevant prior user request for reference resolution:" in question.casefold()
+            and re.search(
+                r"\b(?:analy[sz]e|review|summari[sz]e)\b.{0,100}\b(?:report|filing|financial)\b"
+                r"|分析.{0,24}(?:财报|报告)|报告分析",
+                question,
+                re.IGNORECASE,
+            ) is not None
         )
         risk_question = _is_risk_question(question)
         risk_factor_question = bool(_RISK_FACTOR_QUESTION.search(question or ""))
@@ -1021,6 +1294,20 @@ class HybridRetriever:
                     ),
                     "operating_cash_flow": re.compile(
                         rf"(?:^|\|)\s*(?:\|\s*)*{structured_row_prefix}cash\s+(?:generated\s+by\s+operating\s+activities|flow\s+from\s+operating\s+activities|provided\s+by\s+operating\s+activities)\b",
+                        re.IGNORECASE,
+                    ),
+                    "free_cash_flow": re.compile(
+                        # PDF table extraction can flatten several adjacent
+                        # rows onto one physical line (the Tesla summary is a
+                        # real example: the FCF row follows operating cash
+                        # flow and capex on the same line).  The chunk is
+                        # already restricted to a verified table with a
+                        # reliable column map, so match the labelled row
+                        # anywhere in that line instead of requiring a line
+                        # or pipe boundary.  This preserves period binding
+                        # from ``table_context`` without treating narrative
+                        # mentions as authoritative table values.
+                        r"\bfree\s+cash\s+flow\b",
                         re.IGNORECASE,
                     ),
                     "gross_profit": re.compile(
@@ -1200,6 +1487,17 @@ class HybridRetriever:
                 dims.add("driver_evidence")
                 if company:
                     dims.add(f"driver_evidence:{company}")
+            if growth_narrative_question and _has_growth_narrative_evidence(item):
+                dims.add("growth_narrative_evidence")
+                if company:
+                    dims.add(f"growth_narrative_evidence:{company}")
+                if (
+                    has_explicit_financial_growth_driver_evidence(item.content or "")
+                    or _AI_GROWTH_DRIVER_NARRATIVE.search(item.content or "")
+                ):
+                    dims.add("growth_narrative_driver_evidence")
+                    if company:
+                        dims.add(f"growth_narrative_driver_evidence:{company}")
             if broad_summary_question and _has_financial_summary_evidence(item):
                 dims.add("summary_highlight_evidence")
                 if company:
@@ -1301,6 +1599,11 @@ class HybridRetriever:
                 # over a later reconciliation table when a broad comparison
                 # asks for the same issuer/period fact.
                 score += 0.08
+            if growth_narrative_question:
+                if _has_growth_driver_evidence(item):
+                    score += 0.05
+                elif _has_financial_summary_evidence(item):
+                    score += 0.03
             if "quarter_table" in dims:
                 # For an unqualified "latest quarter" summary, prefer the
                 # three-month column over a six-month roll-up when both are
@@ -1340,6 +1643,7 @@ class HybridRetriever:
                 "gross_margin",
                 "eps",
                 "operating_cash_flow",
+                "free_cash_flow",
             }
             for expected_company in expected_companies:
                 has_verified_compact_highlight = any(
@@ -1534,9 +1838,43 @@ class HybridRetriever:
                     )
                 required.append("summary_driver_evidence")
             if expected_companies:
+                if growth_narrative_question:
+                    # Reserve one reported growth passage per issuer before
+                    # optional comparison metrics. Without this coverage slot
+                    # a high-scoring statement row from the first issuer can
+                    # crowd out another issuer's narrative evidence.
+                    required.extend(
+                        f"growth_narrative_driver_evidence:{company}"
+                        for company in sorted(expected_companies)
+                    )
+                    required.extend(
+                        f"growth_narrative_evidence:{company}"
+                        for company in sorted(expected_companies)
+                    )
+                    required.extend(
+                        ("growth_narrative_driver_evidence", "growth_narrative_evidence")
+                    )
                 broad_compare = query_scope == QueryScope.COMPARE and any(
                     marker in question.casefold()
-                    for marker in ("financial performance", "key metrics", "财务表现", "主要指标")
+                    for marker in (
+                        "financial performance",
+                        "key metrics",
+                        "财务表现",
+                        "主要指标",
+                        "growth narrative",
+                        "growth momentum",
+                        "增长势头",
+                        "增长叙事",
+                    )
+                ) or (
+                    query_scope == QueryScope.COMPARE
+                    and "relevant prior user request for reference resolution:" in question.casefold()
+                    and re.search(
+                        r"\b(?:analy[sz]e|review|summari[sz]e)\b.{0,100}\b(?:report|filing|financial)\b"
+                        r"|分析.{0,24}(?:财报|报告)|报告分析",
+                        question,
+                        re.IGNORECASE,
+                    ) is not None
                 )
                 metrics = (
                     query_metric_ids

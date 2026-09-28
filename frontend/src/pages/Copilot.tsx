@@ -123,7 +123,7 @@ export function Copilot() {
     setLoading(true);
 
     try {
-      const response = await sendChatMessage(message, undefined, threadId);
+      const response = await sendChatMessage(message, undefined, threadId, language);
 
       setCurrentResponse(response);
       setMessages((currentMessages) => [
