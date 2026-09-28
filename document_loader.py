@@ -26,6 +26,11 @@ from config import (
     OCR_LANGUAGES,
     OCR_MIN_TEXT_CHARS,
 )
+from core.financial_statement_reconstruction import (
+    FinancialTableContext,
+    reconstruct_financial_statements,
+)
+from core.financial_table_rows import FinancialTableRow
 from retrieval.periods import extract_metrics, extract_periods
 
 logger = logging.getLogger(__name__)
@@ -162,6 +167,35 @@ class ParsedBlock:
     table_context: str | None = None
     source_locator: str | None = None
     content_type: str = "narrative"
+    bbox: tuple[float, float, float, float] | None = None
+    financial_table_row: FinancialTableRow | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedTextRegion:
+    """Native page text block with its source coordinates preserved."""
+
+    text: str
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedTableRow:
+    """One native table row, including per-cell geometry and blank cells."""
+
+    cells: tuple[str | None, ...]
+    cell_bboxes: tuple[tuple[float, float, float, float] | None, ...]
+    bbox: tuple[float, float, float, float] | None
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedTableCandidate:
+    """Materialized PyMuPDF table grid, detached from its page handle."""
+
+    page: int
+    table_index: int
+    bbox: tuple[float, float, float, float]
+    rows: tuple[ParsedTableRow, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +205,8 @@ class ParsedPage:
     number: int
     blocks: tuple[ParsedBlock, ...]
     ocr_used: bool
+    text_regions: tuple[ParsedTextRegion, ...] = ()
+    table_candidates: tuple[ParsedTableCandidate, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +217,8 @@ class ParsedDocument:
     pages: tuple[ParsedPage, ...]
     parser_version: str = PARSER_VERSION
     content_type: str = "application/pdf"
+    financial_table_contexts: tuple[FinancialTableContext, ...] = ()
+    financial_table_rows: tuple[FinancialTableRow, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +236,7 @@ class DocumentChunk:
     source_locator: str | None = None
     content_type: str = "narrative"
     source_format: str = "application/pdf"
+    financial_table_rows: tuple[FinancialTableRow, ...] = ()
 
 
 def get_company(filename: str) -> str:
@@ -326,6 +365,7 @@ def parse_pdf(
     ocr_languages: str = OCR_LANGUAGES,
     ocr_dpi: int = OCR_DPI,
     ocr_min_text_chars: int = OCR_MIN_TEXT_CHARS,
+    document_id: str | None = None,
 ) -> ParsedDocument:
     """Extract sorted page blocks and OCR pages with insufficient text."""
 
@@ -354,8 +394,15 @@ def parse_pdf(
             for page_index, page in enumerate(pdf):
                 page_number = page_index + 1
                 page_start_section = active_section
-                native_blocks = _extract_text_blocks(page)
+                native_regions = _extract_text_regions(page)
+                native_blocks = [region.text for region in native_regions]
+                # Keep compatibility with callers/tests that provide the
+                # legacy text-block extractor while the layout-aware path is
+                # authoritative whenever it returns source regions.
+                if not native_blocks:
+                    native_blocks = _extract_text_blocks(page)
                 raw_blocks = native_blocks
+                page_text_regions = native_regions
                 text_characters = sum(
                     len(re.sub(r"\s+", "", block_text))
                     for block_text in native_blocks
@@ -380,11 +427,13 @@ def parse_pdf(
                     )
                     if raw_blocks:
                         ocr_used = True
+                        page_text_regions = []
                     else:
                         raw_blocks = native_blocks
+                        page_text_regions = native_regions
 
                 parsed_blocks: list[ParsedBlock] = []
-                for raw_text in raw_blocks:
+                for block_index, raw_text in enumerate(raw_blocks):
                     text = clean_text(raw_text)
                     if not text:
                         continue
@@ -403,14 +452,25 @@ def parse_pdf(
                                 if _looks_like_unverified_financial_table(text)
                                 else "narrative"
                             ),
+                            bbox=(
+                                page_text_regions[block_index].bbox
+                                if block_index < len(page_text_regions)
+                                else None
+                            ),
                         )
                     )
 
                 parsed_blocks = _attach_table_context(parsed_blocks)
+                native_tables = _find_native_table_objects(page, page_number=page_number)
+                table_candidates = _materialize_table_candidates(
+                    native_tables,
+                    page_number=page_number,
+                )
                 structured_table_blocks = _extract_structured_table_blocks(
                     page,
                     page_number=page_number,
                     ocr_used=ocr_used,
+                    native_tables=native_tables,
                 )
                 structured_table_blocks = _inherit_statement_group_labels(
                     parsed_blocks,
@@ -449,6 +509,8 @@ def parse_pdf(
                         number=page_number,
                         blocks=tuple(parsed_blocks),
                         ocr_used=ocr_used,
+                        text_regions=tuple(page_text_regions),
+                        table_candidates=tuple(table_candidates),
                     )
                 )
     except DocumentProcessingError:
@@ -459,7 +521,57 @@ def parse_pdf(
     if not any(page.blocks for page in pages):
         raise DocumentProcessingError("PDF contains no extractable text")
 
-    return ParsedDocument(filename=source_path.name, pages=tuple(pages))
+    reconstruction = reconstruct_financial_statements(
+        pages,
+        filename=source_path.name,
+        document_id=document_id,
+    )
+    rows_by_page: dict[int, list[FinancialTableRow]] = {}
+    for row in reconstruction.rows:
+        if row.page is not None:
+            rows_by_page.setdefault(row.page, []).append(row)
+
+    reconstructed_pages: list[ParsedPage] = []
+    for page in pages:
+        structured_rows: list[ParsedBlock] = []
+        for row in rows_by_page.get(page.number, ()):
+            row_text = (
+                f"Financial table row — Metric: {row.row_label} | "
+                f"{row.period}: {row.raw_value}"
+                + (f" {row.currency}" if row.currency else "")
+            )
+            context_text = "; ".join(
+                part
+                for part in (
+                    row.table_title,
+                    f"Scope: {row.scope}" if row.scope else None,
+                    f"Unit: {row.unit}" if row.unit else None,
+                    f"Currency: {row.currency}" if row.currency else None,
+                )
+                if part
+            )
+            structured_rows.append(
+                ParsedBlock(
+                    text=row_text,
+                    page=page.number,
+                    section=row.table_title or f"Page {page.number}",
+                    ocr_used=page.ocr_used,
+                    table_context=context_text,
+                    source_locator=row.source_locator,
+                    content_type="table",
+                    financial_table_row=row,
+                )
+            )
+        reconstructed_pages.append(
+            replace(page, blocks=(*page.blocks, *structured_rows))
+        )
+
+    return ParsedDocument(
+        filename=source_path.name,
+        pages=tuple(reconstructed_pages),
+        financial_table_contexts=reconstruction.contexts,
+        financial_table_rows=reconstruction.rows,
+    )
 
 
 def chunk_document(
@@ -533,6 +645,7 @@ def load_pdf_chunks(
     ocr_languages: str = OCR_LANGUAGES,
     ocr_dpi: int = OCR_DPI,
     ocr_min_text_chars: int = OCR_MIN_TEXT_CHARS,
+    document_id: str | None = None,
 ) -> list[DocumentChunk]:
     """Run the canonical parser and chunker for one PDF."""
 
@@ -542,6 +655,7 @@ def load_pdf_chunks(
         ocr_languages=ocr_languages,
         ocr_dpi=ocr_dpi,
         ocr_min_text_chars=ocr_min_text_chars,
+        document_id=document_id,
     )
     chunks = chunk_document(
         document,
@@ -678,6 +792,16 @@ def _extract_text_blocks(
     *,
     textpage: fitz.TextPage | None = None,
 ) -> list[str]:
+    return [region.text for region in _extract_text_regions(page, textpage=textpage)]
+
+
+def _extract_text_regions(
+    page: fitz.Page,
+    *,
+    textpage: fitz.TextPage | None = None,
+) -> list[ParsedTextRegion]:
+    """Return the canonical reading order without discarding native bboxes."""
+
     blocks = page.get_text(
         "blocks",
         sort=True,
@@ -692,7 +816,13 @@ def _extract_text_blocks(
     ordered = _column_reading_order(text_blocks, page.rect, page_words=page_words)
     if ordered is None:
         ordered = text_blocks
-    return [str(block[4]) for block in ordered]
+    return [
+        ParsedTextRegion(
+            text=str(block[4]),
+            bbox=tuple(float(value) for value in block[:4]),
+        )
+        for block in ordered
+    ]
 
 
 def _column_reading_order(
@@ -998,11 +1128,97 @@ def _comparative_section_for_page(
     return headings[-1] if headings else default
 
 
+def _find_native_table_objects(page: fitz.Page, *, page_number: int) -> list[object]:
+    """Find once and retain all native grids, including ambiguous candidates.
+
+    The caller stores a detached copy of every candidate before the PDF closes.
+    The older trusted-text path may still reject a candidate; P1.3 performs a
+    separate structural assessment using these original cells and regions.
+    """
+
+    try:
+        return list(page.find_tables(strategy="lines").tables)
+    except Exception as exc:
+        logger.info(
+            "Native table extraction skipped page=%s reason=%s",
+            page_number,
+            type(exc).__name__,
+        )
+        return []
+
+
+def _materialize_table_candidates(
+    native_tables: list[object],
+    *,
+    page_number: int,
+) -> list[ParsedTableCandidate]:
+    """Copy source cells and their PyMuPDF geometry into immutable IR."""
+
+    materialized: list[ParsedTableCandidate] = []
+    for table_index, table in enumerate(native_tables, start=1):
+        try:
+            raw_rows = table.extract() or []
+            source_rows = getattr(table, "rows", ())
+            table_bbox = tuple(float(value) for value in table.bbox)
+            rows: list[ParsedTableRow] = []
+            for row_index, raw_row in enumerate(raw_rows):
+                cells = tuple(
+                    clean_text(str(value)) if value is not None else None
+                    for value in raw_row
+                )
+                source_cells = (
+                    tuple(source_rows[row_index].cells)
+                    if row_index < len(source_rows)
+                    else ()
+                )
+                cell_bboxes = tuple(
+                    tuple(float(value) for value in bbox) if bbox is not None else None
+                    for bbox in source_cells[: len(cells)]
+                )
+                if len(cell_bboxes) < len(cells):
+                    cell_bboxes += (None,) * (len(cells) - len(cell_bboxes))
+                present = [bbox for bbox in cell_bboxes if bbox is not None]
+                row_bbox = (
+                    (
+                        min(bbox[0] for bbox in present),
+                        min(bbox[1] for bbox in present),
+                        max(bbox[2] for bbox in present),
+                        max(bbox[3] for bbox in present),
+                    )
+                    if present
+                    else None
+                )
+                rows.append(
+                    ParsedTableRow(
+                        cells=cells,
+                        cell_bboxes=cell_bboxes,
+                        bbox=row_bbox,
+                    )
+                )
+            materialized.append(
+                ParsedTableCandidate(
+                    page=page_number,
+                    table_index=table_index,
+                    bbox=table_bbox,
+                    rows=tuple(rows),
+                )
+            )
+        except Exception as exc:
+            logger.info(
+                "Native table candidate materialization failed page=%s table=%s reason=%s",
+                page_number,
+                table_index,
+                type(exc).__name__,
+            )
+    return materialized
+
+
 def _extract_structured_table_blocks(
     page: fitz.Page,
     *,
     page_number: int,
     ocr_used: bool,
+    native_tables: list[object] | None = None,
 ) -> list[ParsedBlock]:
     """Add only high-density native table parses as row-scoped evidence.
 
@@ -1011,11 +1227,11 @@ def _extract_structured_table_blocks(
     indexed. The original page text remains present as a fallback.
     """
 
-    try:
-        candidates = page.find_tables(strategy="lines").tables
-    except Exception as exc:
-        logger.info("Native table extraction skipped page=%s reason=%s", page_number, type(exc).__name__)
-        return []
+    candidates = (
+        native_tables
+        if native_tables is not None
+        else _find_native_table_objects(page, page_number=page_number)
+    )
 
     structured: list[ParsedBlock] = []
     page_area = max(float(page.rect.width * page.rect.height), 1.0)
@@ -2277,6 +2493,8 @@ def _chunk_block_group(
                 table_context=block.table_context,
                 source_locator=block.source_locator,
                 content_type=block.content_type,
+                bbox=block.bbox,
+                financial_table_row=block.financial_table_row,
             )
             for index, part in enumerate(parts)
         )
@@ -2314,6 +2532,11 @@ def _make_chunk(
 ) -> DocumentChunk:
     locators = list(dict.fromkeys(block.source_locator for block in blocks if block.source_locator))
     content_types = {block.content_type for block in blocks}
+    financial_rows = tuple(
+        block.financial_table_row
+        for block in blocks
+        if block.financial_table_row is not None
+    )
     return DocumentChunk(
         text="\n\n".join(block.text for block in blocks),
         page=blocks[0].page,
@@ -2327,6 +2550,7 @@ def _make_chunk(
             if "unverified_table" in content_types
             else next(iter(content_types)) if len(content_types) == 1 else "mixed"
         ),
+        financial_table_rows=tuple(dict.fromkeys(financial_rows)),
     )
 
 
@@ -2400,6 +2624,9 @@ def _merge_chunks(
                 if first.content_type == second.content_type
                 else "mixed"
             )
+        ),
+        financial_table_rows=tuple(
+            dict.fromkeys((*first.financial_table_rows, *second.financial_table_rows))
         ),
     )
 

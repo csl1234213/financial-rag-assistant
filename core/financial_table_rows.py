@@ -78,6 +78,9 @@ class FinancialTableRow:
     verification_status: VerificationStatus
     verification_reasons: tuple[str, ...] = ()
     column_binding_proven: bool = False
+    note_reference: str | None = None
+    source_region: str | None = None
+    column_role: str | None = None
 
     def __post_init__(self) -> None:
         if self.page is not None and self.page < 1:
@@ -125,6 +128,9 @@ class FinancialTableRow:
             "source",
             "source_locator",
             "source_text",
+            "note_reference",
+            "source_region",
+            "column_role",
         ):
             if values[field_name] is None:
                 values[field_name] = ""
@@ -154,6 +160,9 @@ class FinancialTableRow:
         source_text: str,
         column_binding_proven: bool,
         source_row_detected: bool = True,
+        note_reference: str | None = None,
+        source_region: str | None = None,
+        column_role: str | None = None,
     ) -> "FinancialTableRow":
         """Assess a candidate conservatively; never upgrade ambiguous rows."""
 
@@ -178,6 +187,8 @@ class FinancialTableRow:
                 source_locator=source_locator,
                 page=page,
                 source_text=source_text,
+                note_reference=note_reference,
+                source_region=source_region,
             )
         )
         if not column_binding_proven:
@@ -219,6 +230,9 @@ class FinancialTableRow:
             verification_status=status,
             verification_reasons=tuple(dict.fromkeys(reasons)),
             column_binding_proven=column_binding_proven,
+            note_reference=note_reference,
+            source_region=source_region,
+            column_role=column_role,
         )
 
 
@@ -229,6 +243,7 @@ _STRUCTURED_ROW = re.compile(
 )
 _PERIOD_LABEL = re.compile(
     r"^(?:FY\s*)?(?P<year>20\d{2})(?:\s*年度|\s*年(?:度)?(?:\s*\d{1,2}月\d{1,2}日)?|$)"
+    r"|^(?P<iso_year>20\d{2})-(?P<iso_month>0[1-9]|1[0-2])-(?P<iso_day>0[1-9]|[12]\d|3[01])$"
     r"|^Q[1-4][ -]?(?P<quarter_year>20\d{2})$",
     re.IGNORECASE,
 )
@@ -274,7 +289,11 @@ def financial_table_rows_from_chunk(
             period_match = _PERIOD_LABEL.fullmatch(column_label)
             if period_match is None:
                 continue
-            year = int(period_match.group("year") or period_match.group("quarter_year"))
+            year = int(
+                period_match.group("year")
+                or period_match.group("quarter_year")
+                or period_match.group("iso_year")
+            )
             period = column_label.strip()
             value = _decimal_from_source_number(raw_value)
             canonical_metric = _exact_canonical_metric(row_label)
@@ -300,6 +319,7 @@ def financial_table_rows_from_chunk(
                     page=page,
                     source_text=source_text,
                     column_binding_proven=True,
+                    column_role="period_value",
                 )
             )
     return tuple(candidates)
@@ -348,7 +368,6 @@ def _verified_row_missing_fields_values(**values: Any) -> list[str]:
             "table_title",
             "scope",
             "row_label",
-            "canonical_metric",
             "column_label",
             "period",
             "raw_value",
@@ -369,8 +388,6 @@ def _verified_row_missing_fields_values(**values: Any) -> list[str]:
     scope = str(values.get("scope") or "").casefold()
     if scope not in {"consolidated", "parent"} and not scope.startswith("segment:"):
         missing.append("scope_not_resolved")
-    if values.get("canonical_metric") not in _CANONICAL_METRICS:
-        missing.append("canonical_metric_not_registered")
     currency = str(values.get("currency") or "")
     if currency and not re.fullmatch(r"[A-Za-z]{3}", currency):
         missing.append("currency_not_iso_4217")
@@ -380,7 +397,9 @@ def _verified_row_missing_fields_values(**values: Any) -> list[str]:
         missing.append("period_not_explicitly_mapped")
     elif period_match is not None:
         expected_year = int(
-            period_match.group("year") or period_match.group("quarter_year")
+            period_match.group("year")
+            or period_match.group("quarter_year")
+            or period_match.group("iso_year")
         )
         if values.get("fiscal_year") != expected_year:
             missing.append("fiscal_year_period_mismatch")

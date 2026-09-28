@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from config import (
@@ -128,6 +129,13 @@ def process_document_task(task_public_id: str):
         filename = os.path.basename(file_path)
         filename_company_hint = get_company(filename)
         filename_period_hint = get_quarter(filename)
+        doc_id = (
+            f"tenant_{tenant_id}_document_{document_id}"
+            if document_id is not None
+            else Path(filename).stem.lower()
+            .replace(" ", "_")
+            .replace("-", "_")
+        )
 
         if Path(filename).suffix.casefold() == ".pdf":
             chunks = load_pdf_chunks(
@@ -138,6 +146,7 @@ def process_document_task(task_public_id: str):
                 ocr_languages=OCR_LANGUAGES,
                 ocr_dpi=OCR_DPI,
                 ocr_min_text_chars=OCR_MIN_TEXT_CHARS,
+                document_id=doc_id,
             )
         else:
             chunks = load_document_chunks(
@@ -174,13 +183,6 @@ def process_document_task(task_public_id: str):
         store = ChromaEmbeddingStore()
         store.create_collection("financial_reports")
 
-        doc_id = (
-            f"tenant_{tenant_id}_document_{document_id}"
-            if document_id is not None
-            else Path(filename).stem.lower()
-            .replace(" ", "_")
-            .replace("-", "_")
-        )
         chunk_identity = (
             content_sha256
             if isinstance(content_sha256, str) and content_sha256
@@ -214,18 +216,15 @@ def process_document_task(task_public_id: str):
                 "embedding_model": EMBEDDING_MODEL,
                 "embedding_revision": EMBEDDING_MODEL_REVISION or "unversioned",
             }
-            if chunk.page > 0:
-                metadata["page"] = chunk.page
-            if isinstance(content_sha256, str) and content_sha256:
-                metadata["content_sha256"] = content_sha256
-            docs.append(
-                VectorDocument(
+            financial_rows = tuple(
+                replace(
+                    row,
                     document_id=doc_id,
-                    chunk_id=(
-                        f"tenant_{tenant_id}_{chunk_identity}_"
-                        f"{chunk.chunk_index}"
-                    ),
-            financial_rows = financial_table_rows_from_chunk(
+                    company=company,
+                    source=filename,
+                )
+                for row in chunk.financial_table_rows
+            ) or financial_table_rows_from_chunk(
                 content=chunk.text,
                 content_type=chunk.content_type,
                 document_id=doc_id,
@@ -243,6 +242,17 @@ def process_document_task(task_public_id: str):
                 metadata["financial_table_rows_json"] = financial_table_rows_json(
                     financial_rows
                 )
+            if chunk.page > 0:
+                metadata["page"] = chunk.page
+            if isinstance(content_sha256, str) and content_sha256:
+                metadata["content_sha256"] = content_sha256
+            docs.append(
+                VectorDocument(
+                    document_id=doc_id,
+                    chunk_id=(
+                        f"tenant_{tenant_id}_{chunk_identity}_"
+                        f"{chunk.chunk_index}"
+                    ),
                     company=company,
                     content=chunk.text,
                     embedding=embedding,

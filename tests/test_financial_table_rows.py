@@ -88,7 +88,7 @@ def test_partial_row_can_be_serialized_but_is_not_fact_eligible():
     assert all(row.eligible_for_deterministic_fact is False for row in rows)
     assert "statement_type" in rows[0].verification_reasons
     assert "scope" in rows[0].verification_reasons
-    assert "canonical_metric" in rows[0].verification_reasons
+    assert rows[0].canonical_metric is None
     serialized = financial_table_rows_json(rows)
     assert '"verification_status": "PARTIAL"' in serialized
     assert '"currency": "CNY"' in serialized
@@ -160,6 +160,40 @@ def test_unknown_scope_or_mismatched_period_cannot_be_verified():
     assert "scope_not_resolved" in candidate.verification_reasons
     assert "fiscal_year_period_mismatch" in candidate.verification_reasons
     assert candidate.eligible_for_deterministic_fact is False
+
+
+def test_structural_verification_does_not_require_canonical_metric():
+    row = FinancialTableRow.assess(
+        document_id="doc-1",
+        company="Example issuer",
+        statement_type="balance_sheet",
+        table_title="合并资产负债表",
+        scope="consolidated",
+        row_label="新准则科目",
+        canonical_metric=None,
+        column_label="2025 年12 月31 日",
+        fiscal_year=2025,
+        period="2025-12-31",
+        value=Decimal("1234.50"),
+        raw_value="1,234.50",
+        unit="元",
+        currency="CNY",
+        source="annual_report.pdf",
+        source_locator="PDF page 56, table 1, row 3, column 3",
+        page=56,
+        source_text="新准则科目 | 七、21 | 1,234.50 | 1,100.00",
+        column_binding_proven=True,
+        note_reference="七、21",
+        source_region="PDF page 56; bbox=(100.0,200.0,300.0,220.0)",
+        column_role="closing_balance",
+    )
+
+    assert row.verification_status == VerificationStatus.VERIFIED
+    assert row.canonical_metric is None
+    assert row.period == "2025-12-31"
+    assert row.note_reference == "七、21"
+    assert row.column_role == "closing_balance"
+    assert row.value == Decimal("1234.50")
 
 
 def test_fact_ledger_does_not_reparse_typed_partial_rows_as_legacy_facts():
