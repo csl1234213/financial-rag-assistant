@@ -139,6 +139,31 @@ class FinancialFact:
     growth_basis: str | None = None
     display_unit: str | None = None
 
+    # Structured statement facts extend, rather than replace, the narrative ledger schema.
+    document_id: str | None = None
+    dimension: str | None = None
+    category: str | None = None
+    company_id: str | None = None
+    company_name: str | None = None
+    accounting_standard: str = "UNKNOWN"
+    original_label: str | None = None
+    normalized_label: str | None = None
+    statement_type: str | None = None
+    scope: str | None = None
+    raw_value: str | None = None
+    source_unit: str | None = None
+    mapping_status: str | None = None
+    mapping_rule: str | None = None
+    row_verification_status: str | None = None
+    source_kind: str | None = None
+    created_from: str | None = None
+    table_id: str | None = None
+    row_id: str | None = None
+    source_locator: str | None = None
+    source_text: str | None = None
+    statement_period: str | None = None
+    structured_identity: tuple[str, ...] | None = None
+
     @property
     def provenance(self) -> dict[str, object]:
         return {
@@ -157,6 +182,28 @@ class FinancialFact:
             "page": self.page,
             "section": self.section,
             "chunk_id": self.chunk_id,
+            "document_id": self.document_id,
+            "dimension": self.dimension,
+            "category": self.category,
+            "company_id": self.company_id,
+            "company_name": self.company_name,
+            "accounting_standard": self.accounting_standard,
+            "original_label": self.original_label,
+            "normalized_label": self.normalized_label,
+            "statement_type": self.statement_type,
+            "scope": self.scope,
+            "raw_value": self.raw_value,
+            "source_unit": self.source_unit,
+            "mapping_status": self.mapping_status,
+            "mapping_rule": self.mapping_rule,
+            "row_verification_status": self.row_verification_status,
+            "source_kind": self.source_kind,
+            "created_from": self.created_from,
+            "table_id": self.table_id,
+            "row_id": self.row_id,
+            "source_locator": self.source_locator,
+            "source_text": self.source_text,
+            "statement_period": self.statement_period,
         }
 
 
@@ -783,18 +830,40 @@ class FactLedger:
 
     def __init__(self, facts: Iterable[FinancialFact] = ()) -> None:
         unique: dict[tuple, FinancialFact] = {}
-        for fact in facts:
+        fact_items = tuple(facts)
+        grouped_structured: dict[tuple[str, ...], list[FinancialFact]] = {}
+        for fact in fact_items:
+            if fact.structured_identity is not None:
+                grouped_structured.setdefault(fact.structured_identity, []).append(fact)
+        self.conflicts: tuple[dict[str, object], ...] = tuple(
+            {
+                "identity": identity,
+                "facts": tuple(fact.provenance | {"value": str(fact.normalized_value)} for fact in group),
+                "status": "FACT_CONFLICT",
+            }
+            for identity, group in grouped_structured.items()
+            if len({fact.normalized_value for fact in group}) > 1
+        )
+        conflicting_identities = {conflict["identity"] for conflict in self.conflicts}
+        for fact in fact_items:
+            if fact.structured_identity in conflicting_identities:
+                continue
             key = (
-                fact.company,
-                fact.metric_id,
-                fact.fact_period,
-                fact.normalized_value,
-                fact.chunk_id,
-                fact.growth_basis,
+                ("structured", fact.structured_identity)
+                if fact.structured_identity is not None
+                else (
+                    fact.company, fact.metric_id, fact.fact_period, fact.normalized_value,
+                    fact.chunk_id, fact.growth_basis, fact.dimension, fact.category,
+                )
             )
             unique.setdefault(key, fact)
         self.facts = tuple(unique.values())
         self._by_id = {fact.fact_id: fact for fact in self.facts}
+
+    @classmethod
+    def from_financial_facts(cls, facts: Iterable[FinancialFact]) -> "FactLedger":
+        """Consume already validated canonical facts without re-extracting text."""
+        return cls(facts)
 
     @classmethod
     def from_evidence(cls, evidence: Iterable[Evidence]) -> "FactLedger":
@@ -802,6 +871,47 @@ class FactLedger:
         for item in evidence:
             metadata = dict(item.metadata or {})
             if str(metadata.get("content_type", "")).casefold() == "unverified_table":
+                continue
+            if "financial_table_rows_json" in metadata:
+                # Structured facts can enter only through the P1.5 fail-closed gate.
+                from core.financial_facts import (
+                    EligibilityStatus,
+                    FinancialDocumentContext,
+                    FinancialFactFactory,
+                    rows_from_json,
+                )
+
+                standard = str(metadata.get("accounting_standard", "UNKNOWN")).upper()
+                standard_source = str(metadata.get("accounting_standard_source", "")) or None
+                if standard != "UNKNOWN" and not standard_source:
+                    standard = "UNKNOWN"
+                try:
+                    context = FinancialDocumentContext(
+                        company_id=str(metadata.get("company_id", "")) or None,
+                        company_name=str(
+                            metadata.get("company_name", item.company or metadata.get("company", ""))
+                        )
+                        or None,
+                        accounting_standard=standard,
+                        accounting_standard_source=standard_source,
+                        fiscal_year_start=str(metadata.get("fiscal_year_start", "")) or None,
+                        fiscal_year_end=str(metadata.get("fiscal_year_end", "")) or None,
+                        fiscal_calendar_source=str(metadata.get("fiscal_calendar_source", "")) or None,
+                    )
+                    table_rows = rows_from_json(str(metadata["financial_table_rows_json"]))
+                except (TypeError, ValueError):
+                    # Invalid document metadata is rejected, never reparsed as narrative.
+                    continue
+                factory = FinancialFactFactory()
+                for row in table_rows:
+                    decision = factory.gate.assess(row, context=context)
+                    if decision.status != EligibilityStatus.ELIGIBLE:
+                        continue
+                    try:
+                        facts.append(factory.create(row, context=context, normalization=decision.normalization))
+                    except ValueError:
+                        # Invalid period/unit metadata must not fall back to text parsing.
+                        continue
                 continue
             company = canonical_company(str(item.company or metadata.get("company", "")))
             content = str(item.content or "")
@@ -1155,13 +1265,6 @@ class FactLedger:
                                     page=metadata.get("page"),
                                     section=metadata.get("section"),
                                     chunk_id=chunk_id,
-            if "financial_table_rows_json" in metadata:
-                # Typed table candidates carry a stricter verification state
-                # and dimensions than this legacy text extractor can retain.
-                # Until the structured-fact adapter lands in P1.5, do not
-                # silently re-parse PARTIAL/VERIFIED row text and lose scope,
-                # statement, unit, or column provenance.
-                continue
                                     evidence_text=evidence_text,
                                     confidence=float(item.confidence or metadata.get("similarity", 0.0) or 0.0),
                                     display_unit=(
@@ -1227,7 +1330,7 @@ class FactLedger:
         growth_basis: str | None = None,
     ) -> tuple[FinancialFact, ...]:
         wanted_company = canonical_company(company or "") if company else None
-        return tuple(
+        results = tuple(
             fact
             for fact in self.facts
             if (wanted_company is None or fact.company == wanted_company)
@@ -1239,6 +1342,7 @@ class FactLedger:
                 or periods_equivalent(fact.table_column_period, period)
             )
         )
+        return tuple(sorted(results, key=lambda fact: 0 if fact.source_kind == "FINANCIAL_STATEMENT" else 1))
 
     def get(self, fact_id: str) -> FinancialFact | None:
         return self._by_id.get(fact_id)
