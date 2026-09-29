@@ -12,6 +12,7 @@ interface MessageBubbleProps {
   loading?: boolean;
   loadingText?: string;
   durationMs?: number;
+  streaming?: boolean;
 }
 
 export function MessageBubble({
@@ -22,6 +23,7 @@ export function MessageBubble({
   loading = false,
   loadingText,
   durationMs,
+  streaming = false,
 }: MessageBubbleProps) {
   const { t, language } = useLanguage();
   const roleLabel = role === 'user' ? t.chat.user : t.chat.assistant;
@@ -49,7 +51,10 @@ export function MessageBubble({
   }
 
   return (
-    <article className={`message message--${role}`}>
+    <article
+      className={`message message--${role}${streaming ? ' message--streaming' : ''}`}
+      aria-busy={streaming || undefined}
+    >
       <div className="message__header">
         <div className="message__avatar" aria-hidden="true">
           {role === 'user' ? 'U' : <Icon name="financial-research" />}

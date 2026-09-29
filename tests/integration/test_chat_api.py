@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -86,6 +87,57 @@ def _fake_run_agent_empty(question, company=None, **_request_scope):
 
 @pytest.mark.integration
 class TestChatAPI:
+    def test_chat_stream_returns_grounded_sse_deltas_and_final_contract(self, client):
+        with patch(
+            "api.services.chat_service.run_agent",
+            side_effect=_fake_run_agent_success,
+        ):
+            response = client.post(
+                "/api/v1/chat",
+                json={"question": "What is Apple's revenue?", "stream": True},
+            )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.headers["x-accel-buffering"] == "no"
+
+        current_event = None
+        event_data = []
+        parsed_events = []
+        for line in response.text.splitlines():
+            if line.startswith("event: "):
+                current_event = line.removeprefix("event: ")
+            elif line.startswith("data: "):
+                event_data.append(line.removeprefix("data: "))
+            elif not line and current_event and event_data:
+                parsed_events.append((current_event, json.loads("\n".join(event_data))))
+                current_event = None
+                event_data = []
+
+        assert parsed_events[0] == ("status", {"state": "processing"})
+        deltas = [payload["text"] for event, payload in parsed_events if event == "delta"]
+        assert "".join(deltas) == "# Investment Research Report\n\nRevenue grew 10%."
+        complete = [payload for event, payload in parsed_events if event == "complete"]
+        assert len(complete) == 1
+        assert complete[0]["report"] == "".join(deltas)
+        assert complete[0]["citations"][0]["source"] == "apple.pdf"
+
+    def test_chat_stream_encodes_provider_timeout_as_sse_error(self, client):
+        from llm.providers.provider_exceptions import ProviderTimeoutError
+
+        with patch(
+            "api.routers.chat.chat_service.chat",
+            side_effect=ProviderTimeoutError("deadline exceeded"),
+        ):
+            response = client.post(
+                "/api/v1/chat",
+                json={"question": "What is Apple's revenue?", "stream": True},
+            )
+
+        assert response.status_code == 200
+        assert 'event: error\ndata: {"status":504' in response.text
+        assert "deadline exceeded" not in response.text
+
     def test_chat_forwards_selected_answer_language(self, client):
         observed = {}
 

@@ -15,6 +15,7 @@ export interface ChatRequest {
   answer_language?: Language;
   company?: string;
   thread_id?: string;
+  stream?: boolean;
 }
 
 export class ChatContractError extends Error {
@@ -194,6 +195,7 @@ export function createChatRequest(
   company?: string,
   threadId?: string,
   answerLanguage?: Language,
+  stream = false,
 ): ChatRequest {
   const normalizedQuestion = question.trim();
   if (!normalizedQuestion) {
@@ -203,6 +205,7 @@ export function createChatRequest(
   const request: ChatRequest = {
     question: normalizedQuestion,
     ...(answerLanguage ? { answer_language: answerLanguage } : {}),
+    ...(stream ? { stream: true } : {}),
   };
   const normalizedCompany = company?.trim();
   if (normalizedCompany) {

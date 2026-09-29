@@ -54,6 +54,12 @@ export function ChatWindow({
     lastMessageId: messages.at(-1)?.id ?? null,
   });
   const isEmpty = messages.length === 0;
+  const latestMessage = messages.at(-1);
+  const hasStreamingAnswer = Boolean(
+    loading
+    && latestMessage?.role === 'assistant'
+    && !latestMessage.response,
+  );
   const resolvedLoadingText = loadingText ?? t.chat.loading;
   const resolvedEmptyTitle = emptyTitle ?? t.chat.emptyTitle;
   const resolvedEmptyHint = emptyHint ?? t.chat.emptyDescription;
@@ -208,10 +214,11 @@ export function ChatWindow({
               response={msg.response}
               citationNamespace={msg.citationNamespace}
               durationMs={msg.durationMs}
+              streaming={hasStreamingAnswer && msg.id === latestMessage?.id}
             />
           ))}
 
-          {loading && (
+          {loading && !hasStreamingAnswer && (
             <MessageBubble
               role="assistant"
               content=""

@@ -178,11 +178,26 @@ export function Chat({
       setDiscoveryStatus(null);
 
       try {
+        let streamedMessageId: string | null = null;
+        let streamedContent = '';
         const apiResponse = await sendChatMessage(
           question,
           undefined,
           threadId,
           language,
+          (delta) => {
+            streamedMessageId = streamedMessageId ?? crypto.randomUUID();
+            streamedContent += delta;
+            commitMessages([
+              ...messagesWithQuestion,
+              {
+                id: streamedMessageId,
+                role: 'assistant',
+                content: streamedContent,
+                citationNamespace: `chat-turn-${turnId}`,
+              },
+            ]);
+          },
         );
         const failureKind = getRuntimeFailureKind(apiResponse.report);
         const localizedFailure = failureKind === 'provider-disabled'
@@ -200,7 +215,7 @@ export function Chat({
         commitMessages([
           ...messagesWithQuestion,
           {
-            id: crypto.randomUUID(),
+            id: streamedMessageId ?? crypto.randomUUID(),
             role: 'assistant',
             content: report,
             durationMs: performance.now() - startedAt,

@@ -114,6 +114,8 @@ export function Copilot() {
 
   async function handleSend(message: string) {
     const submittedAt = Date.now();
+    const assistantId = `assistant-${submittedAt}`;
+    let streamedContent = '';
 
     setMessages((currentMessages) => [
       ...currentMessages,
@@ -123,13 +125,45 @@ export function Copilot() {
     setLoading(true);
 
     try {
-      const response = await sendChatMessage(message, undefined, threadId, language);
+      const response = await sendChatMessage(
+        message,
+        undefined,
+        threadId,
+        language,
+        (delta) => {
+          streamedContent += delta;
+          setMessages((currentMessages) => {
+            const existingIndex = currentMessages.findIndex(
+              (item) => item.id === assistantId,
+            );
+            const streamedMessage: ChatMessage = {
+              id: assistantId,
+              role: 'assistant',
+              content: streamedContent,
+            };
+            if (existingIndex < 0) return [...currentMessages, streamedMessage];
+            return currentMessages.map((item, index) => (
+              index === existingIndex ? streamedMessage : item
+            ));
+          });
+        },
+      );
 
       setCurrentResponse(response);
-      setMessages((currentMessages) => [
-        ...currentMessages,
-        { id: `assistant-${Date.now()}`, role: 'assistant', content: response.report },
-      ]);
+      setMessages((currentMessages) => {
+        const finalMessage: ChatMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: response.report,
+          response,
+        };
+        if (!currentMessages.some((item) => item.id === assistantId)) {
+          return [...currentMessages, finalMessage];
+        }
+        return currentMessages.map((item) => (
+          item.id === assistantId ? finalMessage : item
+        ));
+      });
     } finally {
       setLoading(false);
     }

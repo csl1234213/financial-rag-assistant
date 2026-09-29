@@ -44,6 +44,7 @@ The current phase connects verified statement rows, conservative canonical-metri
 - **LLM Provider Abstraction** — Pluggable DeepSeek, Gemini, OpenAI, Claude, Doubao, and local Ollama providers
 - **Structured Financial Facts** — Verified statement rows map through a conservative metric registry and retain period, scope, unit, and source location for metric-aware queries
 - **Official Filing Discovery** — Optional filing lookup and download flow for SEC EDGAR and CNINFO, followed by the normal document-ingestion path
+- **Grounded SSE Chat Delivery** — `stream: true` returns the normal answer in SSE deltas only after grounding and sanitization; ordinary JSON responses remain supported
 - **User and Workspace Access** — JWT identifies users; documents, vectors, and tasks are scoped to a workspace
 - **Pluggable Runtime Capabilities** — Memory, Metrics, Reliability, Tracing, Tool Calling
 - **LangGraph Orchestration** — Source-controlled plan, execute, and finalize graph
