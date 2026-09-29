@@ -29,16 +29,25 @@ The project addresses these failure points along the evidence path:
 
 The current regression focus is the standard financial statements in the 2025 Guizhou Moutai annual-report sample. This does not establish complete coverage for every issuer, PDF layout, footnote table, or bilingual query. See [Financial RAG problem scope and validation boundaries](docs/FINANCIAL_RAG_PROBLEM_STATEMENT.md).
 
+Newly registered accounts currently join the default workspace and share its materials with other users in that workspace. The current system does not provide a private knowledge base per account.
+
+### Current financial RAG stage: P1.7
+
+The current phase connects verified statement rows, conservative canonical-metric mapping, and provenance-bearing financial facts to structured query routing. Facts retain company, reporting period, statement scope, unit, and source location. Validation is currently centered on the 2025 Guizhou Moutai report; it is not a claim of universal filing coverage. Optional SEC EDGAR and CNINFO discovery uses official filing sources, and availability depends on source access and runtime configuration.
+
 ### Core Capabilities
 
 - **Direct Chat Workflow** — Non-research queries routed to direct LLM conversation
 - **Financial RAG Workflow** — Evidence-backed research reports with citations
 - **Intent Routing** — Automatic classification: Direct Chat / Single Company / Compare Companies / Global Research
 - **Workflow Orchestration** — Strategy-driven execution: RAG / DirectLLM / Parallel / MultiStep / ToolCalling
-- **LLM Provider Abstraction** — Factory pattern with pluggable providers (DeepSeek, Gemini)
+- **LLM Provider Abstraction** — Pluggable DeepSeek, Gemini, OpenAI, Claude, Doubao, and local Ollama providers
+- **Structured Financial Facts** — Verified statement rows map through a conservative metric registry and retain period, scope, unit, and source location for metric-aware queries
+- **Official Filing Discovery** — Optional filing lookup and download flow for SEC EDGAR and CNINFO, followed by the normal document-ingestion path
+- **User and Workspace Access** — JWT identifies users; documents, vectors, and tasks are scoped to a workspace
 - **Pluggable Runtime Capabilities** — Memory, Metrics, Reliability, Tracing, Tool Calling
 - **LangGraph Orchestration** — Source-controlled plan, execute, and finalize graph
-- **Tenant-Safe Tool Use** — Governed retrieval contract with explicit tenant scope
+- **Workspace-Scoped Retrieval** — Governed retrieval contract with explicit workspace scope
 - **MCP Foundation** — Lifecycle-aware stdio JSON-RPC, schemas, allowlists, and authorization hooks
 - **Evaluation & Prompt Governance** — Versioned prompts, golden datasets, RAG/Agent metrics, and model benchmarks
 - **LoRA Readiness** — Validated SFT data and an explicit, opt-in Hugging Face training path
@@ -61,6 +70,7 @@ The current regression focus is the standard financial statements in the 2025 Gu
 | Feature | Status | Description |
 |---|---|---|
 | Gemini Provider | Supported | Registered in ProviderRegistry, 95-line implementation |
+| Ollama Provider | Supported | Connects to a user-configured local Ollama service |
 
 ### Framework Ready (Plug-and-Play)
 
@@ -153,7 +163,7 @@ This design separates strategic decision-making from step-level execution, enabl
 | Language | Python 3.12 |
 | API Framework | FastAPI |
 | Vector Database | ChromaDB |
-| LLM Provider | DeepSeek (primary), Gemini (supported) |
+| LLM Provider | DeepSeek, Gemini, OpenAI, Claude, Doubao, and local Ollama adapters |
 | Agent Runtime | LangGraph orchestration + custom financial domain runtime |
 | AI Evaluation | Versioned golden datasets + deterministic RAG/Agent/model metrics |
 | Testing | pytest with an 85% CI coverage gate |
@@ -323,7 +333,7 @@ Unlike traditional RAG pipelines, this project implements a full Agent Runtime w
 
 Factory pattern with pluggable providers:
 - `ProviderFactory.create(config)` → `ProviderRegistry.get(name)` → `BaseProvider.chat()`
-- DeepSeek (Production) and Gemini (Supported) providers
+- DeepSeek (Production), Gemini, and local Ollama (Supported); additional adapters are available through the provider registry
 - Clean separation between SDK calls and business logic
 
 ### 3. Pluggable Runtime Capabilities
